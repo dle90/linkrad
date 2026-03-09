@@ -182,42 +182,54 @@ export default function Dashboard() {
 
   const siteFilterActive = activeSel.length !== mainSites.length
 
-  // ── Site bar chart data (always annual, filter by selected sites)
+  // Time ratio: scale annual per-site data to selected period
+  const fullYearRev    = MONTH_LABELS.reduce((s, _, i) => s + (Number(monthlyRevRow?.values?.[i]) || 0), 0)
+  const fullYearEbitda = MONTH_LABELS.reduce((s, _, i) => s + (Number(monthlyEbitdaRow?.values?.[i]) || 0), 0)
+  const timeRatioRev    = !isFullYear && fullYearRev    !== 0 ? sumMonthly(monthlyRevRow)    / fullYearRev    : 1
+  const timeRatioEbitda = !isFullYear && fullYearEbitda !== 0 ? sumMonthly(monthlyEbitdaRow) / fullYearEbitda : 1
+
+  // ── Site bar chart data — respects both time filter and site filter
   const revBySite = mainSites
     .filter(site => activeSel.includes(site))
     .map(site => ({
       name: site.length > 7 ? site.slice(0, 7) + '..' : site,
       fullName: site,
-      revenue: Number(revTotalRow?.values?.[site]) || 0,
-      ebitda:  Number(ebitdaRow?.values?.[site]) || 0,
+      revenue: (Number(revTotalRow?.values?.[site]) || 0) * timeRatioRev,
+      ebitda:  (Number(ebitdaRow?.values?.[site])   || 0) * timeRatioEbitda,
     }))
 
-  // ── Monthly trend data (2025 base + actuals for 2026)
-  const actualsEntries = Object.entries(actuals)
-    .filter(([k]) => k.startsWith('2026-'))
-    .sort(([a],[b]) => a.localeCompare(b))
+  // ── Monthly trend data — 2025 scaled by site ratio; 2026 aggregated per month filtered by sites
+  const actuals2026ByMonth = {}
+  Object.entries(actuals).forEach(([key, d]) => {
+    if (!key.startsWith('2026-')) return
+    const parts = key.split('-')
+    const mo = parseInt(parts[1])
+    const site = parts.slice(2).join('-') || d.site
+    if (siteFilterActive && !activeSel.includes(site)) return
+    if (!actuals2026ByMonth[mo]) actuals2026ByMonth[mo] = { revenue: 0, ebitda: 0 }
+    actuals2026ByMonth[mo].revenue += d.rev_total || 0
+    actuals2026ByMonth[mo].ebitda  += d.ebitda    || 0
+  })
 
   const monthlyData = [
-    // 2025 months from monthly-pl
+    // 2025 months scaled by site ratio
     ...MONTH_LABELS.map((m, i) => ({
       month: `${m}'25`,
-      revenue: Number(monthlyRevRow?.values?.[i]) || 0,
-      ebitda:  Number(monthlyEbitdaRow?.values?.[i]) || 0,
+      revenue: (Number(monthlyRevRow?.values?.[i])    || 0) * siteRatio,
+      ebitda:  (Number(monthlyEbitdaRow?.values?.[i]) || 0) * siteRatio,
       selected: selectedMonthIndices.includes(i),
       isActual: false,
     })),
-    // 2026 actuals
-    ...actualsEntries.map(([key, d]) => {
-      const mo = parseInt(key.split('-')[1])
-      return {
+    // 2026 actuals aggregated by month (filtered by selected sites)
+    ...Object.entries(actuals2026ByMonth)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([mo, d]) => ({
         month: `T${mo}'26`,
-        revenue: d.rev_total || 0,
-        ebitda:  d.ebitda    || 0,
+        revenue: d.revenue,
+        ebitda:  d.ebitda,
         selected: false,
         isActual: true,
-        key,
-      }
-    })
+      }))
   ]
 
   // ── Site summary table
@@ -435,14 +447,14 @@ export default function Dashboard() {
       {/* ── Charts Row ── */}
       <div className="grid grid-cols-2 gap-4">
 
-        {/* Revenue by site (annual, filtered by selected sites) */}
+        {/* Revenue by site */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-700">
               Doanh Thu theo Chi Nhánh
               {siteFilterActive && <span className="ml-1 text-xs font-normal text-indigo-500">({activeSel.length} sites)</span>}
             </h3>
-            <span className="text-xs text-gray-400">Cả năm 2025</span>
+            <span className="text-xs font-medium text-blue-600">{periodLabel}</span>
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={revBySite} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
@@ -458,14 +470,12 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* Monthly trend — highlight selected period */}
+        {/* Monthly trend */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-700">Xu Hướng Doanh Thu Tháng</h3>
-            <span className="text-xs text-gray-400">
-              {timeMode === 'range' || period !== 'year'
-                ? <span className="text-blue-600 font-medium">▶ {periodLabel}</span>
-                : 'Cả năm 2025'}
+            <span className="text-xs font-medium text-indigo-600">
+              {siteFilterActive ? `${activeSel.length} sites` : 'Tất cả'}
             </span>
           </div>
           <ResponsiveContainer width="100%" height={220}>
@@ -510,7 +520,7 @@ export default function Dashboard() {
             EBITDA theo Chi Nhánh
             {siteFilterActive && <span className="ml-1 text-xs font-normal text-indigo-500">({activeSel.length} sites)</span>}
           </h3>
-          <span className="text-xs text-gray-400">Cả năm 2025</span>
+          <span className="text-xs font-medium text-blue-600">{periodLabel}</span>
         </div>
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={revBySite} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
