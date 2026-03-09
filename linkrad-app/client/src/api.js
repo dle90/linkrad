@@ -2,6 +2,21 @@ import axios from 'axios'
 
 const api = axios.create({ baseURL: '/api' })
 
+// Attach auth token to every request
+api.interceptors.request.use(config => {
+  try {
+    const stored = localStorage.getItem('linkrad_auth')
+    if (stored) {
+      const { token } = JSON.parse(stored)
+      config.headers['Authorization'] = `Bearer ${token}`
+    }
+  } catch {}
+  return config
+})
+
+export const loginUser  = (username, password) => api.post('/auth/login', { username, password }).then(r => r.data)
+export const logoutUser = () => api.post('/auth/logout').then(r => r.data)
+
 export const getSites = () => api.get('/sites').then(r => r.data)
 export const updateSites = (data) => api.put('/sites', data).then(r => r.data)
 

@@ -1,7 +1,7 @@
 import React from 'react'
 import EditableCell from './EditableCell'
 
-export default function EditableTable({ title, columns, rows, onCellChange, showTotal = true }) {
+export default function EditableTable({ title, columns, rows, onCellChange, showTotal = true, readOnly = false }) {
   const fmt = (v) => {
     if (v === null || v === undefined || v === '') return '-'
     const n = Number(v)
@@ -86,6 +86,7 @@ export default function EditableTable({ title, columns, rows, onCellChange, show
                           key={col.key}
                           value={cellVal}
                           onChange={(newVal) => onCellChange(row.id, col.key, newVal)}
+                          readOnly={readOnly}
                         />
                       )
                     })}

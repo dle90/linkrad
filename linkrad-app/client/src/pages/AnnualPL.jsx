@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { getAnnualPL, updateAnnualPL } from '../api'
 import EditableCell from '../components/EditableCell'
+import { useAuth } from '../context/AuthContext'
 
 const fmt = (v) => {
   if (v === null || v === undefined) return '-'
@@ -10,6 +11,8 @@ const fmt = (v) => {
 }
 
 export default function AnnualPL() {
+  const { auth } = useAuth()
+  const isAdmin = auth?.role === 'admin'
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -135,6 +138,7 @@ export default function AnnualPL() {
                           <EditableCell
                             key={site}
                             value={cellVal}
+                            readOnly={!isAdmin}
                             onChange={(v) => handleCellChange(row.id, site, v)}
                           />
                         )

@@ -1,12 +1,14 @@
-import React, { useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import React from 'react'
+import { NavLink } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { logoutUser } from '../api'
 
-const navItems = [
+const NAV = [
   {
     group: 'Tổng quan',
     items: [
       { path: '/', label: 'Dashboard', icon: '📊' },
-      { path: '/actuals', label: 'Nhập số liệu', icon: '✏️' }
+      { path: '/actuals', label: 'Nhập số liệu', icon: '✏️', adminOnly: true }
     ]
   },
   {
@@ -45,6 +47,14 @@ const navItems = [
 ]
 
 export default function Layout({ children }) {
+  const { auth, logout } = useAuth()
+  const isAdmin = auth?.role === 'admin'
+
+  const handleLogout = async () => {
+    try { await logoutUser() } catch {}
+    logout()
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       {/* Sidebar */}
@@ -57,35 +67,51 @@ export default function Layout({ children }) {
 
         {/* Navigation */}
         <nav className="flex-1 py-4">
-          {navItems.map((section) => (
-            <div key={section.group} className="mb-2">
-              <div className="px-4 py-1 text-blue-400 text-xs font-semibold uppercase tracking-wider">
-                {section.group}
+          {NAV.map((section) => {
+            const visibleItems = section.items.filter(item => !item.adminOnly || isAdmin)
+            if (visibleItems.length === 0) return null
+            return (
+              <div key={section.group} className="mb-2">
+                <div className="px-4 py-1 text-blue-400 text-xs font-semibold uppercase tracking-wider">
+                  {section.group}
+                </div>
+                {visibleItems.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    end={item.path === '/'}
+                    className={({ isActive }) =>
+                      `flex items-center px-4 py-2 text-sm transition-colors duration-150 ${
+                        isActive
+                          ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300'
+                          : 'text-blue-200 hover:bg-blue-800 hover:text-white'
+                      }`
+                    }
+                  >
+                    <span className="mr-2 text-xs">{item.icon}</span>
+                    {item.label}
+                  </NavLink>
+                ))}
               </div>
-              {section.items.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  end={item.path === '/'}
-                  className={({ isActive }) =>
-                    `flex items-center px-4 py-2 text-sm transition-colors duration-150 ${
-                      isActive
-                        ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300'
-                        : 'text-blue-200 hover:bg-blue-800 hover:text-white'
-                    }`
-                  }
-                >
-                  <span className="mr-2 text-xs">{item.icon}</span>
-                  {item.label}
-                </NavLink>
-              ))}
-            </div>
-          ))}
+            )
+          })}
         </nav>
 
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-blue-800">
-          <div className="text-blue-400 text-xs">2025-2026</div>
+        {/* User info + logout */}
+        <div className="px-4 py-3 border-t border-blue-800 space-y-2">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${isAdmin ? 'bg-yellow-400' : 'bg-green-400'}`} />
+            <span className="text-blue-200 text-xs font-medium">{auth?.username}</span>
+            <span className={`ml-auto text-xs px-1.5 py-0.5 rounded ${isAdmin ? 'bg-yellow-800 text-yellow-200' : 'bg-blue-800 text-blue-300'}`}>
+              {isAdmin ? 'Admin' : 'Guest'}
+            </span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full text-xs text-blue-300 hover:text-white hover:bg-blue-800 px-2 py-1.5 rounded text-left transition-colors"
+          >
+            Đăng xuất
+          </button>
         </div>
       </aside>
 
@@ -95,6 +121,9 @@ export default function Layout({ children }) {
         <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0">
           <h1 className="text-lg font-semibold text-gray-800">LinkRad Financial Model 2025-2026</h1>
           <div className="flex items-center gap-3">
+            {!isAdmin && (
+              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">Chế độ xem</span>
+            )}
             <span className="text-sm text-gray-500">Đơn vị: VND triệu</span>
             <div className="w-2 h-2 rounded-full bg-green-500" title="Server online"></div>
           </div>

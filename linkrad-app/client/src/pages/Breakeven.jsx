@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { getBreakeven, updateBreakeven } from '../api'
+import { useAuth } from '../context/AuthContext'
 
 const fmt = (v) => {
   if (v === null || v === undefined) return '-'
@@ -8,12 +9,16 @@ const fmt = (v) => {
   return n.toLocaleString('vi-VN', { maximumFractionDigits: 1 })
 }
 
-function EditableNumberCell({ value, onChange, highlight }) {
+function EditableNumberCell({ value, onChange, highlight, readOnly = false }) {
   const [editing, setEditing] = useState(false)
   const [local, setLocal] = useState('')
 
   const bgClass = highlight === 'green' ? 'bg-green-50 text-green-700' :
                   highlight === 'red' ? 'bg-red-50 text-red-700' : ''
+
+  if (readOnly) {
+    return <td className={`px-2 py-1 text-right text-sm ${bgClass}`}>{fmt(value)}</td>
+  }
 
   if (editing) {
     return (
@@ -46,6 +51,8 @@ function EditableNumberCell({ value, onChange, highlight }) {
 }
 
 export default function Breakeven() {
+  const { auth } = useAuth()
+  const isAdmin = auth?.role === 'admin'
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -133,7 +140,7 @@ export default function Breakeven() {
 
   const sites = data.sites || []
 
-  const SectionTable = ({ title, phase, onCellChange, headerBg = '#1e3a5f' }) => (
+  const SectionTable = ({ title, phase, onCellChange, headerBg = '#1e3a5f' }) => (  // eslint-disable-line
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-200" style={{ backgroundColor: headerBg + '15' }}>
         <h3 className="text-sm font-semibold" style={{ color: headerBg }}>{title}</h3>
@@ -157,6 +164,7 @@ export default function Breakeven() {
                     key={site}
                     value={row.values?.[site] ?? 0}
                     onChange={(v) => onCellChange(i, site, v)}
+                    readOnly={!isAdmin}
                   />
                 ))}
               </tr>
@@ -219,6 +227,7 @@ export default function Breakeven() {
                     key={site}
                     value={data.breakevenRevenue?.values?.[site] ?? 0}
                     onChange={(v) => updateBERevenue(site, v)}
+                    readOnly={!isAdmin}
                   />
                 ))}
               </tr>
@@ -253,6 +262,7 @@ export default function Breakeven() {
                       key={site}
                       value={row.values?.[site] ?? 0}
                       onChange={(v) => updateFixedCost(i, site, v)}
+                      readOnly={!isAdmin}
                     />
                   ))}
                 </tr>

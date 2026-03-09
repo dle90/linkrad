@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { getSites, updateSites } from '../api'
+import { useAuth } from '../context/AuthContext'
 
 const fmt = (v) => {
   if (v === null || v === undefined || v === '') return '-'
@@ -8,9 +9,17 @@ const fmt = (v) => {
   return n.toLocaleString('vi-VN', { maximumFractionDigits: 1 })
 }
 
-function EditableTextCell({ value, onChange, align = 'left', type = 'text' }) {
+function EditableTextCell({ value, onChange, align = 'left', type = 'text', readOnly = false }) {
   const [editing, setEditing] = useState(false)
   const [local, setLocal] = useState('')
+
+  if (readOnly) {
+    return (
+      <td className="px-2 py-1.5 text-sm" style={{ textAlign: align }}>
+        {type === 'number' ? (value != null && value !== '' ? Number(value).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) : '-') : (value || '-')}
+      </td>
+    )
+  }
 
   return editing ? (
     <td className="p-0">
@@ -49,6 +58,8 @@ function EditableTextCell({ value, onChange, align = 'left', type = 'text' }) {
 }
 
 export default function SiteList() {
+  const { auth } = useAuth()
+  const isAdmin = auth?.role === 'admin'
   const [sites, setSites] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -145,10 +156,10 @@ export default function SiteList() {
               {sites.map((site, i) => (
                 <tr key={site.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-yellow-50`}>
                   <td className="px-2 py-1.5 text-center text-gray-500">{i + 1}</td>
-                  <EditableTextCell value={site.name} onChange={(v) => updateCell(site.id, 'name', v)} />
-                  <EditableTextCell value={site.location} onChange={(v) => updateCell(site.id, 'location', v)} />
-                  <EditableTextCell value={site.startMonth} onChange={(v) => updateCell(site.id, 'startMonth', v)} align="center" />
-                  <EditableTextCell value={site.totalInvestment} onChange={(v) => updateCell(site.id, 'totalInvestment', v)} align="right" type="number" />
+                  <EditableTextCell value={site.name} readOnly={!isAdmin} onChange={(v) => updateCell(site.id, 'name', v)} />
+                  <EditableTextCell value={site.location} readOnly={!isAdmin} onChange={(v) => updateCell(site.id, 'location', v)} />
+                  <EditableTextCell value={site.startMonth} readOnly={!isAdmin} onChange={(v) => updateCell(site.id, 'startMonth', v)} align="center" />
+                  <EditableTextCell value={site.totalInvestment} readOnly={!isAdmin} onChange={(v) => updateCell(site.id, 'totalInvestment', v)} align="right" type="number" />
                   <td
                     className="px-2 py-1.5 text-right text-sm cursor-pointer hover:bg-yellow-50"
                     onClick={() => {
@@ -158,10 +169,10 @@ export default function SiteList() {
                   >
                     {((site.linkradShare || 0) * 100).toFixed(1)}%
                   </td>
-                  <EditableTextCell value={site.linkradInvestment} onChange={(v) => updateCell(site.id, 'linkradInvestment', v)} align="right" type="number" />
-                  <EditableTextCell value={site.bankLoan} onChange={(v) => updateCell(site.id, 'bankLoan', v)} align="right" type="number" />
-                  <EditableTextCell value={site.bank} onChange={(v) => updateCell(site.id, 'bank', v)} />
-                  <EditableTextCell value={site.note} onChange={(v) => updateCell(site.id, 'note', v)} />
+                  <EditableTextCell value={site.linkradInvestment} readOnly={!isAdmin} onChange={(v) => updateCell(site.id, 'linkradInvestment', v)} align="right" type="number" />
+                  <EditableTextCell value={site.bankLoan} readOnly={!isAdmin} onChange={(v) => updateCell(site.id, 'bankLoan', v)} align="right" type="number" />
+                  <EditableTextCell value={site.bank} readOnly={!isAdmin} onChange={(v) => updateCell(site.id, 'bank', v)} />
+                  <EditableTextCell value={site.note} readOnly={!isAdmin} onChange={(v) => updateCell(site.id, 'note', v)} />
                   <td className="px-2 py-1.5 text-center">
                     <button
                       onClick={() => {

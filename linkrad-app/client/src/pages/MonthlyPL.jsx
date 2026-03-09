@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { getMonthlyPL, updateMonthlyPL } from '../api'
 import EditableCell from '../components/EditableCell'
+import { useAuth } from '../context/AuthContext'
 
 const fmt = (v) => {
   if (v === null || v === undefined) return '-'
@@ -13,6 +14,8 @@ const fmt = (v) => {
 const MONTH_LABELS = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12']
 
 export default function MonthlyPL() {
+  const { auth } = useAuth()
+  const isAdmin = auth?.role === 'admin'
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -126,6 +129,7 @@ export default function MonthlyPL() {
                           <EditableCell
                             key={i}
                             value={val}
+                            readOnly={!isAdmin}
                             onChange={(v) => handleCellChange(row.id, i, v)}
                           />
                         )
