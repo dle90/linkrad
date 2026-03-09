@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
-import { getActuals, saveActual, deleteActual } from '../api'
+import { getActuals, saveActual, deleteActual, getAnnualPL } from '../api'
 
 const MONTH_LABELS = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12']
 
@@ -7,6 +7,7 @@ const n = (v) => v === '' ? 0 : Number(v) || 0
 
 export default function Actuals() {
   const [actuals, setActuals] = useState({})
+  const [sites, setSites] = useState([])
   const [loading, setLoading] = useState(true)
 
   const now = new Date()
@@ -16,6 +17,7 @@ export default function Actuals() {
 
   const [inputYear, setInputYear]   = useState(nextMonth.year)
   const [inputMonth, setInputMonth] = useState(nextMonth.month)
+  const [inputSite, setInputSite]   = useState('')
   const [saving, setSaving]         = useState(false)
   const [inputValues, setInputValues] = useState({
     rev_mri: '', rev_ct: '', rev_mammo: '', rev_xq: '', rev_ua: '',
@@ -23,12 +25,19 @@ export default function Actuals() {
   })
 
   useEffect(() => {
-    getActuals().then(d => { setActuals(d); setLoading(false) })
+    Promise.all([getActuals(), getAnnualPL()]).then(([acts, apl]) => {
+      setActuals(acts)
+      const mainSites = (apl.sites || []).filter(s => s !== 'HO' && s !== 'Site LK')
+      setSites(mainSites)
+      if (mainSites.length > 0) setInputSite(mainSites[0])
+      setLoading(false)
+    })
   }, [])
 
-  // Load existing data when month/year changes
+  // Load existing data when month/year/site changes
   useEffect(() => {
-    const key = `${inputYear}-${String(inputMonth).padStart(2, '0')}`
+    if (!inputSite) return
+    const key = `${inputYear}-${String(inputMonth).padStart(2, '0')}-${inputSite}`
     const existing = actuals[key]
     if (existing) {
       setInputValues({
@@ -46,7 +55,7 @@ export default function Actuals() {
     } else {
       setInputValues({ rev_mri:'', rev_ct:'', rev_mammo:'', rev_xq:'', rev_ua:'', vc_total:'', fc_staff:'', fc_rent:'', fc_ops:'', fc_other:'' })
     }
-  }, [inputYear, inputMonth, actuals])
+  }, [inputYear, inputMonth, inputSite, actuals])
 
   const setField = (k, v) => setInputValues(prev => ({ ...prev, [k]: v }))
 
@@ -56,10 +65,12 @@ export default function Actuals() {
   const derivedEBITDA = derivedRev - derivedVC - derivedFC
 
   const handleSave = useCallback(async () => {
+    if (!inputSite) return
     setSaving(true)
-    const key = `${inputYear}-${String(inputMonth).padStart(2, '0')}`
+    const key = `${inputYear}-${String(inputMonth).padStart(2, '0')}-${inputSite}`
     const payload = {
       ...Object.fromEntries(Object.entries(inputValues).map(([k, v]) => [k, n(v)])),
+      site:      inputSite,
       rev_total: derivedRev,
       vc_total:  derivedVC,
       fc_total:  derivedFC,
@@ -68,14 +79,14 @@ export default function Actuals() {
     const updated = await saveActual(key, payload)
     setActuals(updated)
     setSaving(false)
-  }, [inputYear, inputMonth, inputValues, derivedRev, derivedVC, derivedFC, derivedEBITDA])
+  }, [inputYear, inputMonth, inputSite, inputValues, derivedRev, derivedVC, derivedFC, derivedEBITDA])
 
   const handleDelete = useCallback(async (key) => {
     const updated = await deleteActual(key)
     setActuals(updated)
   }, [])
 
-  const currentKey = `${inputYear}-${String(inputMonth).padStart(2, '0')}`
+  const currentKey = `${inputYear}-${String(inputMonth).padStart(2, '0')}-${inputSite}`
   const hasExisting = !!actuals[currentKey]
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-500">Đang tải...</div>
@@ -85,14 +96,22 @@ export default function Actuals() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Nhập Số Liệu Thực Tế</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Cập nhật doanh thu và chi phí theo tháng</p>
+          <p className="text-sm text-gray-500 mt-0.5">Cập nhật doanh thu và chi phí theo chi nhánh / tháng</p>
         </div>
         <span className="text-xs text-gray-400 bg-gray-100 px-3 py-1.5 rounded-full">VND triệu</span>
       </div>
 
-      {/* Month selector */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-3 flex items-center gap-3">
-        <span className="text-sm font-medium text-gray-600">Chọn tháng nhập:</span>
+      {/* Selector bar */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-3 flex items-center gap-3 flex-wrap">
+        <span className="text-sm font-medium text-gray-600">Chi nhánh:</span>
+        <select value={inputSite} onChange={e => setInputSite(e.target.value)}
+          className="text-sm border border-gray-200 rounded px-3 py-1.5 outline-none text-gray-700 focus:border-blue-400 min-w-[140px]">
+          {sites.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+
+        <span className="text-gray-300">|</span>
+
+        <span className="text-sm font-medium text-gray-600">Tháng:</span>
         <select value={inputYear} onChange={e => setInputYear(Number(e.target.value))}
           className="text-sm border border-gray-200 rounded px-3 py-1.5 outline-none text-gray-700 focus:border-blue-400">
           <option value={2025}>2025</option>
@@ -102,6 +121,7 @@ export default function Actuals() {
           className="text-sm border border-gray-200 rounded px-3 py-1.5 outline-none text-gray-700 focus:border-blue-400">
           {MONTH_LABELS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
         </select>
+
         {hasExisting && (
           <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">Đã có số liệu — đang chỉnh sửa</span>
         )}
@@ -110,7 +130,7 @@ export default function Actuals() {
       {/* Input form */}
       <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-4">
-          Số liệu tháng {inputMonth}/{inputYear}
+          Số liệu <span className="text-blue-700">{inputSite}</span> — tháng {inputMonth}/{inputYear}
         </h3>
         <div className="grid grid-cols-2 gap-8">
 
@@ -176,7 +196,7 @@ export default function Actuals() {
         {/* EBITDA preview */}
         <div className={`mt-5 rounded-lg px-5 py-4 flex items-center justify-between ${derivedEBITDA >= 0 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
           <span className="text-base font-semibold text-gray-700">
-            EBITDA tháng {inputMonth}/{inputYear}
+            EBITDA — {inputSite} T{inputMonth}/{inputYear}
           </span>
           <span className={`text-2xl font-bold ${derivedEBITDA >= 0 ? 'text-green-700' : 'text-red-700'}`}>
             {derivedEBITDA >= 0 ? '+' : ''}{derivedEBITDA.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} tr.
@@ -187,9 +207,9 @@ export default function Actuals() {
         </div>
 
         <div className="flex justify-end mt-4">
-          <button onClick={handleSave} disabled={saving}
+          <button onClick={handleSave} disabled={saving || !inputSite}
             className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium text-sm disabled:opacity-50">
-            {saving ? 'Đang lưu...' : `Lưu tháng ${inputMonth}/${inputYear}`}
+            {saving ? 'Đang lưu...' : `Lưu ${inputSite} T${inputMonth}/${inputYear}`}
           </button>
         </div>
       </div>
@@ -203,6 +223,7 @@ export default function Actuals() {
               <thead>
                 <tr className="text-left border-b-2 border-gray-200">
                   <th className="py-2 px-3 text-gray-600 font-semibold">Tháng</th>
+                  <th className="py-2 px-3 text-gray-600 font-semibold">Chi nhánh</th>
                   <th className="py-2 px-3 text-right text-gray-600 font-semibold">Doanh thu (tr.)</th>
                   <th className="py-2 px-3 text-right text-gray-600 font-semibold">Biến phí (tr.)</th>
                   <th className="py-2 px-3 text-right text-gray-600 font-semibold">Định phí (tr.)</th>
@@ -213,17 +234,25 @@ export default function Actuals() {
               </thead>
               <tbody>
                 {Object.entries(actuals).sort(([a],[b]) => a.localeCompare(b)).map(([key, d], i) => {
-                  const [yr, mo] = key.split('-')
+                  const parts = key.split('-')
+                  const yr = parts[0]
+                  const mo = parts[1]
+                  const site = parts.slice(2).join('-') || d.site || '—'
                   const ebitdaOk = (d.ebitda || 0) >= 0
                   const margin = d.rev_total > 0 ? (d.ebitda / d.rev_total * 100).toFixed(1) : '0'
                   return (
                     <tr key={key}
-                      onClick={() => { setInputYear(Number(yr)); setInputMonth(Number(mo)) }}
+                      onClick={() => {
+                        setInputYear(Number(yr))
+                        setInputMonth(Number(mo))
+                        if (site !== '—') setInputSite(site)
+                      }}
                       className={`border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors ${i % 2 === 0 ? 'bg-gray-50' : 'bg-white'} ${key === currentKey ? 'ring-2 ring-blue-300 ring-inset' : ''}`}>
-                      <td className="py-2 px-3 font-medium text-gray-700">
+                      <td className="py-2 px-3 font-medium text-gray-700 whitespace-nowrap">
                         T{parseInt(mo)}/{yr}
                         {key === currentKey && <span className="ml-2 text-xs text-blue-600">(đang chỉnh sửa)</span>}
                       </td>
+                      <td className="py-2 px-3 text-indigo-700 font-medium whitespace-nowrap">{site}</td>
                       <td className="py-2 px-3 text-right text-blue-700">{(d.rev_total||0).toLocaleString('vi-VN',{maximumFractionDigits:0})}</td>
                       <td className="py-2 px-3 text-right text-gray-600">{(d.vc_total||0).toLocaleString('vi-VN',{maximumFractionDigits:0})}</td>
                       <td className="py-2 px-3 text-right text-gray-600">{(d.fc_total||0).toLocaleString('vi-VN',{maximumFractionDigits:0})}</td>
