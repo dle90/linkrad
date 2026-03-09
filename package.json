@@ -1,0 +1,16 @@
+{
+  "name": "linkrad",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "npm --prefix linkrad-app/client install && npm --prefix linkrad-app/client run build",
+    "start": "node linkrad-app/server/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "xlsx": "^0.18.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
