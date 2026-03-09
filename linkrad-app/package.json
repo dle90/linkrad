@@ -1,0 +1,12 @@
+{
+  "name": "linkrad",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd client && npm install && npm run build",
+    "start": "cd server && npm install && node index.js",
+    "install": "cd client && npm install && cd ../server && npm install"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
