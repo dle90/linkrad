@@ -9,6 +9,7 @@ const cfRouter = require('./routes/cf')
 const bsRouter = require('./routes/bs')
 const breakevenRouter = require('./routes/breakeven')
 const actualsRouter = require('./routes/actuals')
+const tasksRouter = require('./routes/tasks')
 const { requireAdmin } = require('./middleware/auth')
 
 const app = express()
@@ -32,6 +33,8 @@ app.use('/api/cf', guardWrites, cfRouter)
 app.use('/api/bs', guardWrites, bsRouter)
 app.use('/api/breakeven', guardWrites, breakevenRouter)
 app.use('/api/actuals', guardWrites, actualsRouter)
+// Tasks: auth handled inside the router per endpoint
+app.use('/api/tasks', tasksRouter)
 
 // Serve React build in production
 const clientDist = path.join(__dirname, '../client/dist')

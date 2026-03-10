@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import openpyxl; wb = openpyxl.load_workbook\\(''c:/Users/ducml/Desktop/Claude test 2/LinkRad-Planning_2026_070326.xlsx'', data_only=True\\); print\\(''Sheets:'', wb.sheetnames\\)\")",
+      "Bash(python3 -c \"import openpyxl; wb = openpyxl.load_workbook\\(''c:/Users/ducml/Desktop/Claude test 2/LinkRad-Planning_2026_070326.xlsx'', data_only=True\\); print\\(''Sheets:'', wb.sheetnames\\)\")",
+      "Bash(node -e \"console.log\\(''node available''\\)\")",
+      "Bash(npm list xlsx)",
+      "Bash(npm install xlsx)",
+      "Bash(node -e \":*)",
+      "Bash(npm install)",
+      "Bash(timeout 5 node index.js)",
+      "Bash(node_modules/.bin/vite build)",
+      "Bash(curl -s http://localhost:3001/api/sites)",
+      "Bash(curl -s http://localhost:3001/api/pl/annual)",
+      "Bash(curl -s http://localhost:3001/api/breakeven)",
+      "Bash(start http://localhost:5173)",
+      "Bash(curl -s http://localhost:3001/api/actuals)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //PID 2036 //F)",
+      "Bash(cmd //c \"taskkill /PID 2036 /F\")",
+      "Bash(powershell -Command \"Stop-Process -Id \\(Get-NetTCPConnection -LocalPort 3001\\).OwningProcess -Force\")",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(grep -l \"useAuth\" \"c:/Users/ducml/Desktop/Claude test 2/linkrad-app/client/src/pages/\"*.jsx)",
+      "Bash(done)",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 3001,5173 -ErrorAction SilentlyContinue | Select-Object LocalPort,OwningProcess\")",
+      "Bash(powershell -Command \"Stop-Process -Name node -Force -ErrorAction SilentlyContinue; Write-Host ''killed''\")",
+      "Bash(powershell -Command \"Start-Process node -ArgumentList ''index.js'' -WorkingDirectory ''c:\\\\Users\\\\ducml\\\\Desktop\\\\Claude test 2\\\\linkrad-app\\\\server'' -NoNewWindow\")",
+      "Bash(npm install xlsx --save)",
+      "Bash(node -e \"const XLSX = require\\(''xlsx''\\); const wb = XLSX.readFile\\(''c:/Users/ducml/Desktop/Claude test 2/LinkRad-Planning_2026_070326.xlsx''\\); console.log\\(''Sheets:'', JSON.stringify\\(wb.SheetNames\\)\\); const ws = wb.Sheets[wb.SheetNames[0]]; const rows = XLSX.utils.sheet_to_json\\(ws, {header:1}\\); console.log\\(''First 25 rows of sheet 0:'', JSON.stringify\\(rows.slice\\(0,25\\)\\)\\)\")",
+      "Bash(npm run build)"
+    ]
+  }
+}

@@ -9,4 +9,15 @@ const requireAdmin = (req, res, next) => {
   next()
 }
 
-module.exports = { requireAdmin }
+// Any authenticated user (any role)
+const requireAuth = (req, res, next) => {
+  const token = (req.headers['authorization'] || '').replace('Bearer ', '')
+  const session = token ? tokens.get(token) : null
+  if (!session) {
+    return res.status(401).json({ error: 'Vui lòng đăng nhập' })
+  }
+  req.user = session  // { username, role, department, displayName }
+  next()
+}
+
+module.exports = { requireAdmin, requireAuth }

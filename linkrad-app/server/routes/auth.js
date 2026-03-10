@@ -22,8 +22,8 @@ router.post('/login', (req, res) => {
     return res.status(401).json({ error: 'Sai tên đăng nhập hoặc mật khẩu' })
   }
   const token = crypto.randomUUID()
-  tokens.set(token, { username, role: user.role })
-  res.json({ token, role: user.role, username })
+  tokens.set(token, { username, role: user.role, department: user.department || null, displayName: user.displayName || username })
+  res.json({ token, role: user.role, username, department: user.department || null, displayName: user.displayName || username })
 })
 
 router.post('/logout', (req, res) => {

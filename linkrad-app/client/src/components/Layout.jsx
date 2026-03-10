@@ -8,7 +8,8 @@ const NAV = [
     group: 'Tổng quan',
     items: [
       { path: '/', label: 'Dashboard', icon: '📊' },
-      { path: '/actuals', label: 'Nhập số liệu', icon: '✏️', adminOnly: true }
+      { path: '/actuals', label: 'Nhập số liệu', icon: '✏️', adminOnly: true },
+      { path: '/workflow', label: 'Công việc', icon: '✅', workflowOnly: true }
     ]
   },
   {
@@ -46,9 +47,18 @@ const NAV = [
   }
 ]
 
+const ROLE_LABELS = {
+  admin:       { label: 'Admin',        cls: 'bg-yellow-800 text-yellow-200' },
+  guest:       { label: 'Guest',        cls: 'bg-blue-800 text-blue-300' },
+  nhanvien:    { label: 'Nhân viên',    cls: 'bg-blue-800 text-blue-200' },
+  truongphong: { label: 'Trưởng phòng', cls: 'bg-indigo-800 text-indigo-200' },
+  giamdoc:     { label: 'Giám đốc',     cls: 'bg-purple-800 text-purple-200' },
+}
+
 export default function Layout({ children }) {
   const { auth, logout } = useAuth()
   const isAdmin = auth?.role === 'admin'
+  const isWorkflowUser = auth?.role && auth.role !== 'guest'
 
   const handleLogout = async () => {
     try { await logoutUser() } catch {}
@@ -68,7 +78,11 @@ export default function Layout({ children }) {
         {/* Navigation */}
         <nav className="flex-1 py-4">
           {NAV.map((section) => {
-            const visibleItems = section.items.filter(item => !item.adminOnly || isAdmin)
+            const visibleItems = section.items.filter(item => {
+              if (item.adminOnly && !isAdmin) return false
+              if (item.workflowOnly && !isWorkflowUser) return false
+              return true
+            })
             if (visibleItems.length === 0) return null
             return (
               <div key={section.group} className="mb-2">
@@ -100,12 +114,16 @@ export default function Layout({ children }) {
         {/* User info + logout */}
         <div className="px-4 py-3 border-t border-blue-800 space-y-2">
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${isAdmin ? 'bg-yellow-400' : 'bg-green-400'}`} />
-            <span className="text-blue-200 text-xs font-medium">{auth?.username}</span>
-            <span className={`ml-auto text-xs px-1.5 py-0.5 rounded ${isAdmin ? 'bg-yellow-800 text-yellow-200' : 'bg-blue-800 text-blue-300'}`}>
-              {isAdmin ? 'Admin' : 'Guest'}
-            </span>
+            <div className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+            <span className="text-blue-200 text-xs font-medium truncate">{auth?.displayName || auth?.username}</span>
+            {(() => {
+              const rc = ROLE_LABELS[auth?.role] || ROLE_LABELS.guest
+              return <span className={`ml-auto text-xs px-1.5 py-0.5 rounded whitespace-nowrap flex-shrink-0 ${rc.cls}`}>{rc.label}</span>
+            })()}
           </div>
+          {auth?.department && (
+            <div className="text-blue-400 text-xs px-0.5">{auth.department}</div>
+          )}
           <button
             onClick={handleLogout}
             className="w-full text-xs text-blue-300 hover:text-white hover:bg-blue-800 px-2 py-1.5 rounded text-left transition-colors"

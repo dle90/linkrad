@@ -13,17 +13,21 @@ import MonthlyCF from './pages/MonthlyCF'
 import Breakeven from './pages/Breakeven'
 import SiteList from './pages/SiteList'
 import Actuals from './pages/Actuals'
+import Workflow from './pages/Workflow'
 
 function AppRoutes() {
   const { auth } = useAuth()
 
   if (!auth) return <Login />
 
+  const isWorkflowUser = auth.role && auth.role !== 'guest'
+
   return (
     <Layout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
         {auth.role === 'admin' && <Route path="/actuals" element={<Actuals />} />}
+        {isWorkflowUser && <Route path="/workflow" element={<Workflow />} />}
         <Route path="/pl/annual" element={<AnnualPL />} />
         <Route path="/pl/monthly" element={<MonthlyPL />} />
         <Route path="/pl/site/:siteId" element={<SitePL />} />
