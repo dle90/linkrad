@@ -1,178 +1,179 @@
 const express = require('express')
-const fs = require('fs')
-const path = require('path')
 const crypto = require('crypto')
+const pool = require('../db')
 const { requireAuth } = require('../middleware/auth')
 
 const router = express.Router()
-const TASKS_FILE = path.join(__dirname, '../data/tasks.json')
-const USERS_FILE = path.join(__dirname, '../data/users.json')
 
-const loadTasks = () => {
-  try { return JSON.parse(fs.readFileSync(TASKS_FILE, 'utf8')) }
-  catch { return [] }
-}
-const saveTasks = (tasks) => {
-  fs.writeFileSync(TASKS_FILE, JSON.stringify(tasks, null, 2))
-}
-const loadUsers = () => {
-  try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')) }
-  catch { return {} }
-}
-
-// Filter tasks by role
-const visibleTasks = (tasks, user) => {
-  if (user.role === 'giamdoc' || user.role === 'admin') return tasks
-  if (user.role === 'truongphong') {
-    return tasks.filter(t => t.department === user.department)
-  }
-  if (user.role === 'nhanvien') {
-    return tasks.filter(t => t.assignee === user.username)
-  }
-  return []
-}
-
-// GET /api/tasks — returns tasks visible to caller + list of users (for manager/director)
-router.get('/', requireAuth, (req, res) => {
-  const tasks = loadTasks()
-  const users = loadUsers()
-
-  // Build user list (for manager/director to see employees)
-  const userList = Object.entries(users).map(([username, u]) => ({
-    username,
-    displayName: u.displayName || username,
-    role: u.role,
-    department: u.department,
-  }))
-
-  res.json({ tasks: visibleTasks(tasks, req.user), users: userList })
+const buildTask = (row, comments) => ({
+  id: row.id,
+  title: row.title,
+  description: row.description || '',
+  deadline: row.deadline ? new Date(row.deadline).toISOString().split('T')[0] : null,
+  priority: row.priority,
+  status: row.status,
+  result: row.result || '',
+  assignee: row.assignee,
+  assigneeName: row.assigneeName,
+  department: row.department,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  comments: (comments || []).map(c => ({
+    id: c.id,
+    author: c.author,
+    authorName: c.authorName,
+    text: c.text,
+    createdAt: c.createdAt,
+  })),
 })
 
-// POST /api/tasks — create task (nhanvien, truongphong, admin)
-router.post('/', requireAuth, (req, res) => {
-  const { role, username, department, displayName } = req.user
-  if (role === 'guest') {
-    return res.status(403).json({ error: 'Guest không thể tạo công việc' })
+const roleFilter = (user) => {
+  if (user.role === 'giamdoc' || user.role === 'admin') return ['1=1', []]
+  if (user.role === 'truongphong') return ['department = ?', [user.department]]
+  if (user.role === 'nhanvien') return ['assignee = ?', [user.username]]
+  return ['1=0', []]
+}
+
+router.get('/', requireAuth, async (req, res) => {
+  try {
+    const [where, params] = roleFilter(req.user)
+    const [taskRows] = await pool.execute(
+      `SELECT * FROM tasks WHERE ${where} ORDER BY createdAt DESC`, params
+    )
+    const [commentRows] = await pool.execute('SELECT * FROM task_comments ORDER BY createdAt ASC')
+    const [userRows] = await pool.execute('SELECT username, displayName, role, department FROM users')
+
+    const byTask = {}
+    commentRows.forEach(c => {
+      if (!byTask[c.taskId]) byTask[c.taskId] = []
+      byTask[c.taskId].push(c)
+    })
+
+    res.json({ tasks: taskRows.map(t => buildTask(t, byTask[t.id])), users: userRows })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
+})
+
+router.post('/', requireAuth, async (req, res) => {
+  const { role, username, department } = req.user
+  if (role === 'guest') return res.status(403).json({ error: 'Guest không thể tạo công việc' })
 
   const { title, description, deadline, priority, assignee } = req.body
-  if (!title || !title.trim()) {
-    return res.status(400).json({ error: 'Tiêu đề công việc không được trống' })
-  }
+  if (!title || !title.trim()) return res.status(400).json({ error: 'Tiêu đề công việc không được trống' })
 
-  const users = loadUsers()
-  // For nhanvien: always assign to self. For truongphong/giamdoc/admin: can assign to anyone
-  let taskAssignee = username
-  let taskDept = department
-  if ((role === 'truongphong' || role === 'giamdoc' || role === 'admin') && assignee) {
-    taskAssignee = assignee
-    taskDept = users[assignee]?.department || department
-  }
+  try {
+    let taskAssignee = username
+    let taskDept = department
 
-  const now = new Date().toISOString()
-  const task = {
-    id: crypto.randomUUID(),
-    title: title.trim(),
-    description: (description || '').trim(),
-    deadline: deadline || null,
-    priority: priority || 'medium',
-    status: 'todo',
-    result: '',
-    assignee: taskAssignee,
-    assigneeName: users[taskAssignee]?.displayName || taskAssignee,
-    department: taskDept,
-    createdAt: now,
-    updatedAt: now,
-    comments: [],
-  }
+    if ((role === 'truongphong' || role === 'giamdoc' || role === 'admin') && assignee) {
+      taskAssignee = assignee
+      const [r] = await pool.execute('SELECT department FROM users WHERE username = ?', [assignee])
+      if (r[0]) taskDept = r[0].department || department
+    }
 
-  const tasks = loadTasks()
-  tasks.push(task)
-  saveTasks(tasks)
-  res.json(task)
+    const [nameRows] = await pool.execute('SELECT displayName FROM users WHERE username = ?', [taskAssignee])
+    const assigneeName = nameRows[0]?.displayName || taskAssignee
+
+    const id = crypto.randomUUID()
+    await pool.execute(
+      `INSERT INTO tasks (id, title, description, deadline, priority, status, result, assignee, assigneeName, department, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, 'todo', '', ?, ?, ?, NOW(), NOW())`,
+      [id, title.trim(), (description || '').trim(), deadline || null, priority || 'medium', taskAssignee, assigneeName, taskDept]
+    )
+
+    const [rows] = await pool.execute('SELECT * FROM tasks WHERE id = ?', [id])
+    res.json(buildTask(rows[0], []))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
-// PUT /api/tasks/:id — update task
-router.put('/:id', requireAuth, (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   const { role, username, department } = req.user
-  const tasks = loadTasks()
-  const idx = tasks.findIndex(t => t.id === req.params.id)
-  if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy công việc' })
+  try {
+    const [rows] = await pool.execute('SELECT * FROM tasks WHERE id = ?', [req.params.id])
+    if (!rows[0]) return res.status(404).json({ error: 'Không tìm thấy công việc' })
+    const task = rows[0]
 
-  const task = tasks[idx]
+    if (role === 'guest') return res.status(403).json({ error: 'Không có quyền' })
+    if (role === 'nhanvien' && task.assignee !== username) return res.status(403).json({ error: 'Không có quyền chỉnh sửa công việc của người khác' })
+    if (role === 'truongphong' && task.department !== department) return res.status(403).json({ error: 'Không có quyền chỉnh sửa công việc phòng khác' })
 
-  // Check permission
-  if (role === 'guest') return res.status(403).json({ error: 'Không có quyền' })
-  if (role === 'nhanvien' && task.assignee !== username) return res.status(403).json({ error: 'Không có quyền chỉnh sửa công việc của người khác' })
-  if (role === 'truongphong' && task.department !== department) return res.status(403).json({ error: 'Không có quyền chỉnh sửa công việc phòng khác' })
+    const { status, result, title, description, deadline, priority } = req.body
+    const sets = []
+    const vals = []
 
-  const { status, result, title, description, deadline, priority } = req.body
+    if (status !== undefined)      { sets.push('status = ?');      vals.push(status) }
+    if (result !== undefined)      { sets.push('result = ?');      vals.push(result) }
+    if (role !== 'nhanvien' || task.assignee === username) {
+      if (title !== undefined)       { sets.push('title = ?');       vals.push(title) }
+      if (description !== undefined) { sets.push('description = ?'); vals.push(description) }
+      if (deadline !== undefined)    { sets.push('deadline = ?');    vals.push(deadline || null) }
+      if (priority !== undefined)    { sets.push('priority = ?');    vals.push(priority) }
+    }
+    sets.push('updatedAt = NOW()')
 
-  if (status !== undefined) task.status = status
-  if (result !== undefined) task.result = result
-  // Only truongphong/giamdoc/admin can edit title/deadline/priority of others' tasks
-  if (role !== 'nhanvien' || task.assignee === username) {
-    if (title !== undefined) task.title = title
-    if (description !== undefined) task.description = description
-    if (deadline !== undefined) task.deadline = deadline
-    if (priority !== undefined) task.priority = priority
+    await pool.execute(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`, [...vals, req.params.id])
+
+    const [updated] = await pool.execute('SELECT * FROM tasks WHERE id = ?', [req.params.id])
+    const [comments] = await pool.execute('SELECT * FROM task_comments WHERE taskId = ? ORDER BY createdAt ASC', [req.params.id])
+    res.json(buildTask(updated[0], comments))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
-  task.updatedAt = new Date().toISOString()
-
-  tasks[idx] = task
-  saveTasks(tasks)
-  res.json(task)
 })
 
-// POST /api/tasks/:id/comments — add comment (truongphong, giamdoc, admin)
-router.post('/:id/comments', requireAuth, (req, res) => {
+router.post('/:id/comments', requireAuth, async (req, res) => {
   const { role, username, department, displayName } = req.user
   if (role === 'nhanvien' || role === 'guest') {
     return res.status(403).json({ error: 'Chỉ trưởng phòng và giám đốc mới có thể thêm nhận xét' })
   }
 
-  const tasks = loadTasks()
-  const idx = tasks.findIndex(t => t.id === req.params.id)
-  if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy công việc' })
+  try {
+    const [rows] = await pool.execute('SELECT * FROM tasks WHERE id = ?', [req.params.id])
+    if (!rows[0]) return res.status(404).json({ error: 'Không tìm thấy công việc' })
+    const task = rows[0]
 
-  const task = tasks[idx]
-  if (role === 'truongphong' && task.department !== department) {
-    return res.status(403).json({ error: 'Không có quyền nhận xét công việc phòng khác' })
+    if (role === 'truongphong' && task.department !== department) {
+      return res.status(403).json({ error: 'Không có quyền nhận xét công việc phòng khác' })
+    }
+
+    const { text } = req.body
+    if (!text || !text.trim()) return res.status(400).json({ error: 'Nội dung nhận xét không được trống' })
+
+    const id = crypto.randomUUID()
+    await pool.execute(
+      'INSERT INTO task_comments (id, taskId, author, authorName, text) VALUES (?, ?, ?, ?, ?)',
+      [id, req.params.id, username, displayName, text.trim()]
+    )
+    await pool.execute('UPDATE tasks SET updatedAt = NOW() WHERE id = ?', [req.params.id])
+
+    const [updated] = await pool.execute('SELECT * FROM tasks WHERE id = ?', [req.params.id])
+    const [comments] = await pool.execute('SELECT * FROM task_comments WHERE taskId = ? ORDER BY createdAt ASC', [req.params.id])
+    res.json(buildTask(updated[0], comments))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
-
-  const { text } = req.body
-  if (!text || !text.trim()) return res.status(400).json({ error: 'Nội dung nhận xét không được trống' })
-
-  const comment = {
-    id: crypto.randomUUID(),
-    author: username,
-    authorName: displayName,
-    text: text.trim(),
-    createdAt: new Date().toISOString(),
-  }
-
-  task.comments.push(comment)
-  task.updatedAt = new Date().toISOString()
-  tasks[idx] = task
-  saveTasks(tasks)
-  res.json(task)
 })
 
-// DELETE /api/tasks/:id — delete (own task for nhanvien, dept for truongphong, all for giamdoc/admin)
-router.delete('/:id', requireAuth, (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   const { role, username, department } = req.user
-  const tasks = loadTasks()
-  const idx = tasks.findIndex(t => t.id === req.params.id)
-  if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy công việc' })
+  try {
+    const [rows] = await pool.execute('SELECT * FROM tasks WHERE id = ?', [req.params.id])
+    if (!rows[0]) return res.status(404).json({ error: 'Không tìm thấy công việc' })
+    const task = rows[0]
 
-  const task = tasks[idx]
-  if (role === 'guest') return res.status(403).json({ error: 'Không có quyền' })
-  if (role === 'nhanvien' && task.assignee !== username) return res.status(403).json({ error: 'Không có quyền xóa công việc của người khác' })
-  if (role === 'truongphong' && task.department !== department) return res.status(403).json({ error: 'Không có quyền xóa công việc phòng khác' })
+    if (role === 'guest') return res.status(403).json({ error: 'Không có quyền' })
+    if (role === 'nhanvien' && task.assignee !== username) return res.status(403).json({ error: 'Không có quyền xóa công việc của người khác' })
+    if (role === 'truongphong' && task.department !== department) return res.status(403).json({ error: 'Không có quyền xóa công việc phòng khác' })
 
-  tasks.splice(idx, 1)
-  saveTasks(tasks)
-  res.json({ ok: true })
+    await pool.execute('DELETE FROM task_comments WHERE taskId = ?', [req.params.id])
+    await pool.execute('DELETE FROM tasks WHERE id = ?', [req.params.id])
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 module.exports = router
