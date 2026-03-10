@@ -1,37 +1,42 @@
 const express = require('express')
-const fs = require('fs')
-const path = require('path')
+const KVStore = require('../models/KVStore')
 
 const router = express.Router()
-const FILE = path.join(__dirname, '../data/actuals.json')
+const KEY = 'actuals'
 
-const load = () => {
-  try { return JSON.parse(fs.readFileSync(FILE, 'utf8')) }
-  catch { return {} }
+const load = async () => {
+  const doc = await KVStore.findById(KEY)
+  return doc ? doc.data : {}
 }
 
 // GET all actuals
-router.get('/', (req, res) => res.json(load()))
-
-// PUT a single month entry: body = { key: "2026-03", data: { rev_mri, rev_ct, ... } }
-router.put('/:key', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const all = load()
+    res.json(await load())
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT a single month entry
+router.put('/:key', async (req, res) => {
+  try {
+    const all = await load()
     all[req.params.key] = req.body
-    fs.writeFileSync(FILE, JSON.stringify(all, null, 2))
-    res.json(all)
+    const doc = await KVStore.findByIdAndUpdate(KEY, { data: all }, { upsert: true, new: true })
+    res.json(doc.data)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
 // DELETE a single month
-router.delete('/:key', (req, res) => {
+router.delete('/:key', async (req, res) => {
   try {
-    const all = load()
+    const all = await load()
     delete all[req.params.key]
-    fs.writeFileSync(FILE, JSON.stringify(all, null, 2))
-    res.json(all)
+    const doc = await KVStore.findByIdAndUpdate(KEY, { data: all }, { upsert: true, new: true })
+    res.json(doc.data)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

@@ -2,6 +2,8 @@ const express = require('express')
 const cors = require('cors')
 const path = require('path')
 
+require('./db') // Connect to MongoDB
+
 const { router: authRouter } = require('./routes/auth')
 const sitesRouter = require('./routes/sites')
 const plRouter = require('./routes/pl')

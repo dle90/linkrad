@@ -1,45 +1,39 @@
 const express = require('express')
-const fs = require('fs')
-const path = require('path')
+const KVStore = require('../models/KVStore')
 
 const router = express.Router()
 
-const ANNUAL_FILE = path.join(__dirname, '../data/annual-pl.json')
-const MONTHLY_FILE = path.join(__dirname, '../data/monthly-pl.json')
-
-router.get('/annual', (req, res) => {
+router.get('/annual', async (req, res) => {
   try {
-    const data = JSON.parse(fs.readFileSync(ANNUAL_FILE, 'utf8'))
-    res.json(data)
+    const doc = await KVStore.findById('annual-pl')
+    res.json(doc ? doc.data : [])
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
-router.put('/annual', (req, res) => {
+router.put('/annual', async (req, res) => {
   try {
-    const data = req.body
-    fs.writeFileSync(ANNUAL_FILE, JSON.stringify(data, null, 2))
-    res.json(data)
+    const doc = await KVStore.findByIdAndUpdate('annual-pl', { data: req.body }, { upsert: true, new: true })
+    res.json(doc.data)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
-router.get('/monthly', (req, res) => {
+router.get('/monthly', async (req, res) => {
   try {
-    const data = JSON.parse(fs.readFileSync(MONTHLY_FILE, 'utf8'))
-    res.json(data)
+    const doc = await KVStore.findById('monthly-pl')
+    res.json(doc ? doc.data : [])
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
-router.put('/monthly', (req, res) => {
+router.put('/monthly', async (req, res) => {
   try {
-    const data = req.body
-    fs.writeFileSync(MONTHLY_FILE, JSON.stringify(data, null, 2))
-    res.json(data)
+    const doc = await KVStore.findByIdAndUpdate('monthly-pl', { data: req.body }, { upsert: true, new: true })
+    res.json(doc.data)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
