@@ -1,18 +1,19 @@
-const { tokens } = require('../routes/auth')
+const { verify } = require('../routes/auth')
 
 const requireAdmin = (req, res, next) => {
   const token = (req.headers['authorization'] || '').replace('Bearer ', '')
-  const session = token ? tokens.get(token) : null
+  const session = token ? verify(token) : null
   if (!session || session.role !== 'admin') {
     return res.status(403).json({ error: 'Chỉ admin mới có quyền thực hiện thao tác này' })
   }
+  req.user = session
   next()
 }
 
 // Any authenticated user (any role)
 const requireAuth = (req, res, next) => {
   const token = (req.headers['authorization'] || '').replace('Bearer ', '')
-  const session = token ? tokens.get(token) : null
+  const session = token ? verify(token) : null
   if (!session) {
     return res.status(401).json({ error: 'Vui lòng đăng nhập' })
   }

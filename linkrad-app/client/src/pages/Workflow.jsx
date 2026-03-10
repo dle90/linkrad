@@ -665,10 +665,15 @@ export default function Workflow() {
   }
 
   const load = useCallback(async () => {
-    const data = await getTasks()
-    setTasks(data.tasks || [])
-    setUsers(data.users || [])
-    setLoading(false)
+    try {
+      const data = await getTasks()
+      setTasks(data.tasks || [])
+      setUsers(data.users || [])
+    } catch {
+      // 401 is handled by the api interceptor (auto-logout)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])

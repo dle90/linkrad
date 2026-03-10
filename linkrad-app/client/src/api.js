@@ -14,6 +14,18 @@ api.interceptors.request.use(config => {
   return config
 })
 
+// On 401, clear stale session and reload to login screen
+api.interceptors.response.use(
+  r => r,
+  err => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('linkrad_auth')
+      window.location.reload()
+    }
+    return Promise.reject(err)
+  }
+)
+
 export const loginUser  = (username, password) => api.post('/auth/login', { username, password }).then(r => r.data)
 export const logoutUser = () => api.post('/auth/logout').then(r => r.data)
 
