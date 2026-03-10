@@ -196,6 +196,7 @@ export default function Dashboard() {
       fullName: site,
       revenue: (Number(revTotalRow?.values?.[site]) || 0) * timeRatioRev,
       ebitda:  (Number(ebitdaRow?.values?.[site])   || 0) * timeRatioEbitda,
+      pat:     (Number(patRow?.values?.[site])       || 0) * timeRatioEbitda,
     }))
 
   // ── Monthly trend data — 2025 scaled by site ratio; 2026 aggregated per month filtered by sites
@@ -535,6 +536,34 @@ export default function Dashboard() {
             <Bar dataKey="ebitda" radius={[3,3,0,0]}>
               {revBySite.map((entry, i) => (
                 <Cell key={i} fill={entry.ebitda >= 0 ? '#10b981' : '#ef4444'} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* ── Net Profit (PAT) by site ── */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700">
+            Net Profit (PAT) theo Chi Nhánh
+            {siteFilterActive && <span className="ml-1 text-xs font-normal text-indigo-500">({activeSel.length} sites)</span>}
+          </h3>
+          <span className="text-xs font-medium text-blue-600">{periodLabel}</span>
+        </div>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={revBySite} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+            <YAxis tick={{ fontSize: 10 }} tickFormatter={v => (v/1000).toFixed(1) + 'k'} />
+            <ReferenceLine y={0} stroke="#d1d5db" />
+            <Tooltip
+              formatter={(v) => [fmt(v) + ' tr.', 'Net Profit (PAT)']}
+              labelFormatter={label => revBySite.find(d => d.name === label)?.fullName || label}
+            />
+            <Bar dataKey="pat" radius={[3,3,0,0]}>
+              {revBySite.map((entry, i) => (
+                <Cell key={i} fill={entry.pat >= 0 ? '#6366f1' : '#ef4444'} />
               ))}
             </Bar>
           </BarChart>
