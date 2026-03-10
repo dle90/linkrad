@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { getTasks, createTask, updateTask, addComment, deleteTask } from '../api'
-
-const DEPARTMENTS = ['Ops', 'HR', 'Kế toán']
+import { getTasks, createTask, updateTask, addComment, deleteTask, getSites } from '../api'
 
 const STATUS_CONFIG = {
   todo:       { label: 'Chưa bắt đầu', color: 'bg-gray-100 text-gray-600',    dot: 'bg-gray-400' },
@@ -528,15 +526,15 @@ function TruongPhongView({ tasks, users, department, onSelectTask }) {
 }
 
 // ─── Giám đốc View ───────────────────────────────────────────────────────────
-function GiamDocView({ tasks, users, onSelectTask }) {
+function GiamDocView({ tasks, users, sites, onSelectTask }) {
   const [selectedDept, setSelectedDept] = useState(null)
 
   const depts = useMemo(() => {
     const all = [...new Set(tasks.map(t => t.department).filter(Boolean))]
-    // Ensure placeholder depts appear even if no tasks yet
-    DEPARTMENTS.forEach(d => { if (!all.includes(d)) all.push(d) })
+    // Ensure all sites appear even if no tasks yet
+    sites.forEach(s => { if (!all.includes(s.name)) all.push(s.name) })
     return all
-  }, [tasks])
+  }, [tasks, sites])
 
   const filteredTasks = selectedDept ? tasks.filter(t => t.department === selectedDept) : tasks
 
@@ -566,9 +564,10 @@ function GiamDocView({ tasks, users, onSelectTask }) {
         ))}
       </div>
 
-      {/* Department cards */}
+      {/* Site cards */}
       <div className="grid grid-cols-3 gap-4">
         {depts.map(dept => {
+          const site = sites.find(s => s.name === dept)
           const dTasks = tasks.filter(t => t.department === dept)
           const dUsers = users.filter(u => u.role === 'nhanvien' && u.department === dept)
           const done = dTasks.filter(t => t.status === 'done').length
@@ -583,6 +582,7 @@ function GiamDocView({ tasks, users, onSelectTask }) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-gray-800">{dept}</p>
+                  <p className="text-xs text-gray-400">{site?.location || ''}</p>
                   <p className="text-xs text-gray-500">{dUsers.length} nhân viên · {dTasks.length} công việc</p>
                 </div>
                 <div className="text-right">
@@ -650,6 +650,7 @@ export default function Workflow() {
   const { auth } = useAuth()
   const [tasks, setTasks] = useState([])
   const [users, setUsers] = useState([])
+  const [sites, setSites] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [selectedTask, setSelectedTask] = useState(null)
@@ -666,9 +667,10 @@ export default function Workflow() {
 
   const load = useCallback(async () => {
     try {
-      const data = await getTasks()
-      setTasks(data.tasks || [])
-      setUsers(data.users || [])
+      const [taskData, siteData] = await Promise.all([getTasks(), getSites()])
+      setTasks(taskData.tasks || [])
+      setUsers(taskData.users || [])
+      setSites(siteData || [])
     } catch {
       // 401 is handled by the api interceptor (auto-logout)
     } finally {
@@ -754,7 +756,7 @@ export default function Workflow() {
       )}
       {(role === 'giamdoc' || role === 'admin') && (
         <GiamDocView
-          tasks={tasks} users={users}
+          tasks={tasks} users={users} sites={sites}
           onSelectTask={setSelectedTask}
         />
       )}

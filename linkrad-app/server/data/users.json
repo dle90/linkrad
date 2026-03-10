@@ -1,17 +1,17 @@
 {
-  "admin":   { "password": "linkrad2025", "role": "admin",       "department": null,        "displayName": "Admin" },
-  "guest":   { "password": "guest123",    "role": "guest",       "department": null,        "displayName": "Guest" },
+  "admin":   { "password": "linkrad2025", "role": "admin",       "department": null,          "displayName": "Admin" },
+  "guest":   { "password": "guest123",    "role": "guest",       "department": null,          "displayName": "Guest" },
 
-  "nv_ops1": { "password": "linkrad2025", "role": "nhanvien",    "department": "Ops",       "displayName": "Nguyễn Văn An" },
-  "nv_ops2": { "password": "linkrad2025", "role": "nhanvien",    "department": "Ops",       "displayName": "Trần Thị Bình" },
-  "nv_hr1":  { "password": "linkrad2025", "role": "nhanvien",    "department": "HR",        "displayName": "Lê Văn Cường" },
-  "nv_hr2":  { "password": "linkrad2025", "role": "nhanvien",    "department": "HR",        "displayName": "Phạm Thị Dung" },
-  "nv_acc1": { "password": "linkrad2025", "role": "nhanvien",    "department": "Kế toán",   "displayName": "Hoàng Văn Em" },
-  "nv_acc2": { "password": "linkrad2025", "role": "nhanvien",    "department": "Kế toán",   "displayName": "Vũ Thị Phương" },
+  "nv_hd1":  { "password": "linkrad2025", "role": "nhanvien",    "department": "Hải Dương",   "displayName": "Nguyễn Văn An" },
+  "nv_hd2":  { "password": "linkrad2025", "role": "nhanvien",    "department": "Hải Dương",   "displayName": "Trần Thị Bình" },
+  "nv_cm1":  { "password": "linkrad2025", "role": "nhanvien",    "department": "Cà Mau",      "displayName": "Lê Văn Cường" },
+  "nv_cm2":  { "password": "linkrad2025", "role": "nhanvien",    "department": "Cà Mau",      "displayName": "Phạm Thị Dung" },
+  "nv_th1":  { "password": "linkrad2025", "role": "nhanvien",    "department": "Thanh Hóa",   "displayName": "Hoàng Văn Em" },
+  "nv_th2":  { "password": "linkrad2025", "role": "nhanvien",    "department": "Thanh Hóa",   "displayName": "Vũ Thị Phương" },
 
-  "tp_ops":  { "password": "linkrad2025", "role": "truongphong", "department": "Ops",       "displayName": "TP. Vận hành" },
-  "tp_hr":   { "password": "linkrad2025", "role": "truongphong", "department": "HR",        "displayName": "TP. Nhân sự" },
-  "tp_acc":  { "password": "linkrad2025", "role": "truongphong", "department": "Kế toán",   "displayName": "TP. Kế toán" },
+  "tp_hd":   { "password": "linkrad2025", "role": "truongphong", "department": "Hải Dương",   "displayName": "TP. Hải Dương" },
+  "tp_cm":   { "password": "linkrad2025", "role": "truongphong", "department": "Cà Mau",      "displayName": "TP. Cà Mau" },
+  "tp_th":   { "password": "linkrad2025", "role": "truongphong", "department": "Thanh Hóa",   "displayName": "TP. Thanh Hóa" },
 
-  "giamdoc": { "password": "linkrad2025", "role": "giamdoc",     "department": null,        "displayName": "Giám đốc" }
+  "giamdoc": { "password": "linkrad2025", "role": "giamdoc",     "department": null,          "displayName": "Giám đốc" }
 }
