@@ -1,9 +1,16 @@
 const express = require('express')
+const fs = require('fs')
+const path = require('path')
 const crypto = require('crypto')
-const pool = require('../db')
 
 const router = express.Router()
+const USERS_FILE = path.join(__dirname, '../data/users.json')
 const SECRET = process.env.SESSION_SECRET || 'linkrad-secret-2024'
+
+const loadUsers = () => {
+  try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')) }
+  catch { return {} }
+}
 
 // Stateless HMAC-signed tokens — survive server restarts
 const sign = (payload) => {
@@ -24,31 +31,20 @@ const verify = (token) => {
   } catch { return null }
 }
 
-router.post('/login', async (req, res) => {
+router.post('/login', (req, res) => {
   const { username, password } = req.body
-  try {
-    const [rows] = await pool.execute(
-      'SELECT * FROM users WHERE username = ? AND password = ?',
-      [username, password]
-    )
-    const user = rows[0]
-    if (!user) {
-      return res.status(401).json({ error: 'Sai tên đăng nhập hoặc mật khẩu' })
-    }
-    const session = {
-      username: user.username,
-      role: user.role,
-      department: user.department || null,
-      displayName: user.displayName || user.username,
-    }
-    const token = sign(session)
-    res.json({ token, ...session })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
+  const users = loadUsers()
+  const user = users[username]
+  if (!user || user.password !== password) {
+    return res.status(401).json({ error: 'Sai tên đăng nhập hoặc mật khẩu' })
   }
+  const session = { username, role: user.role, department: user.department || null, displayName: user.displayName || username }
+  const token = sign(session)
+  res.json({ token, ...session })
 })
 
 router.post('/logout', (req, res) => {
+  // Stateless — client discards the token
   res.json({ ok: true })
 })
 

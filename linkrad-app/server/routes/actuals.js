@@ -1,37 +1,40 @@
 const express = require('express')
-const pool = require('../db')
+const fs = require('fs')
+const path = require('path')
 
 const router = express.Router()
+const FILE = path.join(__dirname, '../data/actuals.json')
 
-const getAll = async () => {
-  const [rows] = await pool.execute('SELECT month_key, data FROM actuals')
-  const result = {}
-  rows.forEach(r => { result[r.month_key] = typeof r.data === 'string' ? JSON.parse(r.data) : r.data })
-  return result
+const load = () => {
+  try { return JSON.parse(fs.readFileSync(FILE, 'utf8')) }
+  catch { return {} }
 }
 
-router.get('/', async (req, res) => {
-  try { res.json(await getAll()) }
-  catch (err) { res.status(500).json({ error: err.message }) }
+// GET all actuals
+router.get('/', (req, res) => res.json(load()))
+
+// PUT a single month entry: body = { key: "2026-03", data: { rev_mri, rev_ct, ... } }
+router.put('/:key', (req, res) => {
+  try {
+    const all = load()
+    all[req.params.key] = req.body
+    fs.writeFileSync(FILE, JSON.stringify(all, null, 2))
+    res.json(all)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
-router.put('/:key', async (req, res) => {
+// DELETE a single month
+router.delete('/:key', (req, res) => {
   try {
-    const [existing] = await pool.execute('SELECT month_key FROM actuals WHERE month_key = ?', [req.params.key])
-    if (existing.length > 0) {
-      await pool.execute('UPDATE actuals SET data = ? WHERE month_key = ?', [JSON.stringify(req.body), req.params.key])
-    } else {
-      await pool.execute('INSERT INTO actuals (month_key, data) VALUES (?, ?)', [req.params.key, JSON.stringify(req.body)])
-    }
-    res.json(await getAll())
-  } catch (err) { res.status(500).json({ error: err.message }) }
-})
-
-router.delete('/:key', async (req, res) => {
-  try {
-    await pool.execute('DELETE FROM actuals WHERE month_key = ?', [req.params.key])
-    res.json(await getAll())
-  } catch (err) { res.status(500).json({ error: err.message }) }
+    const all = load()
+    delete all[req.params.key]
+    fs.writeFileSync(FILE, JSON.stringify(all, null, 2))
+    res.json(all)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 module.exports = router

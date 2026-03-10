@@ -3,8 +3,7 @@ const fs = require('fs')
 const path = require('path')
 
 const router = express.Router()
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data')
-const DATA_FILE = path.join(DATA_DIR, 'sites.json')
+const DATA_FILE = path.join(__dirname, '../data/sites.json')
 
 router.get('/', (req, res) => {
   try {

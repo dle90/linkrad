@@ -4,9 +4,8 @@ const path = require('path')
 
 const router = express.Router()
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../data')
-const ANNUAL_FILE = path.join(DATA_DIR, 'annual-pl.json')
-const MONTHLY_FILE = path.join(DATA_DIR, 'monthly-pl.json')
+const ANNUAL_FILE = path.join(__dirname, '../data/annual-pl.json')
+const MONTHLY_FILE = path.join(__dirname, '../data/monthly-pl.json')
 
 router.get('/annual', (req, res) => {
   try {
