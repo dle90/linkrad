@@ -2,6 +2,8 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { getTasks, createTask, updateTask, addComment, deleteTask, getSites } from '../api'
 
+const FIXED_DEPTS = ['Ops', 'HR', 'Kế toán']
+
 const STATUS_CONFIG = {
   todo:       { label: 'Chưa bắt đầu', color: 'bg-gray-100 text-gray-600',    dot: 'bg-gray-400' },
   inprogress: { label: 'Đang thực hiện', color: 'bg-blue-100 text-blue-700',  dot: 'bg-blue-500' },
@@ -413,6 +415,7 @@ function NhanVienView({ tasks, users, onAddTask, onSelectTask, username }) {
 // ─── Trưởng phòng View ───────────────────────────────────────────────────────
 function TruongPhongView({ tasks, users, department, onSelectTask }) {
   const [selectedUser, setSelectedUser] = useState(null)
+  const [viewMode, setViewMode] = useState('board')
 
   const deptUsers = useMemo(() =>
     users.filter(u => u.role === 'nhanvien' && u.department === department),
@@ -454,9 +457,12 @@ function TruongPhongView({ tasks, users, department, onSelectTask }) {
         ))}
       </div>
 
-      {/* Employee filter */}
+      {/* Employee filter + view toggle */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">Nhân viên — {department}</p>
+        <div className="flex items-center justify-between mb-2.5">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Nhân viên — {department}</p>
+          <ViewToggle mode={viewMode} onChange={setViewMode} />
+        </div>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setSelectedUser(null)}
@@ -508,18 +514,210 @@ function TruongPhongView({ tasks, users, department, onSelectTask }) {
         </div>
       )}
 
-      {/* Task list */}
-      <div className="space-y-2">
-        {userTasks.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">Chưa có công việc nào</p>
-        ) : (
-          userTasks
-            .sort((a, b) => {
-              const order = { todo: 0, inprogress: 1, done: 2 }
-              return (order[a.status] ?? 3) - (order[b.status] ?? 3)
-            })
-            .map(t => <TaskCard key={t.id} task={t} onClick={onSelectTask} showAssignee={true} />)
-        )}
+      {/* Task list / list view / gantt */}
+      {viewMode === 'board' && (
+        <div className="space-y-2">
+          {userTasks.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">Chưa có công việc nào</p>
+          ) : (
+            userTasks
+              .sort((a, b) => {
+                const order = { todo: 0, inprogress: 1, done: 2 }
+                return (order[a.status] ?? 3) - (order[b.status] ?? 3)
+              })
+              .map(t => <TaskCard key={t.id} task={t} onClick={onSelectTask} showAssignee={true} />)
+          )}
+        </div>
+      )}
+      {viewMode === 'list' && (
+        <ListView tasks={userTasks} onSelectTask={onSelectTask} />
+      )}
+      {viewMode === 'gantt' && (
+        <GanttView tasks={userTasks} users={users} onSelectTask={onSelectTask} />
+      )}
+    </div>
+  )
+}
+
+// ─── View Toggle ─────────────────────────────────────────────────────────────
+function ViewToggle({ mode, onChange }) {
+  return (
+    <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+      {[
+        { key: 'board', label: 'Kanban' },
+        { key: 'list',  label: 'Danh sách' },
+        { key: 'gantt', label: 'Gantt' },
+      ].map(v => (
+        <button key={v.key} onClick={() => onChange(v.key)}
+          className={`px-3 py-1 text-xs font-medium rounded transition-colors ${mode === v.key ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+          {v.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ─── List View ────────────────────────────────────────────────────────────────
+function ListView({ tasks, onSelectTask }) {
+  const sorted = [...tasks].sort((a, b) => {
+    const o = { todo: 0, inprogress: 1, done: 2 }
+    return (o[a.status] ?? 3) - (o[b.status] ?? 3)
+  })
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 border-b border-gray-200">
+          <tr>
+            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Công việc</th>
+            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Chi nhánh / BP</th>
+            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Nhân viên</th>
+            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Ưu tiên</th>
+            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Trạng thái</th>
+            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Hạn</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.length === 0 ? (
+            <tr><td colSpan={6} className="text-center py-8 text-gray-400">Chưa có công việc nào</td></tr>
+          ) : sorted.map(task => {
+            const overdue = isOverdue(task.deadline, task.status)
+            return (
+              <tr key={task.id} onClick={() => onSelectTask(task)}
+                className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
+                <td className="px-3 py-2 font-medium text-gray-800 max-w-xs">
+                  <span className="line-clamp-1">{task.title}</span>
+                </td>
+                <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{task.department}</td>
+                <td className="px-3 py-2 text-indigo-600 whitespace-nowrap">{task.assigneeName || task.assignee}</td>
+                <td className="px-3 py-2"><PriorityBadge priority={task.priority} /></td>
+                <td className="px-3 py-2"><StatusBadge status={task.status} /></td>
+                <td className={`px-3 py-2 whitespace-nowrap text-xs ${overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                  {overdue ? '⚠ ' : ''}{fmtDate(task.deadline)}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ─── Gantt View ───────────────────────────────────────────────────────────────
+function GanttView({ tasks, users, onSelectTask }) {
+  const now = new Date()
+  const allDates = tasks.flatMap(t => [
+    t.createdAt ? new Date(t.createdAt) : null,
+    t.deadline  ? new Date(t.deadline)  : null,
+  ].filter(Boolean))
+
+  const minDate = new Date(Math.min(
+    ...(allDates.length ? allDates.map(d => d.getTime()) : [now.getTime()]),
+    new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime()
+  ))
+  const maxDate = new Date(Math.max(
+    ...(allDates.length ? allDates.map(d => d.getTime()) : [now.getTime()]),
+    new Date(now.getFullYear(), now.getMonth() + 2, 0).getTime()
+  ))
+  // Snap to month boundaries
+  const rangeStart = new Date(minDate.getFullYear(), minDate.getMonth(), 1)
+  const rangeEnd   = new Date(maxDate.getFullYear(), maxDate.getMonth() + 1, 0)
+  const totalMs    = rangeEnd - rangeStart
+
+  const toLeft = (date) => date ? `${((new Date(date) - rangeStart) / totalMs) * 100}%` : null
+  const toWidth = (start, end) => {
+    const s = new Date(start || rangeStart)
+    const e = end ? new Date(end) : new Date(s.getTime() + 3 * 86400000)
+    return `${Math.max(((e - s) / totalMs) * 100, 0.5)}%`
+  }
+
+  // Month header labels
+  const months = []
+  let cur = new Date(rangeStart)
+  while (cur <= rangeEnd) {
+    months.push(new Date(cur))
+    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)
+  }
+
+  const todayLeft = toLeft(now)
+
+  // Group tasks by assignee
+  const grouped = {}
+  tasks.forEach(t => {
+    const key = t.assignee
+    if (!grouped[key]) grouped[key] = { user: users.find(u => u.username === key), tasks: [] }
+    grouped[key].tasks.push(t)
+  })
+
+  const barColor = (task) => {
+    if (task.status === 'done') return 'bg-green-400'
+    if (isOverdue(task.deadline, task.status)) return 'bg-red-400'
+    if (task.status === 'inprogress') return 'bg-blue-400'
+    return 'bg-gray-300'
+  }
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <div style={{ minWidth: '700px' }}>
+          {/* Month header */}
+          <div className="flex border-b border-gray-200 bg-gray-50 text-xs text-gray-500">
+            <div className="w-44 shrink-0 px-3 py-2 font-semibold border-r border-gray-200">Nhân viên / Công việc</div>
+            <div className="flex-1 relative h-8">
+              {months.map(m => (
+                <div key={m.getTime()} className="absolute top-0 bottom-0 flex items-center border-l border-gray-200 px-1"
+                  style={{ left: toLeft(m) }}>
+                  <span className="whitespace-nowrap">{m.getMonth() + 1}/{m.getFullYear()}</span>
+                </div>
+              ))}
+              <div className="absolute top-0 bottom-0 border-l-2 border-red-400 z-10" style={{ left: todayLeft }} />
+            </div>
+          </div>
+
+          {/* Rows */}
+          {Object.entries(grouped).map(([assignee, { user, tasks: aTasks }]) => (
+            <div key={assignee}>
+              {/* Assignee header */}
+              <div className="flex bg-indigo-50 border-b border-gray-100 text-xs font-semibold text-indigo-700">
+                <div className="w-44 shrink-0 px-3 py-1.5 border-r border-gray-200 truncate">
+                  {user?.displayName || assignee}
+                  <span className="ml-1 font-normal text-indigo-400">({aTasks.length})</span>
+                </div>
+                <div className="flex-1 relative" style={{ minHeight: '24px' }}>
+                  <div className="absolute top-0 bottom-0 border-l border-red-300" style={{ left: todayLeft }} />
+                </div>
+              </div>
+              {/* Task bars */}
+              {aTasks.map(task => (
+                <div key={task.id} className="flex border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                  onClick={() => onSelectTask(task)}>
+                  <div className="w-44 shrink-0 px-3 py-1 text-xs text-gray-600 border-r border-gray-200 truncate">
+                    {task.title}
+                  </div>
+                  <div className="flex-1 relative" style={{ height: '28px' }}>
+                    {months.map(m => (
+                      <div key={m.getTime()} className="absolute top-0 bottom-0 border-l border-gray-100"
+                        style={{ left: toLeft(m) }} />
+                    ))}
+                    <div className="absolute top-0 bottom-0 border-l border-red-200" style={{ left: todayLeft }} />
+                    {task.createdAt && (
+                      <div
+                        onClick={e => { e.stopPropagation(); onSelectTask(task) }}
+                        className={`absolute top-2 bottom-2 rounded ${barColor(task)} opacity-80 hover:opacity-100 transition-opacity`}
+                        style={{ left: toLeft(task.createdAt), width: toWidth(task.createdAt, task.deadline) }}
+                        title={`${task.title} | Hạn: ${fmtDate(task.deadline)}`}
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+
+          {tasks.length === 0 && (
+            <div className="text-center py-10 text-sm text-gray-400">Chưa có công việc nào</div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -528,11 +726,14 @@ function TruongPhongView({ tasks, users, department, onSelectTask }) {
 // ─── Giám đốc View ───────────────────────────────────────────────────────────
 function GiamDocView({ tasks, users, sites, onSelectTask }) {
   const [selectedDept, setSelectedDept] = useState(null)
+  const [viewMode, setViewMode] = useState('board')
 
   const depts = useMemo(() => {
     const all = [...new Set(tasks.map(t => t.department).filter(Boolean))]
-    // Ensure all sites appear even if no tasks yet
+    // Add all sites
     sites.forEach(s => { if (!all.includes(s.name)) all.push(s.name) })
+    // Add fixed functional departments
+    FIXED_DEPTS.forEach(d => { if (!all.includes(d)) all.push(d) })
     return all
   }, [tasks, sites])
 
@@ -564,7 +765,25 @@ function GiamDocView({ tasks, users, sites, onSelectTask }) {
         ))}
       </div>
 
-      {/* Site cards */}
+      {/* View toggle + site filter header */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setSelectedDept(null)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${!selectedDept ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            Tất cả
+          </button>
+          {depts.map(d => (
+            <button key={d} onClick={() => setSelectedDept(selectedDept === d ? null : d)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${selectedDept === d ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {d}
+            </button>
+          ))}
+        </div>
+        <ViewToggle mode={viewMode} onChange={setViewMode} />
+      </div>
+
+      {/* Board: site cards (only in board mode when no dept selected) */}
+      {viewMode === 'board' && !selectedDept && (
       <div className="grid grid-cols-3 gap-4">
         {depts.map(dept => {
           const site = sites.find(s => s.name === dept)
@@ -621,8 +840,20 @@ function GiamDocView({ tasks, users, sites, onSelectTask }) {
         })}
       </div>
 
-      {/* Filtered task list */}
-      {selectedDept && (
+      )} {/* end board-mode site cards */}
+
+      {/* List view */}
+      {viewMode === 'list' && (
+        <ListView tasks={filteredTasks} onSelectTask={onSelectTask} />
+      )}
+
+      {/* Gantt view */}
+      {viewMode === 'gantt' && (
+        <GanttView tasks={filteredTasks} users={users} onSelectTask={onSelectTask} />
+      )}
+
+      {/* Board: filtered task cards when a dept is selected */}
+      {viewMode === 'board' && selectedDept && (
         <div>
           <p className="text-sm font-semibold text-gray-700 mb-2">
             Công việc — {selectedDept}
