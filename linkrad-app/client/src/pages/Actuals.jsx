@@ -19,19 +19,20 @@ const EXCEL_HEADERS = [
   { header: 'Tổng biến phí',         field: 'vc_total'},
   { header: 'Chi phí nhân sự',       field: 'fc_staff'},
   { header: 'Chi phí thuê địa điểm', field: 'fc_rent' },
-  { header: 'Chi phí vận hành',      field: 'fc_ops'  },
-  { header: 'Chi phí khác',          field: 'fc_other'},
+  { header: 'Chi phí vận hành',              field: 'fc_ops'         },
+  { header: 'Chi phí bảo trì - bảo dưỡng',  field: 'fc_maintenance' },
+  { header: 'Chi phí khác',                  field: 'fc_other'       },
 ]
 
 function downloadTemplate(sites) {
   const headers = EXCEL_HEADERS.map(h => h.header)
   const exampleRows = sites.slice(0, 2).map((site, i) => [
     site, 2026, i + 1,
-    0, 0, 0, 0, 0,   // revenues
-    0, 0, 0, 0, 0,   // costs
+    0, 0, 0, 0, 0,      // revenues
+    0, 0, 0, 0, 0, 0,   // costs
   ])
   if (exampleRows.length === 0) {
-    exampleRows.push(['Tên chi nhánh', 2026, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    exampleRows.push(['Tên chi nhánh', 2026, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
   }
 
   const wb = XLSX.utils.book_new()
@@ -42,7 +43,7 @@ function downloadTemplate(sites) {
   ws['!cols'] = [
     { wch: 18 }, { wch: 8 }, { wch: 8 },
     { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
-    { wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 16 }, { wch: 14 },
+    { wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 14 },
   ]
 
   XLSX.utils.book_append_sheet(wb, ws, 'Số liệu thực tế')
@@ -65,7 +66,7 @@ export default function Actuals() {
   const [saving, setSaving]         = useState(false)
   const [inputValues, setInputValues] = useState({
     rev_mri: '', rev_ct: '', rev_mammo: '', rev_xq: '', rev_ua: '',
-    vc_total: '', fc_staff: '', fc_rent: '', fc_ops: '', fc_other: ''
+    vc_total: '', fc_staff: '', fc_rent: '', fc_ops: '', fc_maintenance: '', fc_other: ''
   })
 
   // Excel upload state
@@ -98,13 +99,14 @@ export default function Actuals() {
         rev_xq:    existing.rev_xq    ?? '',
         rev_ua:    existing.rev_ua    ?? '',
         vc_total:  existing.vc_total  ?? '',
-        fc_staff:  existing.fc_staff  ?? '',
-        fc_rent:   existing.fc_rent   ?? '',
-        fc_ops:    existing.fc_ops    ?? '',
-        fc_other:  existing.fc_other  ?? '',
+        fc_staff:       existing.fc_staff       ?? '',
+        fc_rent:        existing.fc_rent        ?? '',
+        fc_ops:         existing.fc_ops         ?? '',
+        fc_maintenance: existing.fc_maintenance ?? '',
+        fc_other:       existing.fc_other       ?? '',
       })
     } else {
-      setInputValues({ rev_mri:'', rev_ct:'', rev_mammo:'', rev_xq:'', rev_ua:'', vc_total:'', fc_staff:'', fc_rent:'', fc_ops:'', fc_other:'' })
+      setInputValues({ rev_mri:'', rev_ct:'', rev_mammo:'', rev_xq:'', rev_ua:'', vc_total:'', fc_staff:'', fc_rent:'', fc_ops:'', fc_maintenance:'', fc_other:'' })
     }
   }, [inputYear, inputMonth, inputSite, actuals])
 
@@ -112,7 +114,7 @@ export default function Actuals() {
 
   const derivedRev    = n(inputValues.rev_mri) + n(inputValues.rev_ct) + n(inputValues.rev_mammo) + n(inputValues.rev_xq) + n(inputValues.rev_ua)
   const derivedVC     = n(inputValues.vc_total)
-  const derivedFC     = n(inputValues.fc_staff) + n(inputValues.fc_rent) + n(inputValues.fc_ops) + n(inputValues.fc_other)
+  const derivedFC     = n(inputValues.fc_staff) + n(inputValues.fc_rent) + n(inputValues.fc_ops) + n(inputValues.fc_maintenance) + n(inputValues.fc_other)
   const derivedEBITDA = derivedRev - derivedVC - derivedFC
 
   const handleSave = useCallback(async () => {
@@ -201,17 +203,18 @@ export default function Actuals() {
           const rev_xq    = getValue('rev_xq')
           const rev_ua    = getValue('rev_ua')
           const vc_total  = getValue('vc_total')
-          const fc_staff  = getValue('fc_staff')
-          const fc_rent   = getValue('fc_rent')
-          const fc_ops    = getValue('fc_ops')
-          const fc_other  = getValue('fc_other')
+          const fc_staff       = getValue('fc_staff')
+          const fc_rent        = getValue('fc_rent')
+          const fc_ops         = getValue('fc_ops')
+          const fc_maintenance = getValue('fc_maintenance')
+          const fc_other       = getValue('fc_other')
 
           const rev_total = rev_mri + rev_ct + rev_mammo + rev_xq + rev_ua
-          const fc_total  = fc_staff + fc_rent + fc_ops + fc_other
+          const fc_total  = fc_staff + fc_rent + fc_ops + fc_maintenance + fc_other
           const ebitda    = rev_total - vc_total - fc_total
 
           const key = `${year}-${String(month).padStart(2, '0')}-${site}`
-          parsed.push({ key, site, year, month, rev_mri, rev_ct, rev_mammo, rev_xq, rev_ua, vc_total, fc_staff, fc_rent, fc_ops, fc_other, rev_total, fc_total, ebitda })
+          parsed.push({ key, site, year, month, rev_mri, rev_ct, rev_mammo, rev_xq, rev_ua, vc_total, fc_staff, fc_rent, fc_ops, fc_maintenance, fc_other, rev_total, fc_total, ebitda })
         }
 
         setUploadErrors(errors)
@@ -431,8 +434,9 @@ export default function Actuals() {
                 { key: 'vc_total', label: 'Tổng biến phí' },
                 { key: 'fc_staff', label: 'Chi phí nhân sự' },
                 { key: 'fc_rent',  label: 'Chi phí thuê địa điểm' },
-                { key: 'fc_ops',   label: 'Chi phí vận hành' },
-                { key: 'fc_other', label: 'Chi phí khác' },
+                { key: 'fc_ops',         label: 'Chi phí vận hành' },
+                { key: 'fc_maintenance', label: 'Chi phí bảo trì - bảo dưỡng' },
+                { key: 'fc_other',       label: 'Chi phí khác' },
               ].map(({ key, label }) => (
                 <div key={key} className="flex items-center gap-3">
                   <label className="text-sm text-gray-500 w-36 shrink-0">{label}</label>
