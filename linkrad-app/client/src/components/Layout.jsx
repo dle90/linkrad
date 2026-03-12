@@ -9,7 +9,8 @@ const NAV = [
     items: [
       { path: '/', label: 'Dashboard', icon: '📊' },
       { path: '/actuals', label: 'Nhập số liệu', icon: '✏️', adminOnly: true },
-      { path: '/workflow', label: 'Công việc', icon: '✅', workflowOnly: true }
+      { path: '/workflow', label: 'Công việc', icon: '✅', workflowOnly: true },
+      { path: '/ris',      label: 'RIS',        icon: '🩻', workflowOnly: true }
     ]
   },
   {

@@ -14,6 +14,7 @@ import Breakeven from './pages/Breakeven'
 import SiteList from './pages/SiteList'
 import Actuals from './pages/Actuals'
 import Workflow from './pages/Workflow'
+import RIS from './pages/RIS'
 
 function AppRoutes() {
   const { auth } = useAuth()
@@ -21,6 +22,7 @@ function AppRoutes() {
   if (!auth) return <Login />
 
   const isWorkflowUser = auth.role && auth.role !== 'guest'
+  const isRISUser = auth.role && auth.role !== 'guest'
 
   return (
     <Layout>
@@ -28,6 +30,7 @@ function AppRoutes() {
         <Route path="/" element={<Dashboard />} />
         {auth.role === 'admin' && <Route path="/actuals" element={<Actuals />} />}
         {isWorkflowUser && <Route path="/workflow" element={<Workflow />} />}
+        {isRISUser && <Route path="/ris" element={<RIS />} />}
         <Route path="/pl/annual" element={<AnnualPL />} />
         <Route path="/pl/monthly" element={<MonthlyPL />} />
         <Route path="/pl/site/:siteId" element={<SitePL />} />
