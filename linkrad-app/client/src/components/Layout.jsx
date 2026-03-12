@@ -40,6 +40,12 @@ const NAV = [
     ]
   },
   {
+    group: 'CRM',
+    items: [
+      { path: '/crm', label: 'Phân tích KH', icon: '👥' }
+    ]
+  },
+  {
     group: 'Danh sách',
     items: [
       { path: '/sites', label: 'Danh sách Site', icon: '📍' }
