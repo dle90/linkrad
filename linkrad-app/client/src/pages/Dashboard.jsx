@@ -3,7 +3,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, Legend, ReferenceLine, ComposedChart, Area
 } from 'recharts'
-import { getAnnualPL, getMonthlyPL, getActuals } from '../api'
+import { getAnnualPL, getMonthlyPL, getActuals, getBreakeven } from '../api'
 
 const fmt = (v) => {
   if (v === null || v === undefined) return '-'
@@ -61,6 +61,7 @@ export default function Dashboard() {
   const [annualPL, setAnnualPL] = useState(null)
   const [monthlyPL, setMonthlyPL] = useState(null)
   const [actuals, setActuals] = useState({})
+  const [breakeven, setBreakeven] = useState(null)
   const [loading, setLoading] = useState(true)
   const [timeMode, setTimeMode] = useState('preset')
   const [period, setPeriod] = useState('year')
@@ -69,11 +70,12 @@ export default function Dashboard() {
   const [selectedSites, setSelectedSites] = useState(null)
 
   useEffect(() => {
-    Promise.all([getAnnualPL(), getMonthlyPL(), getActuals()])
-      .then(([apl, mpl, acts]) => {
+    Promise.all([getAnnualPL(), getMonthlyPL(), getActuals(), getBreakeven()])
+      .then(([apl, mpl, acts, be]) => {
         setAnnualPL(apl)
         setMonthlyPL(mpl)
         setActuals(acts)
+        setBreakeven(be)
         const main = (apl.sites || []).filter(s => s !== 'HO' && s !== 'Site LK')
         setSelectedSites(main)
         setLoading(false)
@@ -195,6 +197,22 @@ export default function Dashboard() {
     .sort((a, b) => b.rev - a.rev)
 
   const totalRevAll = siteSummary.reduce((s, r) => s + r.rev, 0)
+
+  // ── Breakeven chart data
+  const breakevenChartData = mainSites
+    .filter(site => activeSel.includes(site))
+    .map(site => {
+      const annualRev   = Number(revTotalRow?.values?.[site]) || 0
+      const monthlyAvg  = annualRev / 12
+      const beRev       = Number(breakeven?.breakevenRevenue?.values?.[site]) || 0
+      const fixedTotal  = (breakeven?.fixedCosts?.rows || [])
+        .reduce((s, r) => s + (Number(r.values?.[site]) || 0), 0)
+      const gap         = monthlyAvg - beRev
+      const gapPct      = beRev > 0 ? (gap / beRev * 100) : 0
+      const shortName   = site.length > 7 ? site.slice(0, 6) + '..' : site
+      return { name: shortName, fullName: site, monthlyAvg, beRev, fixedTotal, gap, gapPct }
+    })
+    .sort((a, b) => b.gapPct - a.gapPct)
 
   const toggleSite = (site) => {
     setSelectedSites(prev => {
@@ -522,6 +540,137 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* ── BREAKEVEN ANALYSIS ── */}
+        {breakeven && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-3 flex items-center justify-between"
+              style={{ background: 'linear-gradient(135deg, #92400e 0%, #b45309 100%)' }}>
+              <div>
+                <h3 className="text-sm font-bold text-white">Phân Tích Điểm Hòa Vốn — Doanh Thu Thực Tế vs Ngưỡng Hòa Vốn</h3>
+                <p className="text-xs mt-0.5" style={{ color: '#fde68a' }}>
+                  DT bình quân tháng (từ số liệu năm 2025) so với ngưỡng hòa vốn từ tháng 13
+                </p>
+              </div>
+              <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm" style={{ background: '#10b981' }} />
+                  <span style={{ color: '#fde68a' }}>Đã vượt hòa vốn</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm" style={{ background: '#ef4444' }} />
+                  <span style={{ color: '#fde68a' }}>Chưa đạt hòa vốn</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-0 divide-x divide-gray-100">
+              {/* Bar chart */}
+              <div className="p-4">
+                <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">
+                  DT bình quân tháng vs Ngưỡng hòa vốn (triệu VND)
+                </p>
+                <ResponsiveContainer width="100%" height={260}>
+                  <ComposedChart data={breakevenChartData} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={v => v.toFixed(0)} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null
+                        const d = breakevenChartData.find(x => x.name === label)
+                        return (
+                          <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+                            <p className="font-bold text-gray-700 mb-1">{d?.fullName || label}</p>
+                            {payload.map((p, i) => (
+                              <p key={i} style={{ color: p.color }} className="font-medium">
+                                {p.name}: {fmt(p.value)} tr.
+                              </p>
+                            ))}
+                            {d && (
+                              <p className={`font-bold mt-1 ${d.gap >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {d.gap >= 0 ? '▲' : '▼'} Gap: {fmt(Math.abs(d.gap))} tr. ({d.gapPct.toFixed(1)}%)
+                              </p>
+                            )}
+                          </div>
+                        )
+                      }}
+                    />
+                    <Bar dataKey="monthlyAvg" name="DT bình quân/tháng" radius={[4,4,0,0]} barSize={24}>
+                      {breakevenChartData.map((entry, i) => (
+                        <Cell key={i} fill={entry.gap >= 0 ? '#10b981' : '#ef4444'} />
+                      ))}
+                    </Bar>
+                    <Line type="monotone" dataKey="beRev" name="Ngưỡng hòa vốn"
+                      stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 3"
+                      dot={{ fill: '#f59e0b', r: 4, stroke: 'white', strokeWidth: 1.5 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Gap table */}
+              <div className="p-4">
+                <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">
+                  Chi tiết khoảng cách hòa vốn
+                </p>
+                <div className="space-y-2.5">
+                  {breakevenChartData.map((d) => {
+                    const pct = Math.min(100, Math.max(0, d.beRev > 0 ? (d.monthlyAvg / d.beRev * 100) : 0))
+                    const over = d.gap >= 0
+                    return (
+                      <div key={d.fullName}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold text-gray-700">{d.fullName}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400">
+                              {fmt(d.monthlyAvg)} / {fmt(d.beRev)} tr.
+                            </span>
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${over ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                              {over ? '+' : ''}{d.gapPct.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="h-2 rounded-full bg-gray-100 relative">
+                          {/* Breakeven target marker */}
+                          <div className="absolute top-0 bottom-0 w-0.5 bg-amber-400 z-10"
+                            style={{ left: '100%', transform: 'translateX(-50%)' }} />
+                          <div className="h-2 rounded-full transition-all"
+                            style={{
+                              width: `${pct}%`,
+                              background: over
+                                ? 'linear-gradient(90deg, #34d399, #10b981)'
+                                : 'linear-gradient(90deg, #fca5a5, #ef4444)'
+                            }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Summary */}
+                <div className="mt-4 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2">
+                  {[
+                    {
+                      label: 'Đã vượt hòa vốn',
+                      count: breakevenChartData.filter(d => d.gap >= 0).length,
+                      color: '#059669', bg: '#ecfdf5'
+                    },
+                    {
+                      label: 'Chưa đạt hòa vốn',
+                      count: breakevenChartData.filter(d => d.gap < 0).length,
+                      color: '#dc2626', bg: '#fef2f2'
+                    },
+                  ].map(({ label, count, color, bg }) => (
+                    <div key={label} className="rounded-lg px-3 py-2 text-center" style={{ background: bg }}>
+                      <p className="text-2xl font-bold" style={{ color }}>{count}</p>
+                      <p className="text-xs font-medium mt-0.5" style={{ color }}>{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── SITE PERFORMANCE TABLE ── */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
