@@ -104,9 +104,13 @@ function SummaryTable({ data, months, siteList, BLUE, NAVY }) {
         })
       const freeDocs  = Object.keys(hosps['Tự do'] || {}).length
       const freeTotal = Object.values(hosps['Tự do'] || {}).reduce((s, d) => s + months.reduce((s2, m) => s2 + (d[m] || 0), 0), 0)
-      const totalDocs  = hospRows.reduce((s, r) => s + r.docs, freeDocs)
+      // deduplicate doctors by name across all hospitals in this site
+      const allDocNames = new Set(Object.values(hosps).flatMap(ds => Object.keys(ds)))
+      const totalDocs  = allDocNames.size
       const totalVisit = hospRows.reduce((s, r) => s + r.total, freeTotal)
-      return { site: s, hospRows, freeDocs, freeTotal, totalDocs, totalVisit }
+      // count hospital groups including Tự do (to match KPI card)
+      const totalHospGroups = hospRows.length + (freeDocs > 0 ? 1 : 0)
+      return { site: s, hospRows, freeDocs, freeTotal, totalDocs, totalVisit, totalHospGroups }
     })
   }, [data, siteList, months])
 
@@ -199,7 +203,7 @@ function SummaryTable({ data, months, siteList, BLUE, NAVY }) {
             <tfoot>
               <tr style={{ background: NAVY, borderTop: `2px solid ${NAVY}` }}>
                 <td className="py-3 px-4 font-extrabold text-white text-xs uppercase tracking-wider sticky left-0" style={{ background: NAVY }}>TỔNG CỘNG</td>
-                <td className="py-3 px-4 text-white text-xs">{rows.reduce((s, r) => s + r.hospRows.length, 0)} BV/PK trên {siteList.length} chi nhánh</td>
+                <td className="py-3 px-4 text-white text-xs">{rows.reduce((s, r) => s + r.totalHospGroups, 0)} BV/PK trên {siteList.length} chi nhánh</td>
                 <td className="py-3 px-4 text-center font-extrabold text-white">{rows.reduce((s, r) => s + r.totalDocs, 0).toLocaleString('vi-VN')}</td>
                 <td className="py-3 px-4 text-center font-extrabold text-white text-base">{rows.reduce((s, r) => s + r.totalVisit, 0).toLocaleString('vi-VN')}</td>
               </tr>
