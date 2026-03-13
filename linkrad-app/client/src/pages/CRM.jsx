@@ -272,18 +272,19 @@ export default function CRM() {
 
   // global KPIs
   const kpis = useMemo(() => {
-    if (!data) return { totalKH: 0, totalDocs: 0, totalHosps: 0 }
+    if (!data) return { totalKH: 0, totalDocs: 0, totalHosps: 0, totalSites: 0 }
     let totalKH = 0, docSet = new Set(), hospSet = new Set()
-    for (const [s, hs] of Object.entries(data.sites)) {
+    const sites = Object.entries(data.sites)
+    for (const [s, hs] of sites) {
       for (const [h, ds] of Object.entries(hs)) {
-        if (h !== 'Tự do') hospSet.add(h)
+        hospSet.add(`${s}__${h}`)
         for (const [d, ms] of Object.entries(ds)) {
           docSet.add(`${s}||${d}`)
           for (const m of months) totalKH += ms[m] || 0
         }
       }
     }
-    return { totalKH, totalDocs: docSet.size, totalHosps: hospSet.size }
+    return { totalKH, totalDocs: docSet.size, totalHosps: hospSet.size, totalSites: sites.length }
   }, [data, months])
 
   if (loading) return (
@@ -356,10 +357,11 @@ export default function CRM() {
         </div>
         {/* KPI cards */}
         {hasData && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <StatCard label="Tổng lượt KH" value={fmtNum(kpis.totalKH)} sub={!selMo ? 'Cả năm' : `${months.length} tháng`} />
+            <StatCard label="Tổng chi nhánh" value={fmtNum(kpis.totalSites)} sub="Đang hoạt động" />
             <StatCard label="Tổng bác sĩ" value={fmtNum(kpis.totalDocs)} sub="Tất cả chi nhánh" />
-            <StatCard label="Bệnh viện / PK" value={fmtNum(kpis.totalHosps)} sub="Không kể nhóm tự do" />
+            <StatCard label="Bệnh viện / PK" value={fmtNum(kpis.totalHosps)} sub="Bao gồm nhóm tự do" />
           </div>
         )}
       </div>
