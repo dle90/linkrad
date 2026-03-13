@@ -85,6 +85,132 @@ const NAVY   = '#0f2c6b'
 const BLUE   = '#1e3a8a'
 const TEAL   = '#0e7490'
 
+// ── summary table ────────────────────────────────────────────────────
+function SummaryTable({ data, months, siteList, BLUE, NAVY }) {
+  const [open, setOpen] = useState(true)
+  const [expandedSites, setExpandedSites] = useState({})
+
+  const rows = useMemo(() => {
+    if (!data) return []
+    return siteList.map(s => {
+      const hosps = data.sites[s] || {}
+      const hospRows = Object.keys(hosps)
+        .filter(h => h !== 'Tự do')
+        .sort((a, b) => a.localeCompare(b, 'vi'))
+        .map(h => {
+          const docs  = Object.keys(hosps[h] || {}).length
+          const total = Object.values(hosps[h] || {}).reduce((s, d) => s + months.reduce((s2, m) => s2 + (d[m] || 0), 0), 0)
+          return { hosp: h, docs, total }
+        })
+      const freeDocs  = Object.keys(hosps['Tự do'] || {}).length
+      const freeTotal = Object.values(hosps['Tự do'] || {}).reduce((s, d) => s + months.reduce((s2, m) => s2 + (d[m] || 0), 0), 0)
+      const totalDocs  = hospRows.reduce((s, r) => s + r.docs, freeDocs)
+      const totalVisit = hospRows.reduce((s, r) => s + r.total, freeTotal)
+      return { site: s, hospRows, freeDocs, freeTotal, totalDocs, totalVisit }
+    })
+  }, [data, siteList, months])
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {/* header */}
+      <button onClick={() => setOpen(p => !p)}
+        className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors text-left border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <span className="text-base">📊</span>
+          <span className="text-sm font-extrabold text-gray-700 uppercase tracking-wide">Tổng quan — Tất cả chi nhánh</span>
+        </div>
+        <svg className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ background: NAVY + '0d' }}>
+                <th className="py-2.5 px-4 text-left font-extrabold text-gray-500 uppercase tracking-wider text-xs sticky left-0" style={{ background: NAVY + '0d', minWidth: 180 }}>Chi nhánh</th>
+                <th className="py-2.5 px-4 text-left font-extrabold text-gray-500 uppercase tracking-wider text-xs" style={{ minWidth: 240 }}>Bệnh viện / PK</th>
+                <th className="py-2.5 px-4 text-center font-extrabold text-gray-500 uppercase tracking-wider text-xs" style={{ minWidth: 100 }}>Bác sĩ</th>
+                <th className="py-2.5 px-4 text-center font-extrabold text-gray-500 uppercase tracking-wider text-xs" style={{ minWidth: 120 }}>Tổng lượt KH</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, ri) => {
+                const isExpanded = expandedSites[r.site] !== false
+                const bgSite = ri % 2 === 0 ? '#f8fafc' : '#fff'
+                return (
+                  <React.Fragment key={r.site}>
+                    {/* site row */}
+                    <tr className="border-t border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
+                      style={{ background: bgSite }}
+                      onClick={() => setExpandedSites(p => ({ ...p, [r.site]: !isExpanded }))}>
+                      <td className="py-2.5 px-4 sticky left-0 font-extrabold" style={{ background: bgSite, color: BLUE }}>
+                        <div className="flex items-center gap-2">
+                          <svg className={`w-3.5 h-3.5 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                          </svg>
+                          {r.site}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-4 text-xs text-gray-400 italic">
+                        {r.hospRows.length} bệnh viện/PK{r.freeDocs > 0 ? ' + nhóm tự do' : ''}
+                      </td>
+                      <td className="py-2.5 px-4 text-center font-bold" style={{ color: BLUE }}>{r.totalDocs.toLocaleString('vi-VN')}</td>
+                      <td className="py-2.5 px-4 text-center font-extrabold text-base" style={{ color: BLUE }}>{r.totalVisit.toLocaleString('vi-VN')}</td>
+                    </tr>
+                    {/* hospital rows */}
+                    {isExpanded && r.hospRows.map((h, hi) => (
+                      <tr key={h.hosp} className="border-t border-gray-50 hover:bg-blue-50 transition-colors"
+                        style={{ background: hi % 2 === 0 ? '#f0f9ff' : '#e0f2fe' }}>
+                        <td className="py-2 px-4 sticky left-0 text-xs text-gray-400"
+                          style={{ background: hi % 2 === 0 ? '#f0f9ff' : '#e0f2fe' }}></td>
+                        <td className="py-2 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">🏥</span>
+                            <span className="text-xs font-semibold text-gray-700">{h.hosp}</span>
+                          </div>
+                        </td>
+                        <td className="py-2 px-4 text-center text-xs font-semibold text-gray-600">{h.docs.toLocaleString('vi-VN')}</td>
+                        <td className="py-2 px-4 text-center text-xs font-bold" style={{ color: BLUE }}>{h.total.toLocaleString('vi-VN')}</td>
+                      </tr>
+                    ))}
+                    {/* "Tự do" row */}
+                    {isExpanded && r.freeDocs > 0 && (
+                      <tr className="border-t border-gray-50" style={{ background: '#f9fafb' }}>
+                        <td className="py-2 px-4 sticky left-0 text-xs text-gray-400" style={{ background: '#f9fafb' }}></td>
+                        <td className="py-2 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">🏃</span>
+                            <span className="text-xs font-semibold text-gray-500">Tự do (không thuộc BV/PK)</span>
+                          </div>
+                        </td>
+                        <td className="py-2 px-4 text-center text-xs font-semibold text-gray-500">{r.freeDocs.toLocaleString('vi-VN')}</td>
+                        <td className="py-2 px-4 text-center text-xs font-bold text-gray-500">{r.freeTotal.toLocaleString('vi-VN')}</td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                )
+              })}
+            </tbody>
+            {/* grand total */}
+            <tfoot>
+              <tr style={{ background: NAVY, borderTop: `2px solid ${NAVY}` }}>
+                <td className="py-3 px-4 font-extrabold text-white text-xs uppercase tracking-wider sticky left-0" style={{ background: NAVY }}>TỔNG CỘNG</td>
+                <td className="py-3 px-4 text-white text-xs">{rows.reduce((s, r) => s + r.hospRows.length, 0)} BV/PK trên {siteList.length} chi nhánh</td>
+                <td className="py-3 px-4 text-center font-extrabold text-white">{rows.reduce((s, r) => s + r.totalDocs, 0).toLocaleString('vi-VN')}</td>
+                <td className="py-3 px-4 text-center font-extrabold text-white text-base">{rows.reduce((s, r) => s + r.totalVisit, 0).toLocaleString('vi-VN')}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── small stat card ───────────────────────────────────────────────────
 const StatCard = ({ label, value, sub, color = BLUE }) => (
   <div className="rounded-xl px-5 py-4 flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)' }}>
@@ -288,6 +414,9 @@ export default function CRM() {
 
           {/* ── RIGHT: detail ─────────────────────────────────────── */}
           <div className="flex-1 min-w-0 space-y-3">
+
+            {/* ── SUMMARY TABLE ─────────────────────────────────── */}
+            <SummaryTable data={data} months={months} siteList={siteList} BLUE={BLUE} NAVY={NAVY} />
 
             {/* Month pills */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-2.5 flex items-center gap-2 overflow-x-auto">
