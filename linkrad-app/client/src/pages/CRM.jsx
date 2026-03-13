@@ -415,9 +415,6 @@ export default function CRM() {
           {/* ── RIGHT: detail ─────────────────────────────────────── */}
           <div className="flex-1 min-w-0 space-y-3">
 
-            {/* ── SUMMARY TABLE ─────────────────────────────────── */}
-            <SummaryTable data={data} months={months} siteList={siteList} BLUE={BLUE} NAVY={NAVY} />
-
             {/* Month pills */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-2.5 flex items-center gap-2 overflow-x-auto">
               <span className="text-xs font-extrabold text-gray-400 uppercase tracking-widest whitespace-nowrap">Lọc tháng:</span>
@@ -441,6 +438,9 @@ export default function CRM() {
                 )
               })}
             </div>
+
+            {/* ── SUMMARY TABLE ─────────────────────────────────── */}
+            <SummaryTable data={data} months={months} siteList={siteList} BLUE={BLUE} NAVY={NAVY} />
 
             {/* Site summary row */}
             <div className="grid grid-cols-4 gap-3">
