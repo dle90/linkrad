@@ -314,11 +314,12 @@ export default function CRM() {
             </div>
 
             {/* Site summary row */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               {[
-                { label: site, sub: 'Chi nhánh đang xem', val: fmtNum(hospList.reduce((s, h) => s + Object.values(siteData[h] || {}).reduce((s2, d) => s2 + sumMo(d, months), 0), 0)) + ' KH', icon: '📍' },
-                { label: fmtNum(hospList.filter(h => h !== 'Tự do').length), sub: 'Bệnh viện / PK', val: '', icon: '🏥' },
-                { label: fmtNum(hospList.reduce((s, h) => s + Object.keys(siteData[h] || {}).length, 0)), sub: 'Bác sĩ', val: '', icon: '👨‍⚕️' },
+                { label: site, sub: 'Chi nhánh đang xem', icon: '📍' },
+                { label: fmtNum(hospList.reduce((s, h) => s + Object.values(siteData[h] || {}).reduce((s2, d) => s2 + sumMo(d, months), 0), 0)), sub: 'Tổng lượt KH', icon: '🧑‍🤝‍🧑' },
+                { label: fmtNum(hospList.filter(h => h !== 'Tự do').length), sub: 'Bệnh viện / PK', icon: '🏥' },
+                { label: fmtNum(hospList.reduce((s, h) => s + Object.keys(siteData[h] || {}).length, 0)), sub: 'Bác sĩ', icon: '👨‍⚕️' },
               ].map(({ label, sub, icon }) => (
                 <div key={sub} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3">
                   <span className="text-2xl">{icon}</span>
