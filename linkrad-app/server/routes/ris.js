@@ -5,6 +5,8 @@ const Study = require('../models/Study')
 const { requireAuth } = require('../middleware/auth')
 
 const ORTHANC_BASE = process.env.ORTHANC_URL || 'http://localhost:8042'
+// Public URL the browser uses to open the viewer (may differ from server-side ORTHANC_BASE)
+const ORTHANC_PUBLIC = process.env.ORTHANC_PUBLIC_URL || process.env.ORTHANC_URL || 'http://localhost:8042'
 
 // Helper: generate a fake DICOM-style Study UID
 function genStudyUID() {
@@ -251,7 +253,7 @@ router.get('/orthanc/viewer-url/:studyUID', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Study not found in PACS' })
     }
     const orthancId = ids[0]
-    const viewerUrl = `http://localhost:8042/ui/app/#/study/${orthancId}`
+    const viewerUrl = `${ORTHANC_PUBLIC}/ui/app/#/study/${orthancId}`
     res.json({ url: viewerUrl, orthancId })
   } catch (err) {
     res.status(503).json({ error: 'Orthanc không kết nối được', detail: err.message })
