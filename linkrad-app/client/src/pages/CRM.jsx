@@ -388,30 +388,6 @@ export default function CRM() {
       {hasData && (
         <div className="space-y-3">
 
-          {/* ── SITE TABS (horizontal) ────────────────────────────── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-2.5 flex items-center gap-2 overflow-x-auto">
-            <span className="text-xs font-extrabold text-gray-400 uppercase tracking-widest whitespace-nowrap">Chi nhánh:</span>
-            {siteList.map(s => {
-              const total  = siteTotals[s] || 0
-              const active = s === site
-              return (
-                <button key={s} onClick={() => { setSite(s); setOpenH({}) }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all"
-                  style={{
-                    background: active ? BLUE : '#f1f5f9',
-                    color: active ? '#fff' : '#374151',
-                    border: `1.5px solid ${active ? BLUE : '#e2e8f0'}`,
-                  }}>
-                  {s}
-                  <span className="rounded-full px-1.5 py-0.5 text-xs font-bold"
-                    style={{ background: active ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: active ? '#fff' : '#6b7280' }}>
-                    {total.toLocaleString('vi-VN')}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-
           {/* ── DETAIL ────────────────────────────────────────────── */}
           <div className="space-y-3">
 
@@ -441,6 +417,32 @@ export default function CRM() {
 
             {/* ── SUMMARY TABLE ─────────────────────────────────── */}
             <SummaryTable data={data} months={months} siteList={siteList} BLUE={BLUE} NAVY={NAVY} />
+
+            {/* ── SITE TABS (2-row wrap) ─────────────────────────── */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
+              <p className="text-xs font-extrabold text-gray-400 uppercase tracking-widest mb-2">Chọn chi nhánh:</p>
+              <div className="flex flex-wrap gap-2">
+                {siteList.map(s => {
+                  const total  = siteTotals[s] || 0
+                  const active = s === site
+                  return (
+                    <button key={s} onClick={() => { setSite(s); setOpenH({}) }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                      style={{
+                        background: active ? BLUE : '#f1f5f9',
+                        color: active ? '#fff' : '#374151',
+                        border: `1.5px solid ${active ? BLUE : '#e2e8f0'}`,
+                      }}>
+                      {s}
+                      <span className="rounded-full px-1.5 py-0.5 text-xs font-bold"
+                        style={{ background: active ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: active ? '#fff' : '#6b7280' }}>
+                        {total.toLocaleString('vi-VN')}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
 
             {/* Site summary row */}
             <div className="grid grid-cols-4 gap-3">
