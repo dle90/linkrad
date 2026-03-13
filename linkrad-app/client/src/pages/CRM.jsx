@@ -386,40 +386,34 @@ export default function CRM() {
 
       {/* ── MAIN LAYOUT ─────────────────────────────────────────────── */}
       {hasData && (
-        <div className="flex gap-4">
+        <div className="space-y-3">
 
-          {/* ── LEFT SIDEBAR: sites ───────────────────────────────── */}
-          <div className="w-52 flex-shrink-0 space-y-3">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-50"
-                style={{ background: `linear-gradient(90deg, ${NAVY}11, transparent)` }}>
-                <p className="text-xs font-extrabold text-gray-500 uppercase tracking-widest">Chi nhánh</p>
-              </div>
-              {siteList.map(s => {
-                const total  = siteTotals[s] || 0
-                const pct    = Math.round(total / maxSite * 100)
-                const active = s === site
-                return (
-                  <button key={s} onClick={() => { setSite(s); setOpenH({}) }}
-                    className="w-full text-left px-4 py-3 border-b border-gray-50 transition-all hover:bg-blue-50 group"
-                    style={{ background: active ? '#eff6ff' : '' }}>
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-bold truncate" style={{ color: active ? BLUE : '#374151' }}>{s}</p>
-                      <Badge n={total} color={active ? BLUE : '#6b7280'} />
-                    </div>
-                    {/* mini progress bar */}
-                    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-1 rounded-full transition-all"
-                        style={{ width: `${pct}%`, background: active ? BLUE : '#d1d5db' }} />
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+          {/* ── SITE TABS (horizontal) ────────────────────────────── */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-2.5 flex items-center gap-2 overflow-x-auto">
+            <span className="text-xs font-extrabold text-gray-400 uppercase tracking-widest whitespace-nowrap">Chi nhánh:</span>
+            {siteList.map(s => {
+              const total  = siteTotals[s] || 0
+              const active = s === site
+              return (
+                <button key={s} onClick={() => { setSite(s); setOpenH({}) }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all"
+                  style={{
+                    background: active ? BLUE : '#f1f5f9',
+                    color: active ? '#fff' : '#374151',
+                    border: `1.5px solid ${active ? BLUE : '#e2e8f0'}`,
+                  }}>
+                  {s}
+                  <span className="rounded-full px-1.5 py-0.5 text-xs font-bold"
+                    style={{ background: active ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: active ? '#fff' : '#6b7280' }}>
+                    {total.toLocaleString('vi-VN')}
+                  </span>
+                </button>
+              )
+            })}
           </div>
 
-          {/* ── RIGHT: detail ─────────────────────────────────────── */}
-          <div className="flex-1 min-w-0 space-y-3">
+          {/* ── DETAIL ────────────────────────────────────────────── */}
+          <div className="space-y-3">
 
             {/* Month pills */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-2.5 flex items-center gap-2 overflow-x-auto">
