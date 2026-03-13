@@ -15,6 +15,7 @@ import SiteList from './pages/SiteList'
 import Actuals from './pages/Actuals'
 import Workflow from './pages/Workflow'
 import RIS from './pages/RIS'
+import CRM from './pages/CRM'
 
 function AppRoutes() {
   const { auth } = useAuth()
@@ -39,6 +40,7 @@ function AppRoutes() {
         <Route path="/cf/monthly" element={<MonthlyCF />} />
         <Route path="/breakeven" element={<Breakeven />} />
         <Route path="/sites" element={<SiteList />} />
+        <Route path="/crm" element={<CRM />} />
       </Routes>
     </Layout>
   )

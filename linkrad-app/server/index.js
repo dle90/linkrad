@@ -13,13 +13,14 @@ const breakevenRouter = require('./routes/breakeven')
 const actualsRouter = require('./routes/actuals')
 const tasksRouter = require('./routes/tasks')
 const risRouter = require('./routes/ris')
+const crmRouter = require('./routes/crm')
 const { requireAdmin } = require('./middleware/auth')
 
 const app = express()
 const PORT = process.env.PORT || 3001
 
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: '20mb' }))
 
 // Auth routes (public — no token required)
 app.use('/api/auth', authRouter)
@@ -40,6 +41,7 @@ app.use('/api/actuals', guardWrites, actualsRouter)
 app.use('/api/tasks', tasksRouter)
 // RIS: auth handled inside the router per endpoint
 app.use('/api/ris', risRouter)
+app.use('/api/crm', guardWrites, crmRouter)
 
 // Serve React build in production
 const clientDist = path.join(__dirname, '../client/dist')

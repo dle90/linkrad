@@ -370,7 +370,7 @@
     },
     {
       "id": "fc_maintenance",
-      "label": "Chi phí bảo dưỡng",
+      "label": "Chi phí bảo trì - bảo dưỡng",
       "group": "Định phí",
       "values": {
         "Hải Dương": 0,
