@@ -206,7 +206,7 @@ router.put('/studies/:id', requireAuth, async (req, res) => {
         'status', 'verifiedAt', 'patientName', 'patientId', 'dob', 'gender',
         'modality', 'bodyPart', 'clinicalInfo', 'site', 'scheduledDate', 'studyDate',
         'priority', 'technician', 'technicianName', 'radiologist', 'radiologistName',
-        'reportText', 'reportedAt', 'imageStatus', 'imageCount',
+        'reportText', 'reportedAt', 'imageStatus', 'imageCount', 'studyUID',
       ]
       for (const field of allowedFields) {
         if (body[field] !== undefined) {
