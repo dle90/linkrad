@@ -6,7 +6,8 @@ const { requireAuth } = require('../middleware/auth')
 
 const ORTHANC_BASE = process.env.ORTHANC_URL || 'http://localhost:8042'
 // Public URL the browser uses to open the viewer (may differ from server-side ORTHANC_BASE)
-const ORTHANC_PUBLIC = process.env.ORTHANC_PUBLIC_URL || process.env.ORTHANC_URL || 'http://localhost:8042'
+const _rawPublic = process.env.ORTHANC_PUBLIC_URL || process.env.ORTHANC_URL || 'http://localhost:8042'
+const ORTHANC_PUBLIC = _rawPublic.startsWith('http') ? _rawPublic : `https://${_rawPublic}`
 
 // Helper: generate a fake DICOM-style Study UID
 function genStudyUID() {
