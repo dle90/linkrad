@@ -1,6 +1,5 @@
 const express = require('express')
 const router = express.Router()
-const { v4: uuidv4 } = require('uuid')
 const http = require('http')
 const Study = require('../models/Study')
 const { requireAuth } = require('../middleware/auth')
@@ -135,7 +134,6 @@ router.post('/studies', requireAuth, async (req, res) => {
     const now = new Date().toISOString()
 
     const study = new Study({
-      _id: uuidv4(),
       studyUID: genStudyUID(),
       patientName,
       patientId,
