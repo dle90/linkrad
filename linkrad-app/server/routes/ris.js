@@ -250,13 +250,13 @@ router.get('/orthanc/viewer-url/:studyUID', requireAuth, async (req, res) => {
     if (!response.ok) return res.status(502).json({ error: 'Orthanc error' })
     const ids = await response.json()
     if (!ids || ids.length === 0) {
-      return res.status(404).json({ error: 'Study not found in PACS' })
+      return res.json({ url: `${ORTHANC_PUBLIC}/ui/app/`, found: false })
     }
     const orthancId = ids[0]
     const viewerUrl = `${ORTHANC_PUBLIC}/ui/app/#/study/${orthancId}`
-    res.json({ url: viewerUrl, orthancId })
+    res.json({ url: viewerUrl, orthancId, found: true })
   } catch (err) {
-    res.status(503).json({ error: 'Orthanc không kết nối được', detail: err.message })
+    res.json({ url: `${ORTHANC_PUBLIC}/ui/app/`, found: false, error: err.message })
   }
 })
 

@@ -122,9 +122,6 @@ function ImageStatusBadge({ imageStatus, imageCount, studyUID }) {
     try {
       const res = await api.get(`/ris/orthanc/viewer-url/${encodeURIComponent(studyUID)}`)
       window.open(res.data.url, '_blank', 'noopener,noreferrer')
-    } catch (_err) {
-      // fallback: open Orthanc Explorer 2 root
-      window.open('http://localhost:8042/ui/app/', '_blank', 'noopener,noreferrer')
     } finally {
       setOpening(false)
     }
