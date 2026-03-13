@@ -1,8 +1,11 @@
 const express = require('express')
 const router = express.Router()
 const { v4: uuidv4 } = require('uuid')
+const http = require('http')
 const Study = require('../models/Study')
 const { requireAuth } = require('../middleware/auth')
+
+const ORTHANC_BASE = process.env.ORTHANC_URL || 'http://localhost:8042'
 
 // Helper: generate a fake DICOM-style Study UID
 function genStudyUID() {
@@ -202,7 +205,7 @@ router.put('/studies/:id', requireAuth, async (req, res) => {
         'status', 'verifiedAt', 'patientName', 'patientId', 'dob', 'gender',
         'modality', 'bodyPart', 'clinicalInfo', 'site', 'scheduledDate', 'studyDate',
         'priority', 'technician', 'technicianName', 'radiologist', 'radiologistName',
-        'reportText', 'reportedAt',
+        'reportText', 'reportedAt', 'imageStatus', 'imageCount',
       ]
       for (const field of allowedFields) {
         if (body[field] !== undefined) {
@@ -223,6 +226,49 @@ router.put('/studies/:id', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('PUT /studies/:id error:', err)
     res.status(500).json({ error: 'Lỗi server' })
+  }
+})
+
+// GET /orthanc/studies — proxy list of studies from Orthanc
+router.get('/orthanc/studies', requireAuth, async (req, res) => {
+  try {
+    const response = await fetch(`${ORTHANC_BASE}/studies?expand`)
+    if (!response.ok) return res.status(response.status).json({ error: 'Orthanc error' })
+    const data = await response.json()
+    res.json(data)
+  } catch (err) {
+    res.status(503).json({ error: 'Orthanc không kết nối được', detail: err.message })
+  }
+})
+
+// GET /orthanc/viewer-url/:studyUID — resolve StudyInstanceUID → OE2 viewer URL
+router.get('/orthanc/viewer-url/:studyUID', requireAuth, async (req, res) => {
+  try {
+    const uid = req.params.studyUID
+    // Query Orthanc for the study with this UID
+    const response = await fetch(`${ORTHANC_BASE}/studies?StudyInstanceUID=${encodeURIComponent(uid)}`)
+    if (!response.ok) return res.status(502).json({ error: 'Orthanc error' })
+    const ids = await response.json()
+    if (!ids || ids.length === 0) {
+      return res.status(404).json({ error: 'Study not found in PACS' })
+    }
+    const orthancId = ids[0]
+    const viewerUrl = `http://localhost:8042/ui/app/#/study/${orthancId}`
+    res.json({ url: viewerUrl, orthancId })
+  } catch (err) {
+    res.status(503).json({ error: 'Orthanc không kết nối được', detail: err.message })
+  }
+})
+
+// GET /orthanc/status — check if Orthanc is reachable
+router.get('/orthanc/status', requireAuth, async (req, res) => {
+  try {
+    const response = await fetch(`${ORTHANC_BASE}/system`)
+    if (!response.ok) return res.status(response.status).json({ online: false })
+    const data = await response.json()
+    res.json({ online: true, version: data.Version, dicomAet: data.DicomAet })
+  } catch (err) {
+    res.json({ online: false, error: err.message })
   }
 })
 

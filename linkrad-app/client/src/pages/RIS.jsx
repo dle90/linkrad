@@ -2,6 +2,23 @@ import React, { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import api from '../api'
 
+// ─── Error Boundary ────────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null } }
+  static getDerivedStateFromError(e) { return { error: e } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-6 bg-red-50 border border-red-200 rounded-lg text-red-800">
+          <div className="font-bold mb-2">Lỗi RIS:</div>
+          <pre className="text-xs whitespace-pre-wrap">{String(this.state.error)}</pre>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmtDate = (iso) => {
@@ -90,6 +107,47 @@ function ModalityBadge({ modality }) {
   )
 }
 
+function ImageStatusBadge({ imageStatus, imageCount, studyUID }) {
+  const CONFIG = {
+    no_images:  { label: 'Chưa có ảnh', cls: 'bg-gray-100 text-gray-400' },
+    receiving:  { label: 'Đang nhận…',  cls: 'bg-blue-100 text-blue-600 animate-pulse' },
+    available:  { label: 'Có ảnh DICOM', cls: 'bg-emerald-100 text-emerald-700' },
+  }
+  const c = CONFIG[imageStatus] || CONFIG.no_images
+  const [opening, setOpening] = React.useState(false)
+
+  const openViewer = async (e) => {
+    e.preventDefault()
+    setOpening(true)
+    try {
+      const res = await api.get(`/ris/orthanc/viewer-url/${encodeURIComponent(studyUID)}`)
+      window.open(res.data.url, '_blank', 'noopener,noreferrer')
+    } catch (_err) {
+      // fallback: open Orthanc Explorer 2 root
+      window.open('http://localhost:8042/ui/app/', '_blank', 'noopener,noreferrer')
+    } finally {
+      setOpening(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium ${c.cls}`}>
+        {c.label}{imageCount > 0 ? ` (${imageCount})` : ''}
+      </span>
+      {imageStatus === 'available' && (
+        <button
+          onClick={openViewer}
+          disabled={opening}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white transition-colors whitespace-nowrap"
+        >
+          {opening ? '...' : 'Xem ảnh'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, colorBar, sub }) {
@@ -175,7 +233,7 @@ function NhanVienView({ studies, updateStudy, auth }) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['STT', 'Bệnh nhân', 'Loại chụp', 'Bộ phận', 'Ưu tiên', 'Trạng thái', 'Giờ hẹn', 'Thao tác'].map(h => (
+                {['STT', 'Bệnh nhân', 'Loại chụp', 'Bộ phận', 'Ưu tiên', 'Trạng thái', 'Ảnh PACS', 'Giờ hẹn', 'Thao tác'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
@@ -185,7 +243,7 @@ function NhanVienView({ studies, updateStudy, auth }) {
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-gray-400 text-sm">
+                  <td colSpan={9} className="px-4 py-10 text-center text-gray-400 text-sm">
                     Không có ca chụp nào
                   </td>
                 </tr>
@@ -200,6 +258,9 @@ function NhanVienView({ studies, updateStudy, auth }) {
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{s.bodyPart || '—'}</td>
                   <td className="px-4 py-3"><PriorityBadge priority={s.priority} /></td>
                   <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                  <td className="px-4 py-3">
+                    <ImageStatusBadge imageStatus={s.imageStatus} imageCount={s.imageCount} studyUID={s.studyUID} />
+                  </td>
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap text-xs">{fmtTime(s.appointmentTime)}</td>
                   <td className="px-4 py-3">
                     {(s.status === 'scheduled' || s.status === 'in_progress') ? (
@@ -307,7 +368,7 @@ function TruongPhongView({ studies, stats, updateStudy }) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['Bệnh nhân', 'Loại chụp', 'Ưu tiên', 'Trạng thái', 'Thời gian', 'Báo cáo'].map(h => (
+                {['Bệnh nhân', 'Loại chụp', 'Ưu tiên', 'Trạng thái', 'Ảnh PACS', 'Thời gian', 'Báo cáo'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
@@ -317,7 +378,7 @@ function TruongPhongView({ studies, stats, updateStudy }) {
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-gray-400 text-sm">
+                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400 text-sm">
                     Không có ca nào
                   </td>
                 </tr>
@@ -331,6 +392,9 @@ function TruongPhongView({ studies, stats, updateStudy }) {
                     <td className="px-4 py-3"><ModalityBadge modality={s.modality} /></td>
                     <td className="px-4 py-3"><PriorityBadge priority={s.priority} /></td>
                     <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                    <td className="px-4 py-3">
+                      <ImageStatusBadge imageStatus={s.imageStatus} imageCount={s.imageCount} studyUID={s.studyUID} />
+                    </td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                       {fmtTime(s.appointmentTime)}
                     </td>
@@ -358,7 +422,7 @@ function TruongPhongView({ studies, stats, updateStudy }) {
                   {/* Inline report panel */}
                   {reportPanel === s._id && (
                     <tr className="bg-yellow-50">
-                      <td colSpan={6} className="px-6 py-4">
+                      <td colSpan={7} className="px-6 py-4">
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-semibold text-gray-700">
@@ -447,7 +511,7 @@ function GiamDocView({ studies, stats }) {
   const urgentStudies = studies
     .filter(s => s.priority === 'urgent' || s.priority === 'stat')
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-    .slice(0, 10)
+    .slice(0, 20)
 
   return (
     <div className="space-y-4">
@@ -574,6 +638,7 @@ function GiamDocView({ studies, stats }) {
                 </div>
                 <ModalityBadge modality={s.modality} />
                 <StatusBadge status={s.status} />
+                <ImageStatusBadge imageStatus={s.imageStatus} imageCount={s.imageCount} studyUID={s.studyUID} />
                 <PriorityBadge priority={s.priority} />
                 <div className="text-xs text-gray-400 whitespace-nowrap w-20 text-right">
                   {fmtDate(s.createdAt)}
@@ -594,6 +659,7 @@ export default function RIS() {
   const [studies, setStudies] = useState([])
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
 
   useEffect(() => { load() }, [])
 
@@ -606,7 +672,10 @@ export default function RIS() {
       setStudies(studiesRes.data)
       setStats(statsRes.data)
     } catch (e) {
-      // 401 handled by interceptor
+      console.error('RIS load error:', e)
+      if (e?.response?.status !== 401) {
+        setLoadError(String(e?.response?.data?.error || e?.message || e))
+      }
     } finally {
       setLoading(false)
     }
@@ -641,6 +710,15 @@ export default function RIS() {
     )
   }
 
+  if (loadError) {
+    return (
+      <div className="p-6 bg-red-50 border border-red-200 rounded-lg text-red-800">
+        <div className="font-bold mb-2">Lỗi tải dữ liệu RIS:</div>
+        <pre className="text-xs whitespace-pre-wrap">{loadError}</pre>
+      </div>
+    )
+  }
+
   const sharedProps = { studies, stats, updateStudy, auth }
 
   return (
@@ -659,9 +737,11 @@ export default function RIS() {
       </div>
 
       {/* Role-based view */}
-      {auth.role === 'nhanvien' && <NhanVienView {...sharedProps} />}
-      {auth.role === 'truongphong' && <TruongPhongView {...sharedProps} />}
-      {(auth.role === 'giamdoc' || auth.role === 'admin') && <GiamDocView {...sharedProps} />}
+      <ErrorBoundary>
+        {auth.role === 'nhanvien' && <NhanVienView {...sharedProps} />}
+        {auth.role === 'truongphong' && <TruongPhongView {...sharedProps} />}
+        {(auth.role === 'giamdoc' || auth.role === 'admin') && <GiamDocView {...sharedProps} />}
+      </ErrorBoundary>
     </div>
   )
 }

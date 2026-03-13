@@ -30,6 +30,12 @@ const studySchema = new mongoose.Schema({
   reportText: { type: String, default: '' },
   reportedAt: String,
   verifiedAt: String,
+  imageStatus: {
+    type: String,
+    enum: ['no_images', 'receiving', 'available'],
+    default: 'no_images',
+  },
+  imageCount: { type: Number, default: 0 },
   createdAt: String,
   updatedAt: String,
 }, { _id: false })
