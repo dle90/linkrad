@@ -254,7 +254,7 @@ router.get('/orthanc/viewer-url/:studyUID', requireAuth, async (req, res) => {
       return res.json({ url: `${ORTHANC_PUBLIC}/ui/app/`, found: false })
     }
     const orthancId = ids[0]
-    const viewerUrl = `${ORTHANC_PUBLIC}/ui/app/#/studies/${orthancId}`
+    const viewerUrl = `${ORTHANC_PUBLIC}/ui/app/#/filtered-studies?StudyInstanceUID=${encodeURIComponent(uid)}`
     res.json({ url: viewerUrl, orthancId, found: true })
   } catch (err) {
     res.json({ url: `${ORTHANC_PUBLIC}/ui/app/`, found: false, error: err.message })
