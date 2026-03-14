@@ -8,36 +8,22 @@ const NAV = [
     group: 'Tổng quan',
     items: [
       { path: '/', label: 'Dashboard', icon: '📊' },
-      { path: '/actuals', label: 'Nhập số liệu', icon: '✏️', adminOnly: true },
       { path: '/workflow', label: 'Công việc', icon: '✅', workflowOnly: true },
       { path: '/ris',      label: 'RIS',        icon: '🩻', workflowOnly: true }
     ]
   },
   {
-    group: 'Kết quả kinh doanh',
+    group: 'Tài chính',
+    financialsOnly: true,
     items: [
-      { path: '/pl/annual', label: 'P&L Năm 2025', icon: '📋' },
-      { path: '/pl/monthly', label: 'P&L Tháng 2025', icon: '📅' },
-      { path: '/pl/site/1', label: 'P&L Chi nhánh', icon: '🏥' }
-    ]
-  },
-  {
-    group: 'Dòng tiền',
-    items: [
-      { path: '/cf/annual', label: 'CF Năm 2026', icon: '💰' },
-      { path: '/cf/monthly', label: 'CF Tháng 2026', icon: '📆' }
-    ]
-  },
-  {
-    group: 'Bảng cân đối',
-    items: [
-      { path: '/bs', label: 'Bảng cân đối kế toán', icon: '⚖️' }
-    ]
-  },
-  {
-    group: 'Phân tích',
-    items: [
-      { path: '/breakeven', label: 'Điểm hòa vốn', icon: '📈' }
+      { path: '/actuals',    label: 'Nhập số liệu',            icon: '✏️', adminOnly: true },
+      { path: '/pl/annual',  label: 'P&L Năm 2025',            icon: '📋' },
+      { path: '/pl/monthly', label: 'P&L Tháng 2025',          icon: '📅' },
+      { path: '/pl/site/1',  label: 'P&L Chi nhánh',           icon: '🏥' },
+      { path: '/cf/annual',  label: 'CF Năm 2026',             icon: '💰' },
+      { path: '/cf/monthly', label: 'CF Tháng 2026',           icon: '📆' },
+      { path: '/bs',         label: 'Bảng cân đối kế toán',    icon: '⚖️' },
+      { path: '/breakeven',  label: 'Điểm hòa vốn',            icon: '📈' }
     ]
   },
   {
@@ -65,6 +51,7 @@ const ROLE_LABELS = {
 export default function Layout({ children }) {
   const { auth, logout } = useAuth()
   const isAdmin = auth?.role === 'admin'
+  const isFinancialsUser = auth?.role === 'admin' || auth?.role === 'giamdoc'
   const isWorkflowUser = auth?.role && auth.role !== 'guest'
 
   const handleLogout = async () => {
@@ -85,6 +72,7 @@ export default function Layout({ children }) {
         {/* Navigation */}
         <nav className="flex-1 py-4">
           {NAV.map((section) => {
+            if (section.financialsOnly && !isFinancialsUser) return null
             const visibleItems = section.items.filter(item => {
               if (item.adminOnly && !isAdmin) return false
               if (item.workflowOnly && !isWorkflowUser) return false
