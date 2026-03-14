@@ -27,6 +27,8 @@ const studySchema = new mongoose.Schema({
   technicianName: String,
   radiologist: String,
   radiologistName: String,
+  assignedAt: String,
+  reportId: String,
   reportText: { type: String, default: '' },
   reportedAt: String,
   verifiedAt: String,

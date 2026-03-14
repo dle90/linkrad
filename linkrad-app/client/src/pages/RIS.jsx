@@ -67,6 +67,7 @@ function StatusBadge({ status }) {
     scheduled:    { label: 'Đã lên lịch', cls: 'bg-gray-100 text-gray-600' },
     in_progress:  { label: 'Đang chụp',   cls: 'bg-blue-100 text-blue-700' },
     pending_read: { label: 'Chờ đọc',     cls: 'bg-yellow-100 text-yellow-700' },
+    reading:      { label: 'Đang đọc',    cls: 'bg-orange-100 text-orange-700' },
     reported:     { label: 'Có kết quả',  cls: 'bg-green-100 text-green-700' },
     verified:     { label: 'Đã xác nhận', cls: 'bg-emerald-100 text-emerald-800' },
   }
@@ -156,6 +157,271 @@ function StatCard({ label, value, colorBar, sub }) {
         <div className="text-2xl font-bold text-gray-800 mt-1">{value}</div>
         {sub && <div className="text-xs text-gray-400 mt-0.5">{sub}</div>}
       </div>
+    </div>
+  )
+}
+
+// ─── ReportEditor Modal ────────────────────────────────────────────────────────
+
+function ReportEditor({ study, onClose, onSaved }) {
+  const [form, setForm] = useState({ technique: '', clinicalInfo: '', findings: '', impression: '', recommendation: '' })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    api.get(`/ris/reports/${study._id}`)
+      .then(r => setForm({
+        technique: r.data.technique || '',
+        clinicalInfo: r.data.clinicalInfo || study.clinicalInfo || '',
+        findings: r.data.findings || '',
+        impression: r.data.impression || '',
+        recommendation: r.data.recommendation || '',
+      }))
+      .catch(() => setForm(f => ({ ...f, clinicalInfo: study.clinicalInfo || '' })))
+      .finally(() => setLoading(false))
+  }, [study._id])
+
+  const save = async (status) => {
+    setSaving(true)
+    try {
+      await api.post('/ris/reports', { studyId: study._id, studyUID: study.studyUID, ...form, status })
+      onSaved()
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const Field = ({ label, name, rows = 3 }) => (
+    <div>
+      <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+      <textarea
+        rows={rows}
+        value={form[name]}
+        onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 resize-y"
+      />
+    </div>
+  )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-gray-800">Kết quả đọc phim</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{study.patientName} · {study.modality} · {study.bodyPart || '—'}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {loading ? (
+            <div className="text-center py-8 text-gray-400 text-sm">Đang tải...</div>
+          ) : (
+            <>
+              <Field label="Kỹ thuật chụp" name="technique" rows={2} />
+              <Field label="Thông tin lâm sàng" name="clinicalInfo" rows={2} />
+              <Field label="Mô tả hình ảnh (Findings)" name="findings" rows={5} />
+              <Field label="Kết luận (Impression)" name="impression" rows={3} />
+              <Field label="Đề nghị (Recommendation)" name="recommendation" rows={2} />
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center gap-3 flex-shrink-0">
+          <button
+            onClick={() => save('final')}
+            disabled={saving || !form.findings.trim() || !form.impression.trim()}
+            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-colors"
+          >
+            {saving ? 'Đang lưu...' : 'Hoàn thành & Ký'}
+          </button>
+          <button
+            onClick={() => save('preliminary')}
+            disabled={saving}
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 text-sm rounded-lg font-medium transition-colors"
+          >
+            Lưu tạm
+          </button>
+          <button onClick={onClose} className="ml-auto px-4 py-2 text-gray-400 hover:text-gray-600 text-sm">Hủy</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── AssignModal ───────────────────────────────────────────────────────────────
+
+function AssignModal({ study, onClose, onAssigned }) {
+  const [radiologists, setRadiologists] = useState([])
+  const [selected, setSelected] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    api.get('/ris/radiologists').then(r => {
+      setRadiologists(r.data)
+      if (study.radiologist) setSelected(study.radiologist)
+    }).catch(() => {})
+  }, [])
+
+  const assign = async () => {
+    if (!selected) return
+    setSaving(true)
+    try {
+      const rad = radiologists.find(r => r.username === selected)
+      await api.post(`/ris/studies/${study._id}/assign`, {
+        radiologistId: selected,
+        radiologistName: rad?.displayName || selected,
+      })
+      onAssigned()
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-base font-bold text-gray-800">Phân công bác sĩ</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+        </div>
+        <div className="px-6 py-4 space-y-4">
+          <div className="text-sm text-gray-600">
+            Ca chụp: <span className="font-medium">{study.patientName}</span> · {study.modality}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Chọn bác sĩ đọc phim</label>
+            <select
+              value={selected}
+              onChange={e => setSelected(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            >
+              <option value="">— Chọn bác sĩ —</option>
+              {radiologists.map(r => (
+                <option key={r.username} value={r.username}>
+                  {r.displayName} {r.department ? `(${r.department})` : ''}
+                </option>
+              ))}
+            </select>
+            {radiologists.length === 0 && (
+              <p className="text-xs text-red-400 mt-1">Chưa có tài khoản bác sĩ nào. Vui lòng tạo tài khoản với role "bacsi".</p>
+            )}
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
+          <button
+            onClick={assign}
+            disabled={saving || !selected}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-colors"
+          >
+            {saving ? 'Đang lưu...' : 'Phân công'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm rounded-lg font-medium transition-colors">Hủy</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── BacsiView ─────────────────────────────────────────────────────────────────
+
+function BacsiView({ studies, auth, onRefresh }) {
+  const [tab, setTab] = useState('pending')
+  const [reportStudy, setReportStudy] = useState(null)
+
+  const pending   = studies.filter(s => s.status === 'pending_read' || s.status === 'reading')
+  const completed = studies.filter(s => s.status === 'reported' || s.status === 'verified')
+  const list      = tab === 'pending' ? pending : completed
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-5 py-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800">Danh sách ca đọc phim</h2>
+          <p className="text-xs text-gray-400 mt-0.5">BS. {auth.displayName || auth.username}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-medium">{pending.length} ca chờ đọc</span>
+          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">{completed.length} hoàn thành</span>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2">
+        {[{ key: 'pending', label: 'Chờ đọc' }, { key: 'done', label: 'Đã hoàn thành' }].map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              tab === t.key ? 'bg-teal-700 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {['Bệnh nhân', 'Loại chụp', 'Bộ phận', 'Ưu tiên', 'Trạng thái', 'Ảnh PACS', 'Ngày phân công', 'Thao tác'].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {list.length === 0 ? (
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400 text-sm">Không có ca nào</td></tr>
+              ) : list.map((s, i) => (
+                <tr key={s._id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-teal-50 transition-colors`}>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-800">{s.patientName || '—'}</div>
+                    <div className="text-xs text-gray-400">{s.patientId}</div>
+                  </td>
+                  <td className="px-4 py-3"><ModalityBadge modality={s.modality} /></td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{s.bodyPart || '—'}</td>
+                  <td className="px-4 py-3"><PriorityBadge priority={s.priority} /></td>
+                  <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                  <td className="px-4 py-3">
+                    <ImageStatusBadge imageStatus={s.imageStatus} imageCount={s.imageCount} studyUID={s.studyUID} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(s.assignedAt)}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => setReportStudy(s)}
+                      className={`px-3 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
+                        tab === 'pending'
+                          ? 'bg-teal-600 hover:bg-teal-700 text-white'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {tab === 'pending' ? 'Đọc phim' : 'Xem kết quả'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {reportStudy && (
+        <ReportEditor
+          study={reportStudy}
+          onClose={() => setReportStudy(null)}
+          onSaved={onRefresh}
+        />
+      )}
     </div>
   )
 }
@@ -288,11 +554,12 @@ function NhanVienView({ studies, updateStudy, auth }) {
 
 // ─── TruongPhongView ───────────────────────────────────────────────────────────
 
-function TruongPhongView({ studies, stats, updateStudy }) {
+function TruongPhongView({ studies, stats, updateStudy, onRefresh }) {
   const [modalityFilter, setModalityFilter] = useState('all')
   const [reportPanel, setReportPanel] = useState(null) // study._id
   const [reportText, setReportText] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [assignStudy, setAssignStudy] = useState(null)
 
   const MODALITIES = ['Tất cả', 'CT', 'MRI', 'XR', 'US']
 
@@ -365,7 +632,7 @@ function TruongPhongView({ studies, stats, updateStudy }) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['Bệnh nhân', 'Loại chụp', 'Ưu tiên', 'Trạng thái', 'Ảnh PACS', 'Thời gian', 'Báo cáo'].map(h => (
+                {['Bệnh nhân', 'Loại chụp', 'Ưu tiên', 'Trạng thái', 'Ảnh PACS', 'Bác sĩ', 'Thao tác'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">
                     {h}
                   </th>
@@ -380,90 +647,54 @@ function TruongPhongView({ studies, stats, updateStudy }) {
                   </td>
                 </tr>
               ) : filtered.map((s, i) => (
-                <React.Fragment key={s._id}>
-                  <tr className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-800">{s.patientName || '—'}</div>
-                      <div className="text-xs text-gray-400">{s.patientId || ''}</div>
-                    </td>
-                    <td className="px-4 py-3"><ModalityBadge modality={s.modality} /></td>
-                    <td className="px-4 py-3"><PriorityBadge priority={s.priority} /></td>
-                    <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                    <td className="px-4 py-3">
-                      <ImageStatusBadge imageStatus={s.imageStatus} imageCount={s.imageCount} studyUID={s.studyUID} />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                      {fmtTime(s.appointmentTime)}
-                    </td>
-                    <td className="px-4 py-3">
-                      {s.status === 'pending_read' ? (
+                <tr key={s._id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-800">{s.patientName || '—'}</div>
+                    <div className="text-xs text-gray-400">{s.patientId || ''}</div>
+                  </td>
+                  <td className="px-4 py-3"><ModalityBadge modality={s.modality} /></td>
+                  <td className="px-4 py-3"><PriorityBadge priority={s.priority} /></td>
+                  <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                  <td className="px-4 py-3">
+                    <ImageStatusBadge imageStatus={s.imageStatus} imageCount={s.imageCount} studyUID={s.studyUID} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
+                    {s.radiologistName || <span className="text-gray-300">Chưa phân công</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      {s.status === 'pending_read' || !s.radiologist ? (
                         <button
-                          onClick={() => openReport(s)}
-                          className="px-3 py-1 rounded text-xs font-medium bg-yellow-500 hover:bg-yellow-600 text-white transition-colors whitespace-nowrap"
+                          onClick={() => setAssignStudy(s)}
+                          className="px-2 py-1 rounded text-xs font-medium bg-blue-100 hover:bg-blue-200 text-blue-700 transition-colors whitespace-nowrap"
                         >
-                          Ghi báo cáo
+                          Phân công
                         </button>
-                      ) : s.status === 'reported' || s.status === 'verified' ? (
+                      ) : null}
+                      {(s.status === 'reported' || s.status === 'reading') && (
                         <button
-                          onClick={() => openReport(s)}
-                          className="px-3 py-1 rounded text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors whitespace-nowrap"
+                          onClick={() => { setReportPanel(s._id); setReportText(s.reportText || '') }}
+                          className="px-2 py-1 rounded text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors whitespace-nowrap"
                         >
-                          Xem / Sửa
+                          Xem KQ
                         </button>
-                      ) : (
-                        <span className="text-xs text-gray-300">—</span>
                       )}
-                    </td>
-                  </tr>
-
-                  {/* Inline report panel */}
-                  {reportPanel === s._id && (
-                    <tr className="bg-yellow-50">
-                      <td colSpan={7} className="px-6 py-4">
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-gray-700">
-                              Báo cáo kết quả — {s.patientName}
-                            </span>
-                            <button
-                              onClick={() => setReportPanel(null)}
-                              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-                            >
-                              ×
-                            </button>
-                          </div>
-                          <textarea
-                            value={reportText}
-                            onChange={e => setReportText(e.target.value)}
-                            placeholder="Nhập kết quả đọc phim..."
-                            rows={4}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent resize-y"
-                          />
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => submitReport(s)}
-                              disabled={submitting || !reportText.trim()}
-                              className="px-4 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm rounded font-medium transition-colors"
-                            >
-                              {submitting ? 'Đang lưu...' : 'Lưu kết quả'}
-                            </button>
-                            <button
-                              onClick={() => setReportPanel(null)}
-                              className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm rounded font-medium transition-colors"
-                            >
-                              Hủy
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                    </div>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {assignStudy && (
+        <AssignModal
+          study={assignStudy}
+          onClose={() => setAssignStudy(null)}
+          onAssigned={() => { onRefresh(); setAssignStudy(null) }}
+        />
+      )}
     </div>
   )
 }
@@ -716,7 +947,7 @@ export default function RIS() {
     )
   }
 
-  const sharedProps = { studies, stats, updateStudy, auth }
+  const sharedProps = { studies, stats, updateStudy, auth, onRefresh: load }
 
   return (
     <div className="space-y-4">
@@ -735,6 +966,7 @@ export default function RIS() {
 
       {/* Role-based view */}
       <ErrorBoundary>
+        {auth.role === 'bacsi' && <BacsiView studies={studies} auth={auth} onRefresh={load} />}
         {auth.role === 'nhanvien' && <NhanVienView {...sharedProps} />}
         {auth.role === 'truongphong' && <TruongPhongView {...sharedProps} />}
         {(auth.role === 'giamdoc' || auth.role === 'admin') && <GiamDocView {...sharedProps} />}

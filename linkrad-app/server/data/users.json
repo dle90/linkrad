@@ -23,5 +23,8 @@
   "tp_hr":   { "password": "linkrad2025", "role": "truongphong", "department": "HR",          "displayName": "TP. Nhân sự" },
   "tp_acc":  { "password": "linkrad2025", "role": "truongphong", "department": "Kế toán",     "displayName": "TP. Kế toán" },
 
-  "giamdoc": { "password": "linkrad2025", "role": "giamdoc",     "department": null,          "displayName": "Giám đốc" }
+  "giamdoc": { "password": "linkrad2025", "role": "giamdoc",     "department": null,          "displayName": "Giám đốc" },
+
+  "bs_01":   { "password": "linkrad2025", "role": "bacsi",       "department": "Điện quang",  "displayName": "BS. Nguyễn Minh Tuấn" },
+  "bs_02":   { "password": "linkrad2025", "role": "bacsi",       "department": "Điện quang",  "displayName": "BS. Trần Thị Lan" }
 }

@@ -1,7 +1,8 @@
 const express = require('express')
 const router = express.Router()
-const http = require('http')
 const Study = require('../models/Study')
+const Report = require('../models/Report')
+const User = require('../models/User')
 const { requireAuth } = require('../middleware/auth')
 
 const ORTHANC_BASE = process.env.ORTHANC_URL || 'http://localhost:8042'
@@ -16,6 +17,9 @@ function genStudyUID() {
 
 // Helper: build a base Mongoose query filter based on user role
 function buildSiteFilter(user) {
+  if (user.role === 'bacsi') {
+    return { radiologist: user.username }
+  }
   if (user.role === 'nhanvien' || user.role === 'truongphong') {
     return { site: user.department }
   }
@@ -213,6 +217,17 @@ router.put('/studies/:id', requireAuth, async (req, res) => {
           updates[field] = body[field]
         }
       }
+    } else if (role === 'bacsi') {
+      // Bacsi can only update studies assigned to them
+      if (study.radiologist !== req.user.username) {
+        return res.status(403).json({ error: 'Ca chụp không được giao cho bạn' })
+      }
+      if (body.status !== undefined) {
+        if (!['reading', 'reported'].includes(body.status)) {
+          return res.status(403).json({ error: 'Bác sĩ chỉ được cập nhật trạng thái reading hoặc reported' })
+        }
+        updates.status = body.status
+      }
     } else {
       return res.status(403).json({ error: 'Không có quyền cập nhật ca chụp' })
     }
@@ -226,6 +241,97 @@ router.put('/studies/:id', requireAuth, async (req, res) => {
     res.json(updated)
   } catch (err) {
     console.error('PUT /studies/:id error:', err)
+    res.status(500).json({ error: 'Lỗi server' })
+  }
+})
+
+// GET /radiologists — list all bacsi users for assignment dropdown
+router.get('/radiologists', requireAuth, async (req, res) => {
+  try {
+    const users = await User.find({ role: 'bacsi' }).select('_id displayName department')
+    res.json(users.map(u => ({ username: u._id, displayName: u.displayName || u._id, department: u.department })))
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi server' })
+  }
+})
+
+// POST /studies/:id/assign — assign study to a radiologist
+router.post('/studies/:id/assign', requireAuth, async (req, res) => {
+  try {
+    const role = req.user.role
+    if (role !== 'admin' && role !== 'truongphong') {
+      return res.status(403).json({ error: 'Không có quyền phân công' })
+    }
+    const { radiologistId, radiologistName } = req.body
+    const now = new Date().toISOString()
+    const updated = await Study.findByIdAndUpdate(
+      req.params.id,
+      { $set: { radiologist: radiologistId, radiologistName, assignedAt: now, status: 'pending_read', updatedAt: now } },
+      { new: true }
+    )
+    if (!updated) return res.status(404).json({ error: 'Không tìm thấy ca chụp' })
+    res.json(updated)
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi server' })
+  }
+})
+
+// GET /reports/:studyId — get report for a study
+router.get('/reports/:studyId', requireAuth, async (req, res) => {
+  try {
+    const report = await Report.findOne({ studyId: req.params.studyId })
+    if (!report) return res.status(404).json({ error: 'Chưa có kết quả' })
+    res.json(report)
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi server' })
+  }
+})
+
+// POST /reports — create or update report for a study
+router.post('/reports', requireAuth, async (req, res) => {
+  try {
+    const role = req.user.role
+    if (role !== 'bacsi' && role !== 'admin' && role !== 'truongphong') {
+      return res.status(403).json({ error: 'Không có quyền viết kết quả' })
+    }
+    const { studyId, studyUID, technique, clinicalInfo, findings, impression, recommendation, status } = req.body
+    const now = new Date().toISOString()
+
+    let report = await Report.findOne({ studyId })
+    if (report) {
+      report.technique = technique ?? report.technique
+      report.clinicalInfo = clinicalInfo ?? report.clinicalInfo
+      report.findings = findings ?? report.findings
+      report.impression = impression ?? report.impression
+      report.recommendation = recommendation ?? report.recommendation
+      report.updatedAt = now
+      if (status) report.status = status
+      if (status === 'final') report.finalizedAt = now
+      await report.save()
+    } else {
+      report = await Report.create({
+        studyId, studyUID,
+        radiologistId: req.user.username,
+        radiologistName: req.user.displayName || req.user.username,
+        technique: technique || '', clinicalInfo: clinicalInfo || '',
+        findings: findings || '', impression: impression || '',
+        recommendation: recommendation || '',
+        status: status || 'draft',
+        createdAt: now, updatedAt: now,
+        finalizedAt: status === 'final' ? now : null,
+      })
+    }
+
+    // Sync study status
+    const studyStatus = status === 'final' ? 'reported' : 'reading'
+    await Study.findByIdAndUpdate(studyId, {
+      $set: { status: studyStatus, reportId: String(report._id), updatedAt: now,
+              ...(status === 'final' ? { reportedAt: now } : {}) }
+    })
+
+    res.json(report)
+  } catch (err) {
+    console.error('POST /reports error:', err)
     res.status(500).json({ error: 'Lỗi server' })
   }
 })

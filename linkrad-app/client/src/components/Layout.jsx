@@ -43,6 +43,7 @@ const ROLE_LABELS = {
   nhanvien:    { label: 'Nhân viên',    cls: 'bg-blue-800 text-blue-200' },
   truongphong: { label: 'Trưởng phòng', cls: 'bg-indigo-800 text-indigo-200' },
   giamdoc:     { label: 'Giám đốc',     cls: 'bg-purple-800 text-purple-200' },
+  bacsi:       { label: 'Bác sĩ',       cls: 'bg-teal-800 text-teal-200' },
 }
 
 export default function Layout({ children }) {
