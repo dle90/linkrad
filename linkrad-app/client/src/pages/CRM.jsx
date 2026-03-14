@@ -81,9 +81,20 @@ function buildCRM(rows) {
 const sumMo  = (map, mos) => mos.reduce((s, m) => s + (map[m] || 0), 0)
 const fmtMo  = m => m.replace(/^(\d{4})-(\d{2})$/, (_, y, mo) => `T${+mo}/${y.slice(2)}`)
 const fmtNum = n => Number(n).toLocaleString('vi-VN')
+
 const NAVY   = '#0f2c6b'
 const BLUE   = '#1e3a8a'
 const TEAL   = '#0e7490'
+const AMBER  = '#b45309'
+const EMERALD = '#065f46'
+const VIOLET = '#5b21b6'
+
+// Palette for site color-coding (13+ colors)
+const SITE_PALETTE = [
+  '#1e3a8a','#0e7490','#065f46','#92400e','#5b21b6',
+  '#9f1239','#0c4a6e','#14532d','#78350f','#3b0764',
+  '#881337','#1e40af','#0f766e',
+]
 
 // ── summary table ────────────────────────────────────────────────────
 function SummaryTable({ data, months, siteList, BLUE, NAVY }) {
@@ -92,7 +103,7 @@ function SummaryTable({ data, months, siteList, BLUE, NAVY }) {
 
   const rows = useMemo(() => {
     if (!data) return []
-    return siteList.map(s => {
+    return siteList.map((s, si) => {
       const hosps = data.sites[s] || {}
       const hospRows = Object.keys(hosps)
         .filter(h => h !== 'Tự do')
@@ -104,24 +115,31 @@ function SummaryTable({ data, months, siteList, BLUE, NAVY }) {
         })
       const freeDocs  = Object.keys(hosps['Tự do'] || {}).length
       const freeTotal = Object.values(hosps['Tự do'] || {}).reduce((s, d) => s + months.reduce((s2, m) => s2 + (d[m] || 0), 0), 0)
-      // deduplicate doctors by name across all hospitals in this site
       const allDocNames = new Set(Object.values(hosps).flatMap(ds => Object.keys(ds)))
       const totalDocs  = allDocNames.size
       const totalVisit = hospRows.reduce((s, r) => s + r.total, freeTotal)
-      // count hospital groups including Tự do (to match KPI card)
       const totalHospGroups = hospRows.length + (freeDocs > 0 ? 1 : 0)
-      return { site: s, hospRows, freeDocs, freeTotal, totalDocs, totalVisit, totalHospGroups }
+      const color = SITE_PALETTE[si % SITE_PALETTE.length]
+      return { site: s, hospRows, freeDocs, freeTotal, totalDocs, totalVisit, totalHospGroups, color }
     })
   }, [data, siteList, months])
+
+  const grandHosps = rows.reduce((s, r) => s + r.totalHospGroups, 0)
+  const grandDocs  = rows.reduce((s, r) => s + r.totalDocs, 0)
+  const grandVisit = rows.reduce((s, r) => s + r.totalVisit, 0)
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       {/* header */}
       <button onClick={() => setOpen(p => !p)}
-        className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors text-left border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <span className="text-base">📊</span>
-          <span className="text-sm font-extrabold text-gray-700 uppercase tracking-wide">Tổng quan — Tất cả chi nhánh</span>
+        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors text-left"
+        style={{ borderBottom: open ? '1px solid #e5e7eb' : 'none', background: 'linear-gradient(to right, #f8fafc, #fff)' }}>
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm" style={{ background: NAVY + '15' }}>📊</div>
+          <span className="text-sm font-extrabold uppercase tracking-wide" style={{ color: NAVY }}>Tổng quan — Tất cả chi nhánh</span>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: NAVY + '12', color: NAVY }}>
+            {siteList.length} chi nhánh
+          </span>
         </div>
         <svg className={`w-4 h-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`}
           fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,66 +151,74 @@ function SummaryTable({ data, months, siteList, BLUE, NAVY }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ background: NAVY + '0d' }}>
-                <th className="py-2.5 px-4 text-left font-extrabold text-gray-500 uppercase tracking-wider text-xs sticky left-0" style={{ background: NAVY + '0d', minWidth: 180 }}>Chi nhánh</th>
-                <th className="py-2.5 px-4 text-left font-extrabold text-gray-500 uppercase tracking-wider text-xs" style={{ minWidth: 240 }}>Bệnh viện / PK</th>
-                <th className="py-2.5 px-4 text-center font-extrabold text-gray-500 uppercase tracking-wider text-xs" style={{ minWidth: 100 }}>Bác sĩ</th>
-                <th className="py-2.5 px-4 text-center font-extrabold text-gray-500 uppercase tracking-wider text-xs" style={{ minWidth: 120 }}>Tổng lượt KH</th>
+              <tr style={{ background: `linear-gradient(to right, ${NAVY}0f, ${NAVY}06)` }}>
+                <th className="py-3 px-4 text-left font-extrabold text-gray-500 uppercase tracking-wider text-xs sticky left-0" style={{ background: `${NAVY}0f`, minWidth: 180 }}>Chi nhánh</th>
+                <th className="py-3 px-4 text-left font-extrabold text-gray-500 uppercase tracking-wider text-xs" style={{ minWidth: 260 }}>Bệnh viện / PK</th>
+                <th className="py-3 px-4 text-center font-extrabold text-gray-500 uppercase tracking-wider text-xs" style={{ minWidth: 100 }}>Bác sĩ</th>
+                <th className="py-3 px-4 text-center font-extrabold text-gray-500 uppercase tracking-wider text-xs" style={{ minWidth: 130 }}>Tổng lượt KH</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, ri) => {
+              {rows.map((r) => {
                 const isExpanded = expandedSites[r.site] !== false
-                const bgSite = ri % 2 === 0 ? '#f8fafc' : '#fff'
                 return (
                   <React.Fragment key={r.site}>
                     {/* site row */}
                     <tr className="border-t border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors"
-                      style={{ background: bgSite }}
                       onClick={() => setExpandedSites(p => ({ ...p, [r.site]: !isExpanded }))}>
-                      <td className="py-2.5 px-4 sticky left-0 font-extrabold" style={{ background: bgSite, color: BLUE }}>
+                      <td className="py-3 px-4 sticky left-0 font-extrabold bg-white"
+                        style={{ borderLeft: `4px solid ${r.color}` }}>
                         <div className="flex items-center gap-2">
                           <svg className={`w-3.5 h-3.5 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}
-                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: r.color }}>
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                           </svg>
-                          {r.site}
+                          <span style={{ color: r.color }}>{r.site}</span>
                         </div>
                       </td>
-                      <td className="py-2.5 px-4 text-xs text-gray-400 italic">
-                        {r.hospRows.length} bệnh viện/PK{r.freeDocs > 0 ? ' + nhóm tự do' : ''}
+                      <td className="py-3 px-4">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: r.color + '15', color: r.color }}>
+                          {r.hospRows.length} BV/PK{r.freeDocs > 0 ? ' + tự do' : ''}
+                        </span>
                       </td>
-                      <td className="py-2.5 px-4 text-center font-bold" style={{ color: BLUE }}>{r.totalDocs.toLocaleString('vi-VN')}</td>
-                      <td className="py-2.5 px-4 text-center font-extrabold text-base" style={{ color: BLUE }}>{r.totalVisit.toLocaleString('vi-VN')}</td>
+                      <td className="py-3 px-4 text-center">
+                        <span className="text-sm font-bold" style={{ color: r.color }}>{r.totalDocs.toLocaleString('vi-VN')}</span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className="text-base font-extrabold" style={{ color: r.color }}>{r.totalVisit.toLocaleString('vi-VN')}</span>
+                      </td>
                     </tr>
                     {/* hospital rows */}
                     {isExpanded && r.hospRows.map((h, hi) => (
-                      <tr key={h.hosp} className="border-t border-gray-50 hover:bg-blue-50 transition-colors"
-                        style={{ background: hi % 2 === 0 ? '#f0f9ff' : '#e0f2fe' }}>
-                        <td className="py-2 px-4 sticky left-0 text-xs text-gray-400"
-                          style={{ background: hi % 2 === 0 ? '#f0f9ff' : '#e0f2fe' }}></td>
+                      <tr key={h.hosp} className="border-t border-gray-50 hover:bg-slate-50 transition-colors"
+                        style={{ background: hi % 2 === 0 ? '#f8fafc' : '#fff', borderLeft: `4px solid ${r.color}30` }}>
+                        <td className="py-2 px-4 sticky left-0 text-xs text-gray-300 font-light"
+                          style={{ background: hi % 2 === 0 ? '#f8fafc' : '#fff', borderLeft: `4px solid ${r.color}22` }}>
+                          └
+                        </td>
                         <td className="py-2 px-4">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm">🏥</span>
+                            <span className="w-5 h-5 rounded-md flex items-center justify-center text-xs flex-shrink-0"
+                              style={{ background: r.color + '18', color: r.color }}>🏥</span>
                             <span className="text-xs font-semibold text-gray-700">{h.hosp}</span>
                           </div>
                         </td>
-                        <td className="py-2 px-4 text-center text-xs font-semibold text-gray-600">{h.docs.toLocaleString('vi-VN')}</td>
-                        <td className="py-2 px-4 text-center text-xs font-bold" style={{ color: BLUE }}>{h.total.toLocaleString('vi-VN')}</td>
+                        <td className="py-2 px-4 text-center text-xs font-semibold text-gray-500">{h.docs.toLocaleString('vi-VN')}</td>
+                        <td className="py-2 px-4 text-center text-sm font-bold" style={{ color: r.color }}>{h.total.toLocaleString('vi-VN')}</td>
                       </tr>
                     ))}
                     {/* "Tự do" row */}
                     {isExpanded && r.freeDocs > 0 && (
-                      <tr className="border-t border-gray-50" style={{ background: '#f9fafb' }}>
-                        <td className="py-2 px-4 sticky left-0 text-xs text-gray-400" style={{ background: '#f9fafb' }}></td>
+                      <tr className="border-t border-gray-50" style={{ background: '#fefce8', borderLeft: `4px solid ${AMBER}30` }}>
+                        <td className="py-2 px-4 sticky left-0 text-xs text-gray-300" style={{ background: '#fefce8', borderLeft: `4px solid ${AMBER}20` }}>└</td>
                         <td className="py-2 px-4">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm">🏃</span>
-                            <span className="text-xs font-semibold text-gray-500">Tự do (không thuộc BV/PK)</span>
+                            <span className="w-5 h-5 rounded-md flex items-center justify-center text-xs" style={{ background: AMBER + '22' }}>🏃</span>
+                            <span className="text-xs font-semibold" style={{ color: AMBER }}>Tự do (không thuộc BV/PK)</span>
                           </div>
                         </td>
-                        <td className="py-2 px-4 text-center text-xs font-semibold text-gray-500">{r.freeDocs.toLocaleString('vi-VN')}</td>
-                        <td className="py-2 px-4 text-center text-xs font-bold text-gray-500">{r.freeTotal.toLocaleString('vi-VN')}</td>
+                        <td className="py-2 px-4 text-center text-xs font-semibold" style={{ color: AMBER }}>{r.freeDocs.toLocaleString('vi-VN')}</td>
+                        <td className="py-2 px-4 text-center text-sm font-bold" style={{ color: AMBER }}>{r.freeTotal.toLocaleString('vi-VN')}</td>
                       </tr>
                     )}
                   </React.Fragment>
@@ -201,11 +227,17 @@ function SummaryTable({ data, months, siteList, BLUE, NAVY }) {
             </tbody>
             {/* grand total */}
             <tfoot>
-              <tr style={{ background: NAVY, borderTop: `2px solid ${NAVY}` }}>
-                <td className="py-3 px-4 font-extrabold text-white text-xs uppercase tracking-wider sticky left-0" style={{ background: NAVY }}>TỔNG CỘNG</td>
-                <td className="py-3 px-4 text-white text-xs">{rows.reduce((s, r) => s + r.totalHospGroups, 0)} BV/PK trên {siteList.length} chi nhánh</td>
-                <td className="py-3 px-4 text-center font-extrabold text-white">{rows.reduce((s, r) => s + r.totalDocs, 0).toLocaleString('vi-VN')}</td>
-                <td className="py-3 px-4 text-center font-extrabold text-white text-base">{rows.reduce((s, r) => s + r.totalVisit, 0).toLocaleString('vi-VN')}</td>
+              <tr style={{ background: `linear-gradient(to right, ${NAVY}, #1e3a8a)`, borderTop: `2px solid ${NAVY}` }}>
+                <td className="py-3.5 px-4 font-extrabold text-white text-xs uppercase tracking-wider sticky left-0" style={{ background: NAVY }}>
+                  TỔNG CỘNG
+                </td>
+                <td className="py-3.5 px-4">
+                  <span className="text-white text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.15)' }}>
+                    {grandHosps} BV/PK • {siteList.length} chi nhánh
+                  </span>
+                </td>
+                <td className="py-3.5 px-4 text-center font-extrabold text-white text-sm">{grandDocs.toLocaleString('vi-VN')}</td>
+                <td className="py-3.5 px-4 text-center font-extrabold text-white text-lg">{grandVisit.toLocaleString('vi-VN')}</td>
               </tr>
             </tfoot>
           </table>
@@ -215,21 +247,30 @@ function SummaryTable({ data, months, siteList, BLUE, NAVY }) {
   )
 }
 
-// ── small stat card ───────────────────────────────────────────────────
-const StatCard = ({ label, value, sub, color = BLUE }) => (
-  <div className="rounded-xl px-5 py-4 flex flex-col gap-1" style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)' }}>
-    <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#93c5fd' }}>{label}</p>
-    <p className="text-2xl font-bold text-white">{value}</p>
-    {sub && <p className="text-xs" style={{ color: '#bfdbfe' }}>{sub}</p>}
+// ── small stat card (hero banner) ─────────────────────────────────────
+const StatCard = ({ label, value, sub, icon }) => (
+  <div className="rounded-xl px-4 py-3.5 flex items-center gap-3" style={{ background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.18)' }}>
+    {icon && <span className="text-2xl flex-shrink-0">{icon}</span>}
+    <div>
+      <p className="text-xs font-bold uppercase tracking-wider" style={{ color: '#93c5fd' }}>{label}</p>
+      <p className="text-2xl font-extrabold text-white leading-tight">{value}</p>
+      {sub && <p className="text-xs mt-0.5" style={{ color: '#bfdbfe' }}>{sub}</p>}
+    </div>
   </div>
 )
 
-// ── badge ─────────────────────────────────────────────────────────────
-const Badge = ({ n, color }) => (
-  <span className="inline-flex items-center justify-center rounded-full text-xs font-bold px-2 py-0.5 min-w-[26px]"
-    style={{ background: color + '22', color }}>
-    {fmtNum(n)}
-  </span>
+// ── site detail mini KPI card ─────────────────────────────────────────
+const MiniCard = ({ label, value, icon, color, sub }) => (
+  <div className="bg-white rounded-2xl border shadow-sm px-4 py-3.5 flex items-center gap-3" style={{ borderColor: color + '30' }}>
+    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ background: color + '15' }}>
+      {icon}
+    </div>
+    <div>
+      <p className="text-xl font-extrabold leading-tight" style={{ color }}>{value}</p>
+      <p className="text-xs font-semibold text-gray-500">{label}</p>
+      {sub && <p className="text-xs text-gray-400">{sub}</p>}
+    </div>
+  </div>
 )
 
 // ═════════════════════════════════════════════════════════════════════
@@ -330,24 +371,25 @@ export default function CRM() {
   })
 
   const hasData  = siteList.length > 0
-  const maxSite  = Math.max(...siteList.map(s => siteTotals[s] || 0), 1)
+  const siteIdx  = siteList.indexOf(site)
+  const siteColor = siteIdx >= 0 ? SITE_PALETTE[siteIdx % SITE_PALETTE.length] : BLUE
 
   return (
     <div className="space-y-4">
 
       {/* ── HERO BANNER ─────────────────────────────────────────────── */}
       <div className="rounded-2xl p-5 overflow-hidden"
-        style={{ background: `linear-gradient(135deg, ${NAVY} 0%, #1e3a8a 50%, ${TEAL} 100%)` }}>
+        style={{ background: `linear-gradient(135deg, ${NAVY} 0%, #1e3a8a 55%, ${TEAL} 100%)` }}>
         <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-2xl">👥</span>
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-xl">👥</div>
               <h2 className="text-white font-extrabold text-xl tracking-tight">CRM — Phân Tích Khách Hàng</h2>
             </div>
-            <p className="text-blue-200 text-sm">Site → Bệnh viện / Phòng khám → Bác sĩ → Lượt khách theo tháng</p>
+            <p className="text-blue-200 text-sm ml-11">Site → Bệnh viện / Phòng khám → Bác sĩ → Lượt khách theo tháng</p>
           </div>
           <div className="flex items-center gap-3">
-            {saving && <span className="text-yellow-300 text-xs animate-pulse">Đang lưu...</span>}
+            {saving && <span className="text-yellow-300 text-xs animate-pulse font-semibold">💾 Đang lưu...</span>}
             {msg    && <span className="text-blue-100 text-xs px-3 py-1.5 rounded-full font-medium" style={{ background: 'rgba(255,255,255,0.15)' }}>{msg}</span>}
             <label className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold cursor-pointer shadow-lg transition-all hover:scale-105 active:scale-95"
               style={{ background: uploading ? 'rgba(255,255,255,0.15)' : '#f59e0b', color: uploading ? '#fff' : '#1c1917' }}>
@@ -362,10 +404,10 @@ export default function CRM() {
         {/* KPI cards */}
         {hasData && (
           <div className="grid grid-cols-4 gap-3">
-            <StatCard label="Tổng lượt KH" value={fmtNum(kpis.totalKH)} sub={!selMo ? 'Cả năm' : `${months.length} tháng`} />
-            <StatCard label="Tổng chi nhánh" value={fmtNum(kpis.totalSites)} sub="Đang hoạt động" />
-            <StatCard label="Tổng bác sĩ" value={fmtNum(kpis.totalDocs)} sub="Tất cả chi nhánh" />
-            <StatCard label="Bệnh viện / PK" value={fmtNum(kpis.totalHosps)} sub="Bao gồm nhóm tự do" />
+            <StatCard icon="🎯" label="Tổng lượt KH" value={fmtNum(kpis.totalKH)} sub={!selMo ? 'Cả năm' : `${months.length} tháng`} />
+            <StatCard icon="🏢" label="Tổng chi nhánh" value={fmtNum(kpis.totalSites)} sub="Đang hoạt động" />
+            <StatCard icon="👨‍⚕️" label="Tổng bác sĩ" value={fmtNum(kpis.totalDocs)} sub="Tất cả chi nhánh" />
+            <StatCard icon="🏥" label="Bệnh viện / PK" value={fmtNum(kpis.totalHosps)} sub="Bao gồm nhóm tự do" />
           </div>
         )}
       </div>
@@ -388,233 +430,242 @@ export default function CRM() {
       {hasData && (
         <div className="space-y-3">
 
-          {/* ── DETAIL ────────────────────────────────────────────── */}
-          <div className="space-y-3">
+          {/* Month pills */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-extrabold uppercase tracking-widest mr-1 flex-shrink-0" style={{ color: NAVY }}>📅 Lọc tháng:</span>
+            <button onClick={() => setSelMo(null)}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
+              style={{
+                background: !selMo ? `linear-gradient(135deg, ${NAVY}, ${BLUE})` : '#f1f5f9',
+                color: !selMo ? '#fff' : '#64748b',
+                boxShadow: !selMo ? `0 2px 8px ${NAVY}40` : 'none',
+              }}>
+              Tất cả
+            </button>
+            {data.months.map(m => {
+              const on = selMo?.includes(m)
+              return (
+                <button key={m} onClick={() => toggleMo(m)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{
+                    background: on ? TEAL : '#f8fafc',
+                    color: on ? '#fff' : '#64748b',
+                    border: `1.5px solid ${on ? TEAL : '#e2e8f0'}`,
+                    boxShadow: on ? `0 2px 6px ${TEAL}40` : 'none',
+                  }}>
+                  {fmtMo(m)}
+                </button>
+              )
+            })}
+          </div>
 
-            {/* Month pills */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-2.5 flex items-center gap-2 overflow-x-auto">
-              <span className="text-xs font-extrabold text-gray-400 uppercase tracking-widest whitespace-nowrap">Lọc tháng:</span>
-              <button onClick={() => setSelMo(null)}
-                className="px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all"
-                style={{ background: !selMo ? BLUE : '#f1f5f9', color: !selMo ? '#fff' : '#64748b' }}>
-                Tất cả
-              </button>
-              {data.months.map(m => {
-                const on = selMo?.includes(m)
+          {/* Summary Table */}
+          <SummaryTable data={data} months={months} siteList={siteList} BLUE={BLUE} NAVY={NAVY} />
+
+          {/* Site selector (2-row wrap) */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3.5">
+            <p className="text-xs font-extrabold uppercase tracking-widest mb-2.5 flex items-center gap-1.5" style={{ color: NAVY }}>
+              🏢 Chọn chi nhánh để xem chi tiết:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {siteList.map((s, si) => {
+                const total  = siteTotals[s] || 0
+                const active = s === site
+                const col    = SITE_PALETTE[si % SITE_PALETTE.length]
                 return (
-                  <button key={m} onClick={() => toggleMo(m)}
-                    className="px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all"
+                  <button key={s} onClick={() => { setSite(s); setOpenH({}) }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
                     style={{
-                      background: on ? '#dbeafe' : '#f8fafc',
-                      color: on ? BLUE : '#94a3b8',
-                      border: `1.5px solid ${on ? BLUE : '#e2e8f0'}`,
+                      background: active ? `linear-gradient(135deg, ${col}, ${col}cc)` : col + '0f',
+                      color: active ? '#fff' : col,
+                      border: `1.5px solid ${active ? col : col + '40'}`,
+                      boxShadow: active ? `0 2px 8px ${col}50` : 'none',
                     }}>
-                    {fmtMo(m)}
+                    {s}
+                    <span className="rounded-full px-1.5 py-0.5 text-xs font-bold"
+                      style={{ background: active ? 'rgba(255,255,255,0.25)' : col + '20', color: active ? '#fff' : col }}>
+                      {total.toLocaleString('vi-VN')}
+                    </span>
                   </button>
                 )
               })}
             </div>
+          </div>
 
-            {/* ── SUMMARY TABLE ─────────────────────────────────── */}
-            <SummaryTable data={data} months={months} siteList={siteList} BLUE={BLUE} NAVY={NAVY} />
+          {/* Site detail KPI cards */}
+          <div className="grid grid-cols-4 gap-3">
+            <MiniCard icon="📍" label="Chi nhánh đang xem" value={site} color={siteColor} />
+            <MiniCard icon="🎯" label="Tổng lượt KH" color={EMERALD}
+              value={fmtNum(hospList.reduce((s, h) => s + Object.values(siteData[h] || {}).reduce((s2, d) => s2 + sumMo(d, months), 0), 0))} />
+            <MiniCard icon="🏥" label="Bệnh viện / PK" color={TEAL}
+              value={fmtNum(hospList.filter(h => h !== 'Tự do').length)} />
+            <MiniCard icon="👨‍⚕️" label="Bác sĩ" color={VIOLET}
+              value={fmtNum(hospList.reduce((s, h) => s + Object.keys(siteData[h] || {}).length, 0))} />
+          </div>
 
-            {/* ── SITE TABS (2-row wrap) ─────────────────────────── */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
-              <p className="text-xs font-extrabold text-gray-400 uppercase tracking-widest mb-2">Chọn chi nhánh:</p>
-              <div className="flex flex-wrap gap-2">
-                {siteList.map(s => {
-                  const total  = siteTotals[s] || 0
-                  const active = s === site
-                  return (
-                    <button key={s} onClick={() => { setSite(s); setOpenH({}) }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
-                      style={{
-                        background: active ? BLUE : '#f1f5f9',
-                        color: active ? '#fff' : '#374151',
-                        border: `1.5px solid ${active ? BLUE : '#e2e8f0'}`,
-                      }}>
-                      {s}
-                      <span className="rounded-full px-1.5 py-0.5 text-xs font-bold"
-                        style={{ background: active ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: active ? '#fff' : '#6b7280' }}>
-                        {total.toLocaleString('vi-VN')}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+          {/* Hospital accordion blocks */}
+          {hospList.map(hosp => {
+            const hospKey   = `${site}__${hosp}`
+            const isOpen    = openH[hospKey] !== false
+            const isFree    = hosp === 'Tự do'
+            const hColor    = isFree ? AMBER : siteColor
+            const docs      = siteData[hosp] || {}
+            const hospTotal = Object.values(docs).reduce((s, d) => s + sumMo(d, months), 0)
+            const sorted    = Object.entries(docs)
+              .map(([name, mo]) => ({ name, total: sumMo(mo, months), mo }))
+              .sort((a, b) => b.total - a.total)
+            const maxDoc = Math.max(...sorted.map(d => d.total), 1)
+            // Medal colors
+            const medals = ['#f59e0b', '#94a3b8', '#b45309']
 
-            {/* Site summary row */}
-            <div className="grid grid-cols-4 gap-3">
-              {[
-                { label: site, sub: 'Chi nhánh đang xem', icon: '📍' },
-                { label: fmtNum(hospList.reduce((s, h) => s + Object.values(siteData[h] || {}).reduce((s2, d) => s2 + sumMo(d, months), 0), 0)), sub: 'Tổng lượt KH', icon: '🧑‍🤝‍🧑' },
-                { label: fmtNum(hospList.filter(h => h !== 'Tự do').length), sub: 'Bệnh viện / PK', icon: '🏥' },
-                { label: fmtNum(hospList.reduce((s, h) => s + Object.keys(siteData[h] || {}).length, 0)), sub: 'Bác sĩ', icon: '👨‍⚕️' },
-              ].map(({ label, sub, icon }) => (
-                <div key={sub} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3">
-                  <span className="text-2xl">{icon}</span>
-                  <div>
-                    <p className="text-xl font-extrabold" style={{ color: BLUE }}>{label}</p>
-                    <p className="text-xs text-gray-400">{sub}</p>
+            return (
+              <div key={hosp} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+
+                {/* header */}
+                <button onClick={() => setOpenH(p => ({ ...p, [hospKey]: !isOpen }))}
+                  className="w-full flex items-center justify-between px-5 py-4 transition-all text-left"
+                  style={{
+                    borderLeft: `5px solid ${hColor}`,
+                    background: isOpen ? `linear-gradient(to right, ${hColor}0a, white)` : 'white',
+                  }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+                      style={{ background: hColor + '18', border: `1.5px solid ${hColor}30` }}>
+                      {isFree ? '🏃' : '🏥'}
+                    </div>
+                    <div>
+                      <p className="font-extrabold text-gray-800 text-sm leading-tight">{hosp}</p>
+                      <p className="text-xs mt-0.5 font-medium" style={{ color: hColor + 'aa' }}>{sorted.length} bác sĩ</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Hospital accordion blocks */}
-            {hospList.map(hosp => {
-              const hospKey   = `${site}__${hosp}`
-              const isOpen    = openH[hospKey] !== false
-              const isFree    = hosp === 'Tự do'
-              const hColor    = isFree ? '#6b7280' : BLUE
-              const docs      = siteData[hosp] || {}
-              const hospTotal = Object.values(docs).reduce((s, d) => s + sumMo(d, months), 0)
-              const sorted    = Object.entries(docs)
-                .map(([name, mo]) => ({ name, total: sumMo(mo, months), mo }))
-                .sort((a, b) => b.total - a.total)
-              const maxDoc = Math.max(...sorted.map(d => d.total), 1)
-
-              return (
-                <div key={hosp} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-
-                  {/* header */}
-                  <button onClick={() => setOpenH(p => ({ ...p, [hospKey]: !isOpen }))}
-                    className="w-full flex items-center justify-between px-5 py-4 transition-all hover:bg-gray-50 text-left"
-                    style={{ borderLeft: `5px solid ${hColor}` }}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                        style={{ background: hColor + '18' }}>
-                        {isFree ? '🏃' : '🏥'}
-                      </div>
-                      <div>
-                        <p className="font-extrabold text-gray-800 text-sm leading-tight">{hosp}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{sorted.length} bác sĩ</p>
-                      </div>
+                  <div className="flex items-center gap-4">
+                    {/* mini bars */}
+                    <div className="hidden sm:flex items-end gap-1 h-8">
+                      {months.slice(-6).map(m => {
+                        const v = sorted.reduce((s, d) => s + (d.mo[m] || 0), 0)
+                        const maxV = months.slice(-6).reduce((mx, mm) => Math.max(mx, sorted.reduce((s, d) => s + (d.mo[mm] || 0), 0)), 1)
+                        return (
+                          <div key={m} className="w-3 rounded-t" title={`${fmtMo(m)}: ${v}`}
+                            style={{ height: `${Math.max(Math.round(v / maxV * 100), 4)}%`, background: v > 0 ? hColor : '#e5e7eb' }} />
+                        )
+                      })}
                     </div>
-                    <div className="flex items-center gap-4">
-                      {/* mini bars for top 3 months */}
-                      <div className="hidden sm:flex items-end gap-1 h-8">
-                        {months.slice(-6).map(m => {
-                          const v = sorted.reduce((s, d) => s + (d.mo[m] || 0), 0)
-                          const maxV = months.slice(-6).reduce((mx, mm) => Math.max(mx, sorted.reduce((s, d) => s + (d.mo[mm] || 0), 0)), 1)
-                          return (
-                            <div key={m} className="w-3 rounded-t"
-                              title={`${fmtMo(m)}: ${v}`}
-                              style={{ height: `${Math.max(Math.round(v / maxV * 100), 4)}%`, background: v > 0 ? hColor : '#e5e7eb' }} />
-                          )
-                        })}
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xl font-extrabold" style={{ color: hColor }}>{fmtNum(hospTotal)}</p>
-                        <p className="text-xs text-gray-400">lượt KH</p>
-                      </div>
-                      <svg className={`w-5 h-5 text-gray-300 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                    <div className="text-right">
+                      <p className="text-2xl font-extrabold leading-tight" style={{ color: hColor }}>{fmtNum(hospTotal)}</p>
+                      <p className="text-xs font-semibold text-gray-400">lượt KH</p>
                     </div>
-                  </button>
+                    <svg className={`w-5 h-5 text-gray-300 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </button>
 
-                  {/* table */}
-                  {isOpen && sorted.length > 0 && (
-                    <div className="overflow-x-auto border-t border-gray-100">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr style={{ background: hColor + '0d' }}>
-                            <th className="py-2.5 px-5 text-left font-extrabold sticky left-0 z-10 text-gray-500 uppercase tracking-wider"
-                              style={{ background: hColor + '0d', minWidth: 200 }}>Bác sĩ</th>
-                            {months.map(m => (
-                              <th key={m} className="py-2.5 px-2 text-center font-bold text-gray-400 whitespace-nowrap" style={{ minWidth: 48 }}>
-                                {fmtMo(m)}
-                              </th>
-                            ))}
-                            <th className="py-2.5 px-4 text-center font-extrabold sticky right-0 z-10 whitespace-nowrap"
-                              style={{ color: hColor, background: hColor + '18', minWidth: 64 }}>
-                              Tổng
+                {/* doctor table */}
+                {isOpen && sorted.length > 0 && (
+                  <div className="overflow-x-auto border-t border-gray-100">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr style={{ background: `linear-gradient(to right, ${hColor}12, ${hColor}06)` }}>
+                          <th className="py-2.5 px-5 text-left font-extrabold sticky left-0 z-10 uppercase tracking-wider"
+                            style={{ background: hColor + '12', color: hColor, minWidth: 200 }}>Bác sĩ</th>
+                          {months.map(m => (
+                            <th key={m} className="py-2.5 px-2 text-center font-bold text-gray-400 whitespace-nowrap" style={{ minWidth: 48 }}>
+                              {fmtMo(m)}
                             </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sorted.map((doc, i) => {
-                            const rankPct = Math.round(doc.total / maxDoc * 100)
-                            return (
-                              <tr key={doc.name} className="border-t border-gray-50 hover:bg-blue-50 transition-colors"
+                          ))}
+                          <th className="py-2.5 px-4 text-center font-extrabold sticky right-0 z-10 whitespace-nowrap uppercase tracking-wider"
+                            style={{ color: '#fff', background: hColor, minWidth: 70 }}>
+                            Tổng
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sorted.map((doc, i) => {
+                          const rankPct = Math.round(doc.total / maxDoc * 100)
+                          const medalColor = i < 3 ? medals[i] : null
+                          const maxMonthVal = Math.max(...months.map(x => doc.mo[x] || 0), 1)
+                          return (
+                            <tr key={doc.name} className="border-t border-gray-50 hover:bg-blue-50 transition-colors"
+                              style={{ background: i % 2 ? '#fafbfc' : '#fff' }}>
+                              <td className="py-2.5 px-5 sticky left-0 z-10"
                                 style={{ background: i % 2 ? '#fafbfc' : '#fff' }}>
-                                <td className="py-2.5 px-5 sticky left-0 z-10"
-                                  style={{ background: i % 2 ? '#fafbfc' : '#fff' }}>
-                                  <div className="flex items-center gap-2">
-                                    {i < 3 && (
-                                      <span className="w-5 h-5 rounded-full text-xs font-extrabold flex items-center justify-center flex-shrink-0"
-                                        style={{ background: [BLUE, '#0284c7', TEAL][i] + '22', color: [BLUE, '#0284c7', TEAL][i] }}>
-                                        {i + 1}
-                                      </span>
-                                    )}
-                                    <div>
-                                      <p className="font-semibold text-gray-700">{doc.name}</p>
-                                      {/* rank bar */}
-                                      <div className="w-20 h-1 bg-gray-100 rounded-full mt-0.5">
-                                        <div className="h-1 rounded-full" style={{ width: `${rankPct}%`, background: hColor }} />
-                                      </div>
+                                <div className="flex items-center gap-2">
+                                  {medalColor ? (
+                                    <span className="w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center flex-shrink-0 shadow-sm"
+                                      style={{ background: medalColor + '25', color: medalColor, border: `1.5px solid ${medalColor}50` }}>
+                                      {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
+                                    </span>
+                                  ) : (
+                                    <span className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 text-gray-400"
+                                      style={{ background: '#f1f5f9' }}>
+                                      {i + 1}
+                                    </span>
+                                  )}
+                                  <div>
+                                    <p className="font-semibold text-gray-700">{doc.name}</p>
+                                    <div className="w-24 h-1.5 bg-gray-100 rounded-full mt-0.5">
+                                      <div className="h-1.5 rounded-full" style={{ width: `${rankPct}%`, background: `linear-gradient(to right, ${hColor}, ${hColor}88)` }} />
                                     </div>
                                   </div>
-                                </td>
-                                {months.map(m => {
-                                  const v = doc.mo[m] || 0
-                                  const maxV = Math.max(...months.map(x => doc.mo[x] || 0), 1)
-                                  return (
-                                    <td key={m} className="py-2 px-2 text-center">
-                                      {v > 0 ? (
-                                        <div className="flex flex-col items-center gap-0.5">
-                                          <span className="font-bold text-gray-700">{v}</span>
-                                          <div className="w-6 h-1 bg-gray-100 rounded-full">
-                                            <div className="h-1 rounded-full" style={{ width: `${Math.round(v / maxV * 100)}%`, background: hColor }} />
-                                          </div>
-                                        </div>
-                                      ) : <span className="text-gray-200">—</span>}
-                                    </td>
-                                  )
-                                })}
-                                <td className="py-2.5 px-4 text-center font-extrabold sticky right-0 z-10 text-base"
-                                  style={{ color: hColor, background: i % 2 ? hColor + '15' : hColor + '0d' }}>
-                                  {fmtNum(doc.total)}
-                                </td>
-                              </tr>
+                                </div>
+                              </td>
+                              {months.map(m => {
+                                const v = doc.mo[m] || 0
+                                const intensity = v > 0 ? Math.round(v / maxMonthVal * 80) + 10 : 0
+                                return (
+                                  <td key={m} className="py-2 px-2 text-center">
+                                    {v > 0 ? (
+                                      <span className="inline-block min-w-[28px] px-1.5 py-0.5 rounded-md font-bold"
+                                        style={{
+                                          background: hColor + Math.round(intensity * 2.55).toString(16).padStart(2, '0'),
+                                          color: intensity > 50 ? '#fff' : hColor,
+                                        }}>
+                                        {v}
+                                      </span>
+                                    ) : <span className="text-gray-200">—</span>}
+                                  </td>
+                                )
+                              })}
+                              <td className="py-2.5 px-4 text-center font-extrabold sticky right-0 z-10 text-sm"
+                                style={{ color: '#fff', background: i < 3 ? hColor + 'dd' : hColor + 'cc' }}>
+                                {fmtNum(doc.total)}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                        {/* subtotal */}
+                        <tr style={{ background: hColor + '18', borderTop: `2px solid ${hColor}30` }}>
+                          <td className="py-3 px-5 font-extrabold sticky left-0 z-10 text-xs uppercase tracking-wider"
+                            style={{ color: hColor, background: hColor + '18' }}>
+                            Tổng — {hosp}
+                          </td>
+                          {months.map(m => {
+                            const t = sorted.reduce((s, d) => s + (d.mo[m] || 0), 0)
+                            return (
+                              <td key={m} className="py-3 px-2 text-center font-bold" style={{ color: hColor }}>
+                                {t > 0 ? t : ''}
+                              </td>
                             )
                           })}
-                          {/* subtotal */}
-                          <tr style={{ background: hColor + '18', borderTop: `2px solid ${hColor}30` }}>
-                            <td className="py-3 px-5 font-extrabold sticky left-0 z-10 text-xs uppercase tracking-wider"
-                              style={{ color: hColor, background: hColor + '18' }}>
-                              Tổng — {hosp}
-                            </td>
-                            {months.map(m => {
-                              const t = sorted.reduce((s, d) => s + (d.mo[m] || 0), 0)
-                              return (
-                                <td key={m} className="py-3 px-2 text-center font-bold" style={{ color: hColor }}>
-                                  {t > 0 ? t : ''}
-                                </td>
-                              )
-                            })}
-                            <td className="py-3 px-4 text-center font-extrabold text-base sticky right-0 z-10"
-                              style={{ color: hColor, background: hColor + '28' }}>
-                              {fmtNum(hospTotal)}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                          <td className="py-3 px-4 text-center font-extrabold text-sm sticky right-0 z-10 text-white"
+                            style={{ background: hColor }}>
+                            {fmtNum(hospTotal)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
-                  {isOpen && sorted.length === 0 && (
-                    <p className="px-5 py-4 text-xs text-gray-400 italic border-t border-gray-100">
-                      Không có dữ liệu trong kỳ đã chọn
-                    </p>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+                {isOpen && sorted.length === 0 && (
+                  <p className="px-5 py-4 text-xs text-gray-400 italic border-t border-gray-100">
+                    Không có dữ liệu trong kỳ đã chọn
+                  </p>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
