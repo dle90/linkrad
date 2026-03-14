@@ -701,10 +701,12 @@ function TruongPhongView({ studies, stats, updateStudy, onRefresh }) {
 
 // ─── GiamDocView ───────────────────────────────────────────────────────────────
 
-function GiamDocView({ studies, stats }) {
+function GiamDocView({ studies, stats, onRefresh }) {
   const todayStudies  = studies.filter(s => isToday(s.appointmentTime || s.createdAt))
   const pendingRead   = studies.filter(s => s.status === 'pending_read')
   const verified      = studies.filter(s => s.status === 'verified')
+  const [assignStudy, setAssignStudy] = useState(null)
+  const [assignTab, setAssignTab] = useState('pending')
 
   // Modality breakdown
   const modCounts = ['CT', 'MRI', 'XR', 'US'].map(m => ({
@@ -876,6 +878,73 @@ function GiamDocView({ studies, stats }) {
           </div>
         )}
       </div>
+
+      {/* Assignment management */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
+          <h3 className="text-sm font-semibold text-gray-700">Phân công bác sĩ đọc phim</h3>
+          <div className="flex gap-1 ml-2">
+            {[{ key: 'pending', label: 'Chờ phân công' }, { key: 'all', label: 'Tất cả' }].map(t => (
+              <button key={t.key} onClick={() => setAssignTab(t.key)}
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${assignTab === t.key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {['Bệnh nhân', 'Chi nhánh', 'Loại chụp', 'Ưu tiên', 'Trạng thái', 'Bác sĩ', 'Thao tác'].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {(() => {
+                const list = assignTab === 'pending'
+                  ? studies.filter(s => s.status === 'pending_read' || !s.radiologist)
+                  : studies
+                if (list.length === 0) return (
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">Không có ca nào</td></tr>
+                )
+                return list.map((s, i) => (
+                  <tr key={s._id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-800">{s.patientName || '—'}</div>
+                      <div className="text-xs text-gray-400">{s.patientId}</div>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{s.site || '—'}</td>
+                    <td className="px-4 py-3"><ModalityBadge modality={s.modality} /></td>
+                    <td className="px-4 py-3"><PriorityBadge priority={s.priority} /></td>
+                    <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
+                      {s.radiologistName || <span className="text-gray-300">Chưa phân công</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setAssignStudy(s)}
+                        className="px-2 py-1 rounded text-xs font-medium bg-blue-100 hover:bg-blue-200 text-blue-700 transition-colors whitespace-nowrap"
+                      >
+                        Phân công
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              })()}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {assignStudy && (
+        <AssignModal
+          study={assignStudy}
+          onClose={() => setAssignStudy(null)}
+          onAssigned={() => { onRefresh(); setAssignStudy(null) }}
+        />
+      )}
     </div>
   )
 }
