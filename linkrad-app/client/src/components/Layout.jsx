@@ -7,7 +7,8 @@ const NAV = [
   {
     group: 'Tổng quan',
     items: [
-      { path: '/', label: 'Dashboard', icon: '📊' },
+      { path: '/',      label: 'Dashboard',      icon: '📊' },
+      { path: '/sites', label: 'Danh sách Site', icon: '📍' },
     ]
   },
   {
@@ -34,12 +35,6 @@ const NAV = [
       { path: '/crm', label: 'Phân tích KH', icon: '👥' }
     ]
   },
-  {
-    group: 'Danh sách',
-    items: [
-      { path: '/sites', label: 'Danh sách Site', icon: '📍' }
-    ]
-  }
 ]
 
 const ROLE_LABELS = {
