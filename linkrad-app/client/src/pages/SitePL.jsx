@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
 import { getAnnualPL } from '../api'
 
 const fmt = (v) => {
@@ -12,22 +11,16 @@ const fmt = (v) => {
 const SITES = ['Hải Dương','Cà Mau','Thanh Hóa','Thái Nguyên','Thái Bình','Yết Kiêu','Nha Trang','Thạch Thất','Sóc Sơn']
 
 export default function SitePL() {
-  const { siteId } = useParams()
-  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [selectedSite, setSelectedSite] = useState(SITES[0])
 
   useEffect(() => {
-    const idx = parseInt(siteId, 10) - 1
-    if (!isNaN(idx) && idx >= 0 && idx < SITES.length) {
-      setSelectedSite(SITES[idx])
-    }
     getAnnualPL().then(d => {
       setData(d)
       setLoading(false)
     })
-  }, [siteId])
+  }, [])
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-500">Đang tải...</div>
   if (!data) return <div className="text-red-500 p-4">Lỗi tải dữ liệu</div>
@@ -102,10 +95,7 @@ export default function SitePL() {
           <label className="text-sm text-gray-600 font-medium">Chọn chi nhánh:</label>
           <select
             value={selectedSite}
-            onChange={e => {
-              setSelectedSite(e.target.value)
-              navigate('/pl/site/' + (SITES.indexOf(e.target.value) + 1))
-            }}
+            onChange={e => setSelectedSite(e.target.value)}
             className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
           >
             {SITES.map(s => <option key={s} value={s}>{s}</option>)}

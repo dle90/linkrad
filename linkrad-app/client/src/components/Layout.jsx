@@ -16,14 +16,11 @@ const NAV = [
     group: 'Tài chính',
     financialsOnly: true,
     items: [
-      { path: '/actuals',    label: 'Nhập số liệu',            icon: '✏️', adminOnly: true },
-      { path: '/pl/annual',  label: 'P&L Năm 2025',            icon: '📋' },
-      { path: '/pl/monthly', label: 'P&L Tháng 2025',          icon: '📅' },
-      { path: '/pl/site/1',  label: 'P&L Chi nhánh',           icon: '🏥' },
-      { path: '/cf/annual',  label: 'CF Năm 2026',             icon: '💰' },
-      { path: '/cf/monthly', label: 'CF Tháng 2026',           icon: '📆' },
-      { path: '/bs',         label: 'Bảng cân đối kế toán',    icon: '⚖️' },
-      { path: '/breakeven',  label: 'Điểm hòa vốn',            icon: '📈' }
+      { path: '/actuals',   label: 'Nhập số liệu',          icon: '✏️', adminOnly: true },
+      { path: '/pl',        label: 'Kết quả kinh doanh',    icon: '📋' },
+      { path: '/cf',        label: 'Dòng tiền',             icon: '💰' },
+      { path: '/bs',        label: 'Bảng cân đối kế toán',  icon: '⚖️' },
+      { path: '/breakeven', label: 'Điểm hòa vốn',          icon: '📈' }
     ]
   },
   {
