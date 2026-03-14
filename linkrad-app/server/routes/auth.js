@@ -1,6 +1,7 @@
 const express = require('express')
 const crypto = require('crypto')
 const User = require('../models/User')
+const { requireAuth } = require('../middleware/auth')
 
 const router = express.Router()
 const SECRET = process.env.SESSION_SECRET || 'linkrad-secret-2024'
@@ -42,6 +43,40 @@ router.post('/login', async (req, res) => {
 router.post('/logout', (req, res) => {
   // Stateless — client discards the token
   res.json({ ok: true })
+})
+
+// POST /auth/users — admin only: create or update a user
+router.post('/users', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin only' })
+    }
+    const { username, password, role, department, displayName } = req.body
+    if (!username || !password || !role) {
+      return res.status(400).json({ error: 'username, password, role required' })
+    }
+    const user = await User.findByIdAndUpdate(
+      username,
+      { _id: username, password, role, department: department || null, displayName: displayName || username },
+      { upsert: true, new: true }
+    )
+    res.json({ ok: true, user: { username: user._id, role: user.role, displayName: user.displayName } })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /auth/users — admin only: list all users
+router.get('/users', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin only' })
+    }
+    const users = await User.find({}).select('-password')
+    res.json(users)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 module.exports = { router, verify }
