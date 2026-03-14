@@ -85,7 +85,7 @@ const fmtNum = n => Number(n).toLocaleString('vi-VN')
 const NAVY   = '#0f2c6b'
 const BLUE   = '#1e3a8a'
 const TEAL   = '#0e7490'
-const AMBER  = '#b45309'
+const AMBER  = '#ea580c'
 const EMERALD = '#065f46'
 const VIOLET = '#5b21b6'
 
