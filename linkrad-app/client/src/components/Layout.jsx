@@ -8,8 +8,13 @@ const NAV = [
     group: 'Tổng quan',
     items: [
       { path: '/', label: 'Dashboard', icon: '📊' },
+    ]
+  },
+  {
+    group: 'Hoạt động',
+    items: [
       { path: '/workflow', label: 'Công việc', icon: '✅', workflowOnly: true },
-      { path: '/ris',      label: 'RIS',        icon: '🩻', workflowOnly: true }
+      { path: '/ris',      label: 'RIS',        icon: '🩻', workflowOnly: true },
     ]
   },
   {
