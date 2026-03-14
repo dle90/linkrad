@@ -15,6 +15,7 @@ const NAV = [
     group: 'Hoạt động',
     items: [
       { path: '/workflow', label: 'Công việc', icon: '✅', workflowOnly: true },
+      { path: '/his',      label: 'HIS',        icon: '🏥', workflowOnly: true },
       { path: '/ris',      label: 'RIS',        icon: '🩻', workflowOnly: true },
     ]
   },

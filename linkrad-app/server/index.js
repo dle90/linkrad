@@ -14,6 +14,7 @@ const actualsRouter = require('./routes/actuals')
 const tasksRouter = require('./routes/tasks')
 const risRouter = require('./routes/ris')
 const crmRouter = require('./routes/crm')
+const hisRouter = require('./routes/his')
 const { requireAdmin } = require('./middleware/auth')
 
 const app = express()
@@ -42,6 +43,8 @@ app.use('/api/tasks', tasksRouter)
 // RIS: auth handled inside the router per endpoint
 app.use('/api/ris', risRouter)
 app.use('/api/crm', guardWrites, crmRouter)
+// HIS: auth handled inside the router per endpoint
+app.use('/api/his', hisRouter)
 
 // Serve React build in production
 const clientDist = path.join(__dirname, '../client/dist')

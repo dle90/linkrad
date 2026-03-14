@@ -12,6 +12,7 @@ import SiteList from './pages/SiteList'
 import Actuals from './pages/Actuals'
 import Workflow from './pages/Workflow'
 import RIS from './pages/RIS'
+import HIS from './pages/HIS'
 import CRM from './pages/CRM'
 
 function AppRoutes() {
@@ -29,6 +30,7 @@ function AppRoutes() {
         {auth.role === 'admin' && <Route path="/actuals" element={<Actuals />} />}
         {isWorkflowUser && <Route path="/workflow" element={<Workflow />} />}
         {isRISUser && <Route path="/ris" element={<RIS />} />}
+        {isWorkflowUser && <Route path="/his" element={<HIS />} />}
         <Route path="/pl" element={<PL />} />
         <Route path="/cf" element={<CF />} />
         <Route path="/bs" element={<BalanceSheet />} />
