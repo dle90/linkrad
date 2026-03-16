@@ -783,45 +783,51 @@ function GiamDocView({ tasks, users, sites, onSelectTask }) {
       </div>
 
       {/* Board: site cards (only in board mode when no dept selected) */}
-      {viewMode === 'board' && !selectedDept && (
-      <div className="grid grid-cols-3 gap-4">
-        {depts.map(dept => {
-          const site = sites.find(s => s.name === dept)
-          const dTasks = tasks.filter(t => t.department === dept)
-          const dUsers = users.filter(u => u.role === 'nhanvien' && u.department === dept)
-          const done = dTasks.filter(t => t.status === 'done').length
-          const prog = dTasks.filter(t => t.status === 'inprogress').length
-          const overdue = dTasks.filter(t => isOverdue(t.deadline, t.status)).length
-          const pct = dTasks.length > 0 ? Math.round((done / dTasks.length) * 100) : 0
+      {viewMode === 'board' && !selectedDept && (() => {
+        const siteNames = sites.map(s => s.name)
+        const backOfficeDepts = depts.filter(d => FIXED_DEPTS.includes(d))
+        const branchDepts     = depts.filter(d => siteNames.includes(d))
 
+        const DeptCard = ({ dept }) => {
+          const site    = sites.find(s => s.name === dept)
+          const dTasks  = tasks.filter(t => t.department === dept)
+          const dUsers  = users.filter(u => u.role === 'nhanvien' && u.department === dept)
+          const done    = dTasks.filter(t => t.status === 'done').length
+          const prog    = dTasks.filter(t => t.status === 'inprogress').length
+          const overdue = dTasks.filter(t => isOverdue(t.deadline, t.status)).length
+          const pct     = dTasks.length > 0 ? Math.round((done / dTasks.length) * 100) : 0
+          const isBO    = FIXED_DEPTS.includes(dept)
           return (
             <div key={dept}
               onClick={() => setSelectedDept(selectedDept === dept ? null : dept)}
-              className={`bg-white rounded-lg border-2 p-4 cursor-pointer transition-all space-y-3 ${selectedDept === dept ? 'border-indigo-400 shadow-md' : 'border-gray-200 hover:border-indigo-200'}`}>
-              <div className="flex items-center justify-between">
+              className={`bg-white rounded-xl border-2 p-4 cursor-pointer transition-all space-y-3 ${selectedDept === dept ? 'border-indigo-500 shadow-lg' : 'border-gray-200 hover:border-indigo-200 hover:shadow-md'}`}>
+              <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-semibold text-gray-800">{dept}</p>
-                  <p className="text-xs text-gray-400">{site?.location || ''}</p>
-                  <p className="text-xs text-gray-500">{dUsers.length} nhân viên · {dTasks.length} công việc</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isBO ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {isBO ? 'BackOffice' : 'Chi nhánh'}
+                    </span>
+                  </div>
+                  <p className="font-semibold text-gray-800 mt-1">{dept}</p>
+                  {site?.location && <p className="text-xs text-gray-400">{site.location}</p>}
+                  <p className="text-xs text-gray-500 mt-0.5">{dUsers.length} nhân viên · {dTasks.length} công việc</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-indigo-600">{pct}%</p>
+                <div className="text-right shrink-0">
+                  <p className={`text-2xl font-bold ${pct === 100 ? 'text-green-500' : pct > 50 ? 'text-indigo-600' : 'text-gray-400'}`}>{pct}%</p>
                   <p className="text-xs text-gray-400">hoàn thành</p>
                 </div>
               </div>
               <ProgressBar tasks={dTasks} />
-              <div className="flex gap-2 flex-wrap">
-                {done > 0     && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Done: {done}</span>}
-                {prog > 0     && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Đang làm: {prog}</span>}
-                {overdue > 0  && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded">⚠ Quá hạn: {overdue}</span>}
+              <div className="flex gap-1.5 flex-wrap">
+                {done > 0    && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ {done}</span>}
+                {prog > 0    && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">▶ {prog}</span>}
+                {overdue > 0 && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">⚠ {overdue}</span>}
               </div>
-
-              {/* Per-employee mini list */}
               {dUsers.length > 0 && (
                 <div className="border-t border-gray-100 pt-2 space-y-1.5">
                   {dUsers.map(u => {
                     const uTasks = dTasks.filter(t => t.assignee === u.username)
-                    const uDone = uTasks.filter(t => t.status === 'done').length
+                    const uDone  = uTasks.filter(t => t.status === 'done').length
                     return (
                       <div key={u.username} className="flex items-center gap-2">
                         <span className="text-xs text-gray-600 w-28 shrink-0 truncate">{u.displayName}</span>
@@ -837,10 +843,45 @@ function GiamDocView({ tasks, users, sites, onSelectTask }) {
               )}
             </div>
           )
-        })}
-      </div>
+        }
 
-      )} {/* end board-mode site cards */}
+        return (
+          <div className="space-y-5">
+            {/* Khối BackOffice */}
+            {backOfficeDepts.length > 0 && (
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5">
+                    <span className="text-purple-600 font-bold text-sm">🏢 Khối BackOffice</span>
+                    <span className="text-xs text-purple-400">{backOfficeDepts.length} bộ phận</span>
+                  </div>
+                  <div className="flex-1 h-px bg-purple-100" />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  {backOfficeDepts.map(d => <DeptCard key={d} dept={d} />)}
+                </div>
+              </div>
+            )}
+
+            {/* Khối Chi nhánh */}
+            {branchDepts.length > 0 && (
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+                    <span className="text-blue-700 font-bold text-sm">📍 Khối Chi nhánh</span>
+                    <span className="text-xs text-blue-400">{branchDepts.length} chi nhánh</span>
+                  </div>
+                  <div className="flex-1 h-px bg-blue-100" />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  {branchDepts.map(d => <DeptCard key={d} dept={d} />)}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+      {/* end board-mode site cards */}
 
       {/* List view */}
       {viewMode === 'list' && (
