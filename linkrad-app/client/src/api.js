@@ -66,4 +66,7 @@ export const deleteTask     = (id) => api.delete(`/tasks/${id}`).then(r => r.dat
 export const getWorkCategories  = () => api.get('/work-categories').then(r => r.data)
 export const saveWorkCategories = (data) => api.put('/work-categories', data).then(r => r.data)
 
+export const getKPI  = () => api.get('/kpi').then(r => r.data)
+export const saveKPI = (data) => api.put('/kpi', data).then(r => r.data)
+
 export default api

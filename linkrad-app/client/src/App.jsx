@@ -14,6 +14,7 @@ import Workflow from './pages/Workflow'
 import RIS from './pages/RIS'
 import HIS from './pages/HIS'
 import CRM from './pages/CRM'
+import KPISales from './pages/KPISales'
 
 function AppRoutes() {
   const { auth } = useAuth()
@@ -37,6 +38,7 @@ function AppRoutes() {
         <Route path="/breakeven" element={<Breakeven />} />
         <Route path="/sites" element={<SiteList />} />
         <Route path="/crm" element={<CRM />} />
+        <Route path="/kpi-sales" element={<KPISales />} />
       </Routes>
     </Layout>
   )
