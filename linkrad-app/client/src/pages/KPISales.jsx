@@ -2,303 +2,210 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { getKPI, saveKPI, getSites } from '../api'
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ─── helpers ─────────────────────────────────────────────────────────────────
 const fmtB  = n => { if (!n) return '0'; const b = n / 1e9; return b >= 1 ? b.toFixed(2) + ' tỷ' : (n / 1e6).toFixed(0) + 'M' }
-const fmtM  = n => n ? (n / 1e6).toFixed(0) + 'M' : '0'
 const num   = v => Number(v) || 0
-const pct   = (a, b) => (b > 0 ? Math.round(a / b * 100) : 0)
+const pct   = (a, b) => b > 0 ? Math.round(a / b * 100) : 0
 const clamp = v => Math.min(100, Math.max(0, v))
 
-const MONTHS = Array.from({ length: 12 }, (_, i) => {
-  const m = String(i + 1).padStart(2, '0')
-  return { value: `2026-${m}`, label: `T${i + 1}/2026` }
-}).concat(Array.from({ length: 12 }, (_, i) => {
-  const m = String(i + 1).padStart(2, '0')
-  return { value: `2025-${m}`, label: `T${i + 1}/2025` }
-}))
+const MONTHS = Array.from({ length: 12 }, (_, i) => ({
+  value: `2026-${String(i + 1).padStart(2, '0')}`,
+  label: `T${i + 1}/2026`,
+})).concat(Array.from({ length: 12 }, (_, i) => ({
+  value: `2025-${String(i + 1).padStart(2, '0')}`,
+  label: `T${i + 1}/2025`,
+})))
 
 const DEFAULT_TARGETS = {
-  revenue: 2500000000,
-  costs: 2000000000,
-  avgPrice: 2000000,
+  revenue: 2500000000, costs: 2000000000, avgPrice: 2000000,
   channelSplit: { doctor: 70, hospital: 20, direct: 10 },
-  doctorActive: 70,
-  doctorNew: 20,
-  salesVisits: 160,
-  salesConversion: 20,
+  doctorActive: 70, doctorNew: 20, salesVisits: 160, salesConversion: 20,
 }
-
 const DEFAULT_MONTH = {
   cases: { doctor: 0, hospital: 0, direct: 0, internal: 0 },
   revenue: { doctor: 0, hospital: 0, direct: 0, internal: 0 },
   doctors: { active: 0, new: 0, churn: 0 },
-  hospitalDeals: 0,
-  sales: [],
+  hospitalDeals: 0, sales: [],
 }
 
-// ── small components ─────────────────────────────────────────────────────────
-function KpiCard({ title, actual, target, unit = '', color = 'blue', icon, note }) {
-  const p = pct(actual, target)
-  const colors = {
-    blue:   { ring: 'border-blue-200',   bg: 'bg-blue-50',   txt: 'text-blue-700',   bar: 'bg-blue-500' },
-    green:  { ring: 'border-green-200',  bg: 'bg-green-50',  txt: 'text-green-700',  bar: 'bg-green-500' },
-    purple: { ring: 'border-purple-200', bg: 'bg-purple-50', txt: 'text-purple-700', bar: 'bg-purple-500' },
-    orange: { ring: 'border-orange-200', bg: 'bg-orange-50', txt: 'text-orange-700', bar: 'bg-orange-500' },
-    red:    { ring: 'border-red-200',    bg: 'bg-red-50',    txt: 'text-red-700',    bar: 'bg-red-500' },
-  }
-  const c = colors[color] || colors.blue
+// ─── Gauge circle ─────────────────────────────────────────────────────────────
+function Gauge({ value, max, label, sub, color = '#3b82f6' }) {
+  const p = clamp(pct(value, max))
+  const r = 36, c = 2 * Math.PI * r
+  const dash = (p / 100) * c
   return (
-    <div className={`bg-white rounded-xl border ${c.ring} p-4 space-y-2`}>
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{icon} {title}</p>
-        {target > 0 && (
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.bg} ${c.txt}`}>{p}%</span>
-        )}
+    <div className="flex flex-col items-center">
+      <svg width="100" height="100" className="-rotate-90">
+        <circle cx="50" cy="50" r={r} fill="none" stroke="#e5e7eb" strokeWidth="8" />
+        <circle cx="50" cy="50" r={r} fill="none" stroke={color} strokeWidth="8"
+          strokeDasharray={`${dash} ${c}`} strokeLinecap="round" className="transition-all duration-700" />
+      </svg>
+      <div className="text-center -mt-[78px] mb-[18px]">
+        <p className="text-xl font-extrabold text-gray-800">{p}%</p>
+        <p className="text-xs text-gray-500">{label}</p>
       </div>
-      <p className={`text-2xl font-extrabold ${c.txt}`}>{actual}{unit}</p>
-      {target > 0 && (
-        <>
-          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className={`h-full ${c.bar} rounded-full transition-all`} style={{ width: `${clamp(p)}%` }} />
-          </div>
-          <p className="text-xs text-gray-400">Mục tiêu: {target}{unit} {note && `· ${note}`}</p>
-        </>
-      )}
-      {!target && note && <p className="text-xs text-gray-400">{note}</p>}
+      <p className="text-xs text-gray-400 mt-1">{sub}</p>
     </div>
   )
 }
 
-function ChannelBar({ label, actual, target, pctSplit, color }) {
-  const p = pct(actual, target)
-  const barColors = { doctor: 'bg-blue-500', hospital: 'bg-emerald-500', direct: 'bg-orange-400', internal: 'bg-purple-400' }
+// ─── Stat card ────────────────────────────────────────────────────────────────
+function StatCard({ icon, title, value, sub, target, barColor = 'bg-blue-500', accent = 'text-blue-700' }) {
+  const p = target > 0 ? pct(num(value), target) : null
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-1.5">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{icon} {title}</p>
+      <p className={`text-2xl font-extrabold ${accent}`}>{typeof value === 'number' ? value.toLocaleString('vi-VN') : value}</p>
+      {p !== null && (
+        <div>
+          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
+            <div className={`h-full ${barColor} rounded-full transition-all`} style={{ width: `${clamp(p)}%` }} />
+          </div>
+          <p className="text-xs text-gray-400">{p}% mục tiêu ({target.toLocaleString('vi-VN')})</p>
+        </div>
+      )}
+      {p === null && sub && <p className="text-xs text-gray-400">{sub}</p>}
+    </div>
+  )
+}
+
+// ─── Channel row ──────────────────────────────────────────────────────────────
+const CH_CFG = {
+  doctor:   { label: 'Doctor Referral',   icon: '👨‍⚕️', color: 'bg-blue-500',    light: 'bg-blue-50',   txt: 'text-blue-700',   note: 'CORE – 70~80% doanh thu' },
+  hospital: { label: 'Hospital Partner',  icon: '🏥',   color: 'bg-emerald-500', light: 'bg-emerald-50', txt: 'text-emerald-700', note: 'Outsource MRI/CT' },
+  direct:   { label: 'Direct / Walk-in',  icon: '🚶',   color: 'bg-orange-400',  light: 'bg-orange-50',  txt: 'text-orange-700',  note: 'SEO / Ads / thương hiệu' },
+  internal: { label: 'Nội bộ',            icon: '🔄',   color: 'bg-purple-400',  light: 'bg-purple-50',  txt: 'text-purple-700',  note: 'Chuyển từ site khác' },
+}
+
+function ChannelCard({ ch, actual, targetCases, targetRev }) {
+  const cfg = CH_CFG[ch]
+  const cPct = pct(actual.cases, targetCases)
+  const rPct = pct(actual.revenue, targetRev)
+  return (
+    <div className={`rounded-xl border border-gray-100 shadow-sm p-4 ${cfg.light}`}>
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold text-gray-700">{label}</span>
-        <span className="text-xs text-gray-400">mục tiêu {pctSplit}%</span>
-      </div>
-      <div className="grid grid-cols-2 gap-2 mb-3">
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Số ca</p>
-          <p className="text-xl font-bold text-gray-800">{actual.cases.toLocaleString('vi-VN')}</p>
-          <p className="text-xs text-gray-400">/ {target.cases.toLocaleString('vi-VN')} ca</p>
+          <p className="text-sm font-bold text-gray-800">{cfg.icon} {cfg.label}</p>
+          <p className="text-xs text-gray-400">{cfg.note}</p>
         </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
         <div>
-          <p className="text-xs text-gray-400 mb-0.5">Doanh thu</p>
-          <p className="text-xl font-bold text-gray-800">{fmtB(actual.revenue)}</p>
-          <p className="text-xs text-gray-400">/ {fmtB(target.revenue)}</p>
-        </div>
-      </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full ${barColors[color] || 'bg-blue-500'} rounded-full`} style={{ width: `${clamp(p)}%` }} />
-      </div>
-      <p className="text-xs text-gray-400 mt-1 text-right">{p}% hoàn thành</p>
-    </div>
-  )
-}
-
-function SalesRow({ rep, targets, onEdit, isManager }) {
-  const visitPct  = pct(rep.visits,    targets.salesVisits)
-  const newDocPct = pct(rep.newDocs,   targets.doctorNew)
-  const convRate  = rep.visits > 0 ? Math.round(rep.newDocs / rep.visits * 100) : 0
-  return (
-    <tr className="border-b border-gray-100 hover:bg-gray-50">
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">
-            {rep.name.charAt(0)}
-          </span>
-          <span className="text-sm font-semibold text-gray-800">{rep.name}</span>
-        </div>
-      </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${clamp(visitPct)}%` }} />
-          </div>
-          <span className="text-sm font-medium text-gray-700">{rep.visits}</span>
-          <span className="text-xs text-gray-400">/{targets.salesVisits}</span>
-        </div>
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-700">{rep.calls}</td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${clamp(newDocPct)}%` }} />
-          </div>
-          <span className="text-sm font-medium text-gray-700">{rep.newDocs}</span>
-          <span className="text-xs text-gray-400">/{targets.doctorNew}</span>
-        </div>
-      </td>
-      <td className="px-4 py-3">
-        <span className={`text-sm font-semibold ${convRate >= 20 ? 'text-green-600' : convRate >= 10 ? 'text-yellow-600' : 'text-red-500'}`}>
-          {convRate}%
-        </span>
-        <span className="text-xs text-gray-400 ml-1">(chuẩn ≥20%)</span>
-      </td>
-      <td className="px-4 py-3">
-        <span className="text-sm font-semibold text-indigo-700">{rep.activeDocs}</span>
-        <span className="text-xs text-gray-400 ml-1">/{targets.doctorActive}</span>
-      </td>
-      <td className="px-4 py-3 text-sm font-bold text-emerald-700">{fmtB(rep.revenue)}</td>
-      {isManager && (
-        <td className="px-4 py-3">
-          <button onClick={() => onEdit(rep)}
-            className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded">
-            Sửa
-          </button>
-        </td>
-      )}
-    </tr>
-  )
-}
-
-// ── Edit sales rep modal ──────────────────────────────────────────────────────
-function EditSalesModal({ rep, onClose, onSave }) {
-  const [form, setForm] = useState({ ...rep })
-  const setF = (k, v) => setForm(p => ({ ...p, [k]: Number(v) || v }))
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-800">Cập nhật KPI — {rep.name}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-        </div>
-        <div className="p-5 space-y-3">
-          {[
-            { key: 'visits',     label: 'Số lượt visit' },
-            { key: 'calls',      label: 'Số cuộc gọi' },
-            { key: 'followups',  label: 'Follow-up' },
-            { key: 'newDocs',    label: 'Bác sĩ mới' },
-            { key: 'activeDocs', label: 'Bác sĩ active duy trì' },
-            { key: 'revenue',    label: 'Doanh thu generate (VND)' },
-          ].map(f => (
-            <div key={f.key}>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}</label>
-              <input type="number" value={form[f.key] || 0} onChange={e => setF(f.key, e.target.value)}
-                className="w-full border border-gray-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-400" />
+          <p className="text-xs text-gray-500 mb-0.5">Số ca</p>
+          <p className={`text-xl font-extrabold ${cfg.txt}`}>{actual.cases.toLocaleString('vi-VN')}</p>
+          {targetCases > 0 && <p className="text-xs text-gray-400">mục tiêu {targetCases.toLocaleString('vi-VN')}</p>}
+          {targetCases > 0 && (
+            <div className="h-1 bg-white/70 rounded-full mt-1 overflow-hidden">
+              <div className={`h-full ${cfg.color} rounded-full`} style={{ width: `${clamp(cPct)}%` }} />
             </div>
-          ))}
-          <div className="flex justify-end gap-2 pt-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded">Hủy</button>
-            <button onClick={() => { onSave(form); onClose() }}
-              className="px-5 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium">Lưu</button>
-          </div>
+          )}
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 mb-0.5">Doanh thu</p>
+          <p className={`text-xl font-extrabold ${cfg.txt}`}>{fmtB(actual.revenue)}</p>
+          {targetRev > 0 && <p className="text-xs text-gray-400">mục tiêu {fmtB(targetRev)}</p>}
+          {targetRev > 0 && (
+            <div className="h-1 bg-white/70 rounded-full mt-1 overflow-hidden">
+              <div className={`h-full ${cfg.color} rounded-full`} style={{ width: `${clamp(rPct)}%` }} />
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-// ── Target setup modal ────────────────────────────────────────────────────────
+// ─── Section header ───────────────────────────────────────────────────────────
+function SectionHeader({ title, action }) {
+  return (
+    <div className="flex items-center gap-3 mb-4">
+      <div className="flex-1 h-px bg-gradient-to-r from-gray-200 to-transparent" />
+      <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">{title}</span>
+      <div className="flex-1 h-px bg-gradient-to-l from-gray-200 to-transparent" />
+      {action}
+    </div>
+  )
+}
+
+// ─── Edit modals ──────────────────────────────────────────────────────────────
 function TargetModal({ targets, onClose, onSave }) {
-  const [form, setForm] = useState({
+  const [f, setF] = useState({
     revenue: targets.revenue || 2500000000,
-    costs: targets.costs || 2000000000,
+    costs:   targets.costs   || 2000000000,
     avgPrice: targets.avgPrice || 2000000,
     doctorActive: targets.doctorActive || 70,
-    doctorNew: targets.doctorNew || 20,
-    salesVisits: targets.salesVisits || 160,
+    doctorNew:    targets.doctorNew    || 20,
+    salesVisits:  targets.salesVisits  || 160,
     salesConversion: targets.salesConversion || 20,
-    splitDoctor: (targets.channelSplit?.doctor) || 70,
-    splitHospital: (targets.channelSplit?.hospital) || 20,
-    splitDirect: (targets.channelSplit?.direct) || 10,
+    splitDoctor:   targets.channelSplit?.doctor   || 70,
+    splitHospital: targets.channelSplit?.hospital || 20,
+    splitDirect:   targets.channelSplit?.direct   || 10,
   })
-  const setF = (k, v) => setForm(p => ({ ...p, [k]: Number(v) || 0 }))
-  const breakeven = form.avgPrice > 0 ? Math.round(form.costs / form.avgPrice) : 0
+  const upd = (k, v) => setF(p => ({ ...p, [k]: Number(v) || 0 }))
+  const be = f.avgPrice > 0 ? Math.round(f.costs / f.avgPrice) : 0
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
-          <h3 className="font-semibold text-gray-800">⚙ Cài đặt mục tiêu tháng</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-100 flex items-center justify-between rounded-t-2xl">
+          <div>
+            <h3 className="font-bold text-gray-800">⚙ Cài đặt mục tiêu</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Áp dụng cho chi nhánh & tháng đang chọn</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
         </div>
-        <div className="p-5 space-y-5">
-          <section>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Tài chính</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { key: 'revenue',  label: 'Doanh thu mục tiêu (VND)' },
-                { key: 'costs',    label: 'Chi phí / tháng (VND)' },
-                { key: 'avgPrice', label: 'Giá trung bình / ca (VND)' },
-              ].map(f => (
-                <div key={f.key} className={f.key === 'avgPrice' ? 'col-span-2' : ''}>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}</label>
-                  <input type="number" value={form[f.key]} onChange={e => setF(f.key, e.target.value)}
-                    className="w-full border border-gray-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-400" />
-                </div>
-              ))}
+        <div className="p-6 space-y-6">
+          {[
+            { title: 'Tài chính', fields: [
+              { k: 'revenue',  l: 'Doanh thu mục tiêu (VND)' },
+              { k: 'costs',    l: 'Chi phí / tháng (VND)' },
+              { k: 'avgPrice', l: 'Giá trung bình / ca (VND)', full: true },
+            ]},
+            { title: 'Phân bổ kênh (%)', fields: [
+              { k: 'splitDoctor',   l: 'Doctor Referral %' },
+              { k: 'splitHospital', l: 'Hospital %' },
+              { k: 'splitDirect',   l: 'Direct %' },
+            ]},
+            { title: 'Doctor funnel', fields: [
+              { k: 'doctorActive', l: 'Bác sĩ active mục tiêu' },
+              { k: 'doctorNew',    l: 'Bác sĩ mới / tháng' },
+            ]},
+            { title: 'KPI nhân viên Sale', fields: [
+              { k: 'salesVisits',     l: 'Visit / sale / tháng' },
+              { k: 'salesConversion', l: 'Conversion rate mục tiêu (%)' },
+            ]},
+          ].map(sec => (
+            <div key={sec.title}>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 pb-1 border-b border-gray-100">{sec.title}</p>
+              <div className="grid grid-cols-2 gap-3">
+                {sec.fields.map(({ k, l, full }) => (
+                  <div key={k} className={full ? 'col-span-2' : ''}>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{l}</label>
+                    <input type="number" value={f[k]} onChange={e => upd(k, e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400" />
+                  </div>
+                ))}
+              </div>
+              {sec.title === 'Tài chính' && be > 0 && (
+                <p className="mt-2 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg">
+                  Break-even: <strong>{be.toLocaleString('vi-VN')} ca/tháng</strong> (~{Math.ceil(be/26)} ca/ngày)
+                </p>
+              )}
+              {sec.title === 'Phân bổ kênh (%)' && (
+                <p className="mt-1 text-xs text-gray-400">Tổng: {f.splitDoctor + f.splitHospital + f.splitDirect}%</p>
+              )}
             </div>
-            {breakeven > 0 && (
-              <p className="mt-2 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded">
-                Break-even: <strong>{breakeven.toLocaleString('vi-VN')} ca/tháng</strong>
-                {' '}(~{Math.ceil(breakeven / 26)} ca/ngày)
-              </p>
-            )}
-          </section>
-
-          <section>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Phân bổ kênh (%)</p>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { key: 'splitDoctor',   label: 'Doctor Referral' },
-                { key: 'splitHospital', label: 'Hospital Partner' },
-                { key: 'splitDirect',   label: 'Direct / Walk-in' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{f.label} %</label>
-                  <input type="number" min="0" max="100" value={form[f.key]} onChange={e => setF(f.key, e.target.value)}
-                    className="w-full border border-gray-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-400" />
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-gray-400 mt-1">Tổng: {form.splitDoctor + form.splitHospital + form.splitDirect}% (cần = 100%)</p>
-          </section>
-
-          <section>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Doctor funnel</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { key: 'doctorActive', label: 'Bác sĩ active mục tiêu' },
-                { key: 'doctorNew',    label: 'Bác sĩ mới / tháng' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}</label>
-                  <input type="number" value={form[f.key]} onChange={e => setF(f.key, e.target.value)}
-                    className="w-full border border-gray-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-400" />
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">KPI nhân viên Sale</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { key: 'salesVisits',     label: 'Visit / sale / tháng' },
-                { key: 'salesConversion', label: 'Tỷ lệ chuyển đổi mục tiêu (%)' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}</label>
-                  <input type="number" value={form[f.key]} onChange={e => setF(f.key, e.target.value)}
-                    className="w-full border border-gray-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-400" />
-                </div>
-              ))}
-            </div>
-          </section>
-
+          ))}
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded">Hủy</button>
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy</button>
             <button onClick={() => {
               onSave({
-                revenue: form.revenue, costs: form.costs, avgPrice: form.avgPrice,
-                doctorActive: form.doctorActive, doctorNew: form.doctorNew,
-                salesVisits: form.salesVisits, salesConversion: form.salesConversion,
-                channelSplit: { doctor: form.splitDoctor, hospital: form.splitHospital, direct: form.splitDirect },
-              })
-              onClose()
-            }} className="px-5 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium">Lưu mục tiêu</button>
+                revenue: f.revenue, costs: f.costs, avgPrice: f.avgPrice,
+                doctorActive: f.doctorActive, doctorNew: f.doctorNew,
+                salesVisits: f.salesVisits, salesConversion: f.salesConversion,
+                channelSplit: { doctor: f.splitDoctor, hospital: f.splitHospital, direct: f.splitDirect },
+              }); onClose()
+            }} className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Lưu mục tiêu</button>
           </div>
         </div>
       </div>
@@ -306,76 +213,62 @@ function TargetModal({ targets, onClose, onSave }) {
   )
 }
 
-// ── Edit actuals modal ────────────────────────────────────────────────────────
 function ActualsModal({ month, onClose, onSave }) {
-  const [form, setForm] = useState({
-    casesDoctor:   month.cases?.doctor   || 0,
-    casesHospital: month.cases?.hospital || 0,
-    casesDirect:   month.cases?.direct   || 0,
-    casesInternal: month.cases?.internal || 0,
-    revDoctor:     month.revenue?.doctor   || 0,
-    revHospital:   month.revenue?.hospital || 0,
-    revDirect:     month.revenue?.direct   || 0,
-    revInternal:   month.revenue?.internal || 0,
-    docActive:     month.doctors?.active  || 0,
-    docNew:        month.doctors?.new     || 0,
-    docChurn:      month.doctors?.churn   || 0,
-    hospitalDeals: month.hospitalDeals    || 0,
+  const [f, setF] = useState({
+    cD: month.cases?.doctor || 0,    cH: month.cases?.hospital || 0,
+    cDi: month.cases?.direct || 0,   cI: month.cases?.internal || 0,
+    rD: month.revenue?.doctor || 0,  rH: month.revenue?.hospital || 0,
+    rDi: month.revenue?.direct || 0, rI: month.revenue?.internal || 0,
+    dA: month.doctors?.active || 0,  dN: month.doctors?.new || 0,
+    dC: month.doctors?.churn || 0,   hD: month.hospitalDeals || 0,
   })
-  const setF = (k, v) => setForm(p => ({ ...p, [k]: Number(v) || 0 }))
-  const fields = [
-    { section: 'Số ca thực tế', items: [
-      { key: 'casesDoctor', label: 'Ca kênh Doctor' },
-      { key: 'casesHospital', label: 'Ca kênh Hospital' },
-      { key: 'casesDirect', label: 'Ca kênh Direct' },
-      { key: 'casesInternal', label: 'Ca nội bộ' },
+  const upd = (k, v) => setF(p => ({ ...p, [k]: Number(v) || 0 }))
+  const rows = [
+    { title: 'Số ca thực tế', fields: [
+      { k: 'cD', l: '👨‍⚕️ Doctor' }, { k: 'cH', l: '🏥 Hospital' },
+      { k: 'cDi', l: '🚶 Direct' }, { k: 'cI', l: '🔄 Nội bộ' },
     ]},
-    { section: 'Doanh thu thực tế (VND)', items: [
-      { key: 'revDoctor', label: 'Doanh thu Doctor' },
-      { key: 'revHospital', label: 'Doanh thu Hospital' },
-      { key: 'revDirect', label: 'Doanh thu Direct' },
-      { key: 'revInternal', label: 'Doanh thu Nội bộ' },
+    { title: 'Doanh thu thực tế (VND)', fields: [
+      { k: 'rD', l: '👨‍⚕️ Doctor' }, { k: 'rH', l: '🏥 Hospital' },
+      { k: 'rDi', l: '🚶 Direct' }, { k: 'rI', l: '🔄 Nội bộ' },
     ]},
-    { section: 'Doctor funnel', items: [
-      { key: 'docActive', label: 'Bác sĩ active' },
-      { key: 'docNew', label: 'Bác sĩ mới' },
-      { key: 'docChurn', label: 'Bác sĩ rời bỏ (churn)' },
-      { key: 'hospitalDeals', label: 'Hợp đồng hospital' },
+    { title: 'Doctor funnel', fields: [
+      { k: 'dA', l: 'Bác sĩ active' }, { k: 'dN', l: 'Bác sĩ mới' },
+      { k: 'dC', l: 'Bác sĩ churn' }, { k: 'hD', l: 'Hợp đồng Hospital' },
     ]},
   ]
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
-          <h3 className="font-semibold text-gray-800">📊 Nhập số liệu thực tế</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-100 flex items-center justify-between rounded-t-2xl">
+          <h3 className="font-bold text-gray-800">📊 Nhập số liệu thực tế</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
         </div>
-        <div className="p-5 space-y-5">
-          {fields.map(sec => (
-            <section key={sec.section}>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">{sec.section}</p>
+        <div className="p-6 space-y-5">
+          {rows.map(sec => (
+            <div key={sec.title}>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 pb-1 border-b border-gray-100">{sec.title}</p>
               <div className="grid grid-cols-2 gap-3">
-                {sec.items.map(f => (
-                  <div key={f.key}>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}</label>
-                    <input type="number" value={form[f.key]} onChange={e => setF(f.key, e.target.value)}
-                      className="w-full border border-gray-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-400" />
+                {sec.fields.map(({ k, l }) => (
+                  <div key={k}>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{l}</label>
+                    <input type="number" value={f[k]} onChange={e => upd(k, e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400" />
                   </div>
                 ))}
               </div>
-            </section>
+            </div>
           ))}
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded">Hủy</button>
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy</button>
             <button onClick={() => {
               onSave({
-                cases:   { doctor: form.casesDoctor, hospital: form.casesHospital, direct: form.casesDirect, internal: form.casesInternal },
-                revenue: { doctor: form.revDoctor,   hospital: form.revHospital,   direct: form.revDirect,   internal: form.revInternal   },
-                doctors: { active: form.docActive,   new: form.docNew,             churn: form.docChurn },
-                hospitalDeals: form.hospitalDeals,
-              })
-              onClose()
-            }} className="px-5 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium">Lưu</button>
+                cases:   { doctor: f.cD,  hospital: f.cH,  direct: f.cDi, internal: f.cI  },
+                revenue: { doctor: f.rD,  hospital: f.rH,  direct: f.rDi, internal: f.rI  },
+                doctors: { active: f.dA,  new: f.dN,       churn:  f.dC  },
+                hospitalDeals: f.hD,
+              }); onClose()
+            }} className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Lưu</button>
           </div>
         </div>
       </div>
@@ -383,26 +276,58 @@ function ActualsModal({ month, onClose, onSave }) {
   )
 }
 
-// ── Add sales rep modal ───────────────────────────────────────────────────────
-function AddSalesModal({ onClose, onSave }) {
+function EditRepModal({ rep, onClose, onSave }) {
+  const [f, setF] = useState({ ...rep })
+  const upd = (k, v) => setF(p => ({ ...p, [k]: Number(v) || 0 }))
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-bold text-gray-800">Cập nhật KPI — {rep.name}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div className="p-5 space-y-3">
+          {[
+            { k: 'visits',     l: '🚗 Số lượt visit' },
+            { k: 'calls',      l: '📞 Số cuộc gọi' },
+            { k: 'followups',  l: '🔔 Follow-up' },
+            { k: 'newDocs',    l: '👨‍⚕️ Bác sĩ mới' },
+            { k: 'activeDocs', l: '🤝 BS active duy trì' },
+            { k: 'revenue',    l: '💰 Doanh thu generate (VND)' },
+          ].map(({ k, l }) => (
+            <div key={k}>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{l}</label>
+              <input type="number" value={f[k] || 0} onChange={e => upd(k, e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400" />
+            </div>
+          ))}
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy</button>
+            <button onClick={() => { onSave(f); onClose() }}
+              className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Lưu</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AddRepModal({ onClose, onSave }) {
   const [name, setName] = useState('')
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-xs" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-800">Thêm nhân viên Sale</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-bold text-gray-800">Thêm nhân viên Sale</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
         </div>
         <div className="p-5 space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Tên nhân viên</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Nguyễn Văn A..."
-              className="w-full border border-gray-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-400" />
-          </div>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Nguyễn Văn A..."
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400" />
           <div className="flex justify-end gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded">Hủy</button>
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy</button>
             <button disabled={!name.trim()} onClick={() => { onSave(name.trim()); onClose() }}
-              className="px-5 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium disabled:opacity-50">Thêm</button>
+              className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50">Thêm</button>
           </div>
         </div>
       </div>
@@ -410,407 +335,484 @@ function AddSalesModal({ onClose, onSave }) {
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ─── Tab: Quản lý ─────────────────────────────────────────────────────────────
+function ManagerView({ targets, monthData, breakeven, dailyBE, channelDefs, onOpenActuals, isManager }) {
+  const totalRev   = Object.values(monthData.revenue).reduce((s, v) => s + num(v), 0)
+  const totalCases = Object.values(monthData.cases).reduce((s, v) => s + num(v), 0)
+  const revPct     = pct(totalRev, targets.revenue)
+  const bePct      = pct(totalCases, breakeven)
+  const netDoc     = num(monthData.doctors.new) - num(monthData.doctors.churn)
+  const teamRev    = (monthData.sales || []).reduce((s, r) => s + num(r.revenue), 0)
+  const teamVisits = (monthData.sales || []).reduce((s, r) => s + num(r.visits), 0)
+  const teamNew    = (monthData.sales || []).reduce((s, r) => s + num(r.newDocs), 0)
+
+  return (
+    <div className="space-y-8">
+
+      {/* ── A. Doanh thu tổng quan ── */}
+      <div>
+        <SectionHeader title="A · Doanh thu tổng quan"
+          action={isManager && (
+            <button onClick={onOpenActuals}
+              className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+              📊 Nhập thực tế
+            </button>
+          )} />
+
+        <div className="grid grid-cols-5 gap-4 items-center">
+          {/* Gauges */}
+          <div className="col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex justify-around">
+            <Gauge value={totalRev} max={targets.revenue} label="Doanh thu"
+              sub={`${fmtB(totalRev)} / ${fmtB(targets.revenue)}`}
+              color={revPct >= 90 ? '#22c55e' : revPct >= 70 ? '#f59e0b' : '#ef4444'} />
+            <Gauge value={totalCases} max={breakeven} label="Ca / Break-even"
+              sub={`${totalCases.toLocaleString('vi-VN')} / ${breakeven.toLocaleString('vi-VN')}`}
+              color={bePct >= 100 ? '#22c55e' : bePct >= 80 ? '#f59e0b' : '#3b82f6'} />
+          </div>
+
+          {/* Key numbers */}
+          <div className="col-span-3 grid grid-cols-3 gap-3">
+            <StatCard icon="💰" title="Doanh thu" value={fmtB(totalRev)}
+              sub={`Mục tiêu: ${fmtB(targets.revenue)}`} accent="text-blue-700" />
+            <StatCard icon="📸" title="Tổng số ca" value={totalCases}
+              target={breakeven} barColor="bg-indigo-500" accent="text-indigo-700" />
+            <StatCard icon="📅" title="Ca / ngày cần đạt" value={dailyBE}
+              sub="= Chi phí ÷ Giá/ca ÷ 26 ngày" accent="text-gray-700" />
+            <StatCard icon="🏥" title="Hợp đồng Hospital" value={num(monthData.hospitalDeals)}
+              sub="Kênh Hospital Partnership" accent="text-emerald-700" />
+            <StatCard icon="🎯" title="% Doanh thu" value={`${revPct}%`}
+              sub={revPct >= 90 ? '✅ Đạt mục tiêu' : revPct >= 70 ? '⚠ Cần đẩy thêm' : '❌ Chưa đạt'}
+              accent={revPct >= 90 ? 'text-green-600' : revPct >= 70 ? 'text-yellow-600' : 'text-red-600'} />
+            <StatCard icon="⚖️" title="% Break-even" value={`${bePct}%`}
+              sub={`${totalCases.toLocaleString('vi-VN')} / ${breakeven.toLocaleString('vi-VN')} ca`}
+              accent={bePct >= 100 ? 'text-green-600' : 'text-blue-700'} />
+          </div>
+        </div>
+      </div>
+
+      {/* ── B. Kênh ── */}
+      <div>
+        <SectionHeader title="B · Phân tích kênh" />
+        <div className="grid grid-cols-4 gap-3">
+          {channelDefs.map(ch => (
+            <ChannelCard key={ch.key} ch={ch.key} actual={ch.actual}
+              targetCases={ch.target.cases} targetRev={ch.target.revenue} />
+          ))}
+        </div>
+      </div>
+
+      {/* ── C. Doctor funnel ── */}
+      <div>
+        <SectionHeader title="C · Doctor Funnel" />
+        <div className="grid grid-cols-4 gap-3">
+          <StatCard icon="👨‍⚕️" title="Bác sĩ Active" value={num(monthData.doctors.active)}
+            target={targets.doctorActive} barColor="bg-blue-500" accent="text-blue-700" />
+          <StatCard icon="✨" title="Bác sĩ mới" value={num(monthData.doctors.new)}
+            target={targets.doctorNew} barColor="bg-emerald-500" accent="text-emerald-700" />
+          <StatCard icon="📉" title="Bác sĩ churn" value={num(monthData.doctors.churn)}
+            sub={num(monthData.doctors.churn) > 5 ? '⚠ Cần chú ý giữ chân' : 'Trong ngưỡng kiểm soát'}
+            accent={num(monthData.doctors.churn) > 5 ? 'text-red-600' : 'text-gray-700'} />
+          <div className={`rounded-xl border shadow-sm p-4 ${netDoc >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-1.5">🔢 Tăng trưởng net</p>
+            <p className={`text-3xl font-extrabold ${netDoc >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {netDoc >= 0 ? '+' : ''}{netDoc}
+            </p>
+            <p className="text-xs text-gray-400 mt-1">{num(monthData.doctors.new)} mới − {num(monthData.doctors.churn)} churn</p>
+            <p className="text-xs text-gray-400 mt-0.5 font-mono">= (Visit × Conv%) − Churn</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── D. Manager control ── */}
+      <div>
+        <SectionHeader title="D · Tổng hợp Team Sales" />
+        <div className="grid grid-cols-3 gap-4">
+
+          {/* Team summary */}
+          <div className="col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 bg-indigo-700 flex items-center gap-3">
+              <p className="text-sm font-bold text-white">Hiệu suất Team</p>
+              <span className="text-xs text-indigo-300">{(monthData.sales || []).length} nhân viên</span>
+            </div>
+            <div className="p-4 space-y-3">
+              {(monthData.sales || []).length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">Chưa có dữ liệu nhân viên</p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 gap-3 pb-3 border-b border-gray-100">
+                    <div className="text-center">
+                      <p className="text-2xl font-extrabold text-indigo-700">{teamVisits}</p>
+                      <p className="text-xs text-gray-400">Tổng visit</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-extrabold text-emerald-600">{teamNew}</p>
+                      <p className="text-xs text-gray-400">Bác sĩ mới</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-extrabold text-blue-700">{fmtB(teamRev)}</p>
+                      <p className="text-xs text-gray-400">DT generate</p>
+                    </div>
+                  </div>
+                  {(monthData.sales || []).map(rep => {
+                    const maxRev = Math.max(...(monthData.sales || []).map(r => num(r.revenue)), 1)
+                    return (
+                      <div key={rep.id} className="flex items-center gap-3">
+                        <span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0">
+                          {rep.name.charAt(0)}
+                        </span>
+                        <span className="text-sm font-medium text-gray-700 w-32 truncate">{rep.name}</span>
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct(num(rep.revenue), maxRev)}%` }} />
+                        </div>
+                        <span className="text-xs font-bold text-emerald-700 w-16 text-right">{fmtB(num(rep.revenue))}</span>
+                        <span className="text-xs text-gray-400 w-16 text-right">{num(rep.visits)} visits</span>
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Benchmark */}
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-5 text-white">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Benchmark chuẩn</p>
+            <div className="space-y-3">
+              {[
+                { label: 'Visit / sale / tháng', value: '150–200', icon: '🚗' },
+                { label: 'Cuộc gọi / tháng',    value: '300–400', icon: '📞' },
+                { label: 'Bác sĩ mới',           value: '20–40',  icon: '✨' },
+                { label: 'BS active maintain',   value: '50–80',  icon: '🤝' },
+                { label: 'Conversion rate',      value: '≥ 20%',  icon: '🎯' },
+                { label: 'Doanh thu / sale',     value: '300–600M', icon: '💰' },
+                { label: 'Visit / ngày',         value: '8–10',   icon: '📅' },
+              ].map(b => (
+                <div key={b.label} className="flex items-center justify-between">
+                  <span className="text-xs text-slate-300">{b.icon} {b.label}</span>
+                  <span className="text-xs font-bold text-white bg-white/10 px-2 py-0.5 rounded">{b.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Tab: Nhân viên Sale ──────────────────────────────────────────────────────
+function SalesView({ targets, monthData, isManager, onAdd, onEdit, onDelete }) {
+  const sales = monthData.sales || []
+
+  return (
+    <div className="space-y-6">
+
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-700">Danh sách nhân viên Sale</p>
+          <p className="text-xs text-gray-400 mt-0.5">Theo dõi KPI hoạt động từng người theo tháng</p>
+        </div>
+        {isManager && (
+          <button onClick={onAdd}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700">
+            + Thêm nhân viên
+          </button>
+        )}
+      </div>
+
+      {sales.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-dashed border-gray-300 py-16 text-center">
+          <p className="text-4xl mb-3">👥</p>
+          <p className="text-sm font-medium text-gray-500">Chưa có nhân viên sale</p>
+          {isManager && (
+            <button onClick={onAdd} className="mt-4 px-5 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 font-medium">
+              + Thêm nhân viên
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {sales.map((rep) => {
+            const convRate = rep.visits > 0 ? Math.round(num(rep.newDocs) / num(rep.visits) * 100) : 0
+
+            const kpis = [
+              {
+                label: 'Visit', actual: num(rep.visits), target: targets.salesVisits,
+                bar: 'bg-blue-500', note: 'chuẩn 150–200/tháng',
+              },
+              {
+                label: 'Cuộc gọi', actual: num(rep.calls), target: 0,
+                bar: 'bg-sky-400', note: 'chuẩn 300–400/tháng',
+              },
+              {
+                label: 'Bác sĩ mới', actual: num(rep.newDocs), target: targets.doctorNew,
+                bar: 'bg-emerald-500', note: 'chuẩn 20–40/tháng',
+              },
+              {
+                label: 'BS Active', actual: num(rep.activeDocs), target: targets.doctorActive,
+                bar: 'bg-indigo-500', note: 'chuẩn 50–80',
+              },
+            ]
+
+            return (
+              <div key={rep.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                {/* Rep header */}
+                <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-indigo-50 to-white border-b border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-full bg-indigo-600 text-white text-base font-extrabold flex items-center justify-center shadow">
+                      {rep.name.charAt(0)}
+                    </span>
+                    <div>
+                      <p className="font-bold text-gray-800">{rep.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${convRate >= 20 ? 'bg-green-100 text-green-700' : convRate >= 10 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'}`}>
+                          Conversion {convRate}%
+                        </span>
+                        <span className="text-xs text-gray-400">(chuẩn ≥ 20%)</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="text-xl font-extrabold text-emerald-700">{fmtB(num(rep.revenue))}</p>
+                      <p className="text-xs text-gray-400">Doanh thu generate</p>
+                    </div>
+                    {isManager && (
+                      <div className="flex gap-1.5">
+                        <button onClick={() => onEdit(rep)}
+                          className="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg font-medium">
+                          Sửa
+                        </button>
+                        <button onClick={() => onDelete(rep.id)}
+                          className="text-xs px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg font-medium">
+                          Xóa
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* KPI bars */}
+                <div className="px-5 py-4 grid grid-cols-4 gap-5">
+                  {kpis.map(k => {
+                    const p = k.target > 0 ? pct(k.actual, k.target) : null
+                    return (
+                      <div key={k.label}>
+                        <div className="flex items-end justify-between mb-1.5">
+                          <span className="text-xs font-semibold text-gray-500">{k.label}</span>
+                          <span className="text-lg font-extrabold text-gray-800">{k.actual}</span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={`h-full ${k.bar} rounded-full transition-all`}
+                            style={{ width: `${p !== null ? clamp(p) : 60}%` }} />
+                        </div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-xs text-gray-400">{k.note}</span>
+                          {p !== null && <span className={`text-xs font-bold ${p >= 100 ? 'text-green-600' : p >= 70 ? 'text-yellow-600' : 'text-red-500'}`}>{p}%</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Daily task guide */}
+                <div className="px-5 pb-4">
+                  <div className="bg-slate-50 rounded-xl p-3 grid grid-cols-4 gap-2">
+                    {[
+                      { icon: '🚗', label: 'Visit / ngày', target: '8–10', actual: rep.visits > 0 ? Math.round(num(rep.visits) / 26) : '—' },
+                      { icon: '📞', label: 'Call / ngày',  target: '15–20', actual: rep.calls  > 0 ? Math.round(num(rep.calls)  / 26) : '—' },
+                      { icon: '🔔', label: 'Follow-up',   target: '10/ngày', actual: num(rep.followups) },
+                      { icon: '📝', label: 'CRM update',  target: 'bắt buộc', actual: '—' },
+                    ].map(d => (
+                      <div key={d.label} className="text-center">
+                        <p className="text-lg">{d.icon}</p>
+                        <p className="text-sm font-bold text-gray-700">{d.actual}</p>
+                        <p className="text-xs text-gray-500">{d.label}</p>
+                        <p className="text-xs text-gray-400">{d.target}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Team footer */}
+          {sales.length > 1 && (() => {
+            const tot = sales.reduce((a, r) => ({
+              visits: a.visits + num(r.visits), calls: a.calls + num(r.calls),
+              newDocs: a.newDocs + num(r.newDocs), activeDocs: a.activeDocs + num(r.activeDocs),
+              revenue: a.revenue + num(r.revenue),
+            }), { visits: 0, calls: 0, newDocs: 0, activeDocs: 0, revenue: 0 })
+            const teamConv = tot.visits > 0 ? Math.round(tot.newDocs / tot.visits * 100) : 0
+            return (
+              <div className="bg-indigo-700 rounded-2xl px-5 py-4">
+                <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest mb-3">Tổng team ({sales.length} người)</p>
+                <div className="grid grid-cols-5 gap-4 text-center">
+                  {[
+                    { label: 'Tổng visit',    value: tot.visits,    accent: 'text-white' },
+                    { label: 'Tổng cuộc gọi', value: tot.calls,     accent: 'text-white' },
+                    { label: 'BS mới',         value: tot.newDocs,   accent: 'text-emerald-300' },
+                    { label: 'Conversion',     value: `${teamConv}%`, accent: teamConv >= 20 ? 'text-green-300' : 'text-yellow-300' },
+                    { label: 'Doanh thu',      value: fmtB(tot.revenue), accent: 'text-emerald-300' },
+                  ].map(s => (
+                    <div key={s.label}>
+                      <p className={`text-xl font-extrabold ${s.accent}`}>{typeof s.value === 'number' ? s.value.toLocaleString('vi-VN') : s.value}</p>
+                      <p className="text-xs text-indigo-300">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
 export default function KPISales() {
   const { auth } = useAuth()
   const isManager = auth?.role === 'admin' || auth?.role === 'giamdoc' || auth?.role === 'truongphong'
-
   const todayM = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
 
-  const [kpiData, setKpiData]   = useState({})
-  const [sites,   setSites]     = useState([])
-  const [site,    setSite]      = useState('')
-  const [month,   setMonth]     = useState(todayM)
-  const [loading, setLoading]   = useState(true)
-  const [saving,  setSaving]    = useState(false)
+  const [kpiData, setKpiData] = useState({})
+  const [sites,   setSites]   = useState([])
+  const [site,    setSite]    = useState('')
+  const [month,   setMonth]   = useState(todayM)
+  const [tab,     setTab]     = useState('manager')
+  const [loading, setLoading] = useState(true)
+  const [saving,  setSaving]  = useState(false)
+  const [modal,   setModal]   = useState(null)
+  const [editRep, setEditRep] = useState(null)
 
-  const [modal, setModal] = useState(null) // 'target' | 'actuals' | 'sales-edit' | 'sales-add'
-  const [editingRep, setEditingRep] = useState(null)
-
-  // ── data helpers ─────────────────────────────────────────────────────────
   const siteData  = kpiData?.sites?.[site] || {}
-  const targets   = { ...DEFAULT_TARGETS, ...(siteData.targets || {}) }
-  const monthData = { ...DEFAULT_MONTH, ...(siteData.monthly?.[month] || {}) }
-
-  const totalCases   = Object.values(monthData.cases).reduce((s, v) => s + num(v), 0)
-  const totalRevenue = Object.values(monthData.revenue).reduce((s, v) => s + num(v), 0)
-  const breakeven    = targets.avgPrice > 0 ? Math.round(targets.costs / targets.avgPrice) : 0
-  const dailyBE      = breakeven > 0 ? Math.ceil(breakeven / 26) : 0
+  const targets   = useMemo(() => ({ ...DEFAULT_TARGETS, ...(siteData.targets || {}) }), [siteData])
+  const monthData = useMemo(() => ({ ...DEFAULT_MONTH, ...(siteData.monthly?.[month] || {}) }), [siteData, month])
+  const breakeven = targets.avgPrice > 0 ? Math.round(targets.costs / targets.avgPrice) : 0
+  const dailyBE   = breakeven > 0 ? Math.ceil(breakeven / 26) : 0
 
   const channelDefs = useMemo(() => {
-    const split = targets.channelSplit
-    const totalTarget = targets.revenue
-    return [
-      {
-        key: 'doctor', label: '👨‍⚕️ Doctor Referral', color: 'doctor',
-        actual: { cases: num(monthData.cases.doctor), revenue: num(monthData.revenue.doctor) },
-        target: { cases: Math.round(breakeven * split.doctor / 100), revenue: Math.round(totalTarget * split.doctor / 100) },
-        pctSplit: split.doctor,
+    const sp = targets.channelSplit
+    return ['doctor', 'hospital', 'direct', 'internal'].map(k => ({
+      key: k,
+      actual: { cases: num(monthData.cases[k]), revenue: num(monthData.revenue[k]) },
+      target: {
+        cases:   k !== 'internal' ? Math.round(breakeven * (sp[k] || 0) / 100) : 0,
+        revenue: k !== 'internal' ? Math.round(targets.revenue * (sp[k] || 0) / 100) : 0,
       },
-      {
-        key: 'hospital', label: '🏥 Hospital Partner', color: 'hospital',
-        actual: { cases: num(monthData.cases.hospital), revenue: num(monthData.revenue.hospital) },
-        target: { cases: Math.round(breakeven * split.hospital / 100), revenue: Math.round(totalTarget * split.hospital / 100) },
-        pctSplit: split.hospital,
-      },
-      {
-        key: 'direct', label: '🚶 Direct / Walk-in', color: 'direct',
-        actual: { cases: num(monthData.cases.direct), revenue: num(monthData.revenue.direct) },
-        target: { cases: Math.round(breakeven * split.direct / 100), revenue: Math.round(totalTarget * split.direct / 100) },
-        pctSplit: split.direct,
-      },
-      {
-        key: 'internal', label: '🔄 Nội bộ', color: 'internal',
-        actual: { cases: num(monthData.cases.internal), revenue: num(monthData.revenue.internal) },
-        target: { cases: 0, revenue: 0 },
-        pctSplit: 0,
-      },
-    ]
+    }))
   }, [monthData, targets, breakeven])
 
-  // ── load / save ──────────────────────────────────────────────────────────
   const load = useCallback(async () => {
     try {
       const [kd, sd] = await Promise.all([getKPI(), getSites()])
       setKpiData(kd || {})
-      const siteNames = (sd || []).map(s => s.name).filter(Boolean)
-      setSites(siteNames)
-      if (!site && siteNames.length > 0) setSite(siteNames[0])
-    } finally {
-      setLoading(false)
-    }
+      const names = (sd || []).map(s => s.name).filter(Boolean)
+      setSites(names)
+      if (!site && names.length) setSite(names[0])
+    } finally { setLoading(false) }
   }, [site])
 
   useEffect(() => { load() }, []) // eslint-disable-line
 
   const persist = useCallback(async (updated) => {
     setSaving(true)
-    try {
-      await saveKPI(updated)
-      setKpiData(updated)
-    } finally {
-      setSaving(false)
-    }
+    try { await saveKPI(updated); setKpiData(updated) }
+    finally { setSaving(false) }
   }, [])
 
-  const updateTargets = useCallback((newTargets) => {
-    const updated = {
-      ...kpiData,
-      sites: {
-        ...(kpiData.sites || {}),
-        [site]: { ...siteData, targets: newTargets },
-      }
-    }
-    persist(updated)
-  }, [kpiData, site, siteData, persist])
+  const updateTargets = (t) => persist({ ...kpiData, sites: { ...(kpiData.sites || {}), [site]: { ...siteData, targets: t } } })
 
-  const updateMonthActuals = useCallback((actuals) => {
-    const updated = {
+  const patchMonth = useCallback((patch) => {
+    persist({
       ...kpiData,
-      sites: {
-        ...(kpiData.sites || {}),
-        [site]: {
-          ...siteData,
-          monthly: {
-            ...(siteData.monthly || {}),
-            [month]: { ...monthData, ...actuals },
-          }
-        },
-      }
-    }
-    persist(updated)
+      sites: { ...(kpiData.sites || {}), [site]: {
+        ...siteData,
+        monthly: { ...(siteData.monthly || {}), [month]: { ...monthData, ...patch } },
+      }},
+    })
   }, [kpiData, site, siteData, month, monthData, persist])
 
-  const updateSalesRep = useCallback((repData) => {
-    const sales = [...(monthData.sales || [])]
-    const idx = sales.findIndex(s => s.id === repData.id)
-    if (idx >= 0) sales[idx] = repData
-    else sales.push({ ...repData, id: Date.now().toString() })
-    updateMonthActuals({ sales })
-  }, [monthData, updateMonthActuals])
-
-  const addSalesRep = useCallback((name) => {
-    const sales = [...(monthData.sales || []), {
-      id: Date.now().toString(), name, visits: 0, calls: 0, followups: 0,
-      newDocs: 0, activeDocs: 0, revenue: 0,
-    }]
-    updateMonthActuals({ sales })
-  }, [monthData, updateMonthActuals])
-
-  const deleteSalesRep = useCallback((id) => {
-    const sales = (monthData.sales || []).filter(s => s.id !== id)
-    updateMonthActuals({ sales })
-  }, [monthData, updateMonthActuals])
+  const updateSalesRep = (rep) => {
+    const sales = (monthData.sales || []).map(s => s.id === rep.id ? rep : s)
+    if (!sales.find(s => s.id === rep.id)) sales.push({ ...rep, id: Date.now().toString() })
+    patchMonth({ sales })
+  }
+  const addRep   = (name) => patchMonth({ sales: [...(monthData.sales || []), { id: Date.now().toString(), name, visits: 0, calls: 0, followups: 0, newDocs: 0, activeDocs: 0, revenue: 0 }] })
+  const deleteRep = (id)  => patchMonth({ sales: (monthData.sales || []).filter(r => r.id !== id) })
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Đang tải...</div>
 
   return (
     <div className="space-y-5">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+
+      {/* ── Top bar ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-lg font-bold text-gray-800">KPI Sales & Manager</h2>
-          <p className="text-xs text-gray-400 mt-0.5">B2B2C · Doctor-Driven Funnel</p>
+          <h2 className="text-lg font-extrabold text-gray-800">KPI Sales & Manager</h2>
+          <p className="text-xs text-gray-400 mt-0.5">B2B2C · Doctor-Driven → Chỉ định → Ca chụp → Doanh thu</p>
         </div>
+
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Site selector */}
           <select value={site} onChange={e => setSite(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 outline-none focus:border-blue-400 bg-white">
             {sites.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
-          {/* Month selector */}
           <select value={month} onChange={e => setMonth(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 outline-none focus:border-blue-400 bg-white">
             {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
           {isManager && (
-            <>
-              <button onClick={() => setModal('actuals')}
-                className="px-3 py-1.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-                📊 Nhập thực tế
-              </button>
-              <button onClick={() => setModal('target')}
-                className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-                ⚙ Mục tiêu
-              </button>
-            </>
+            <button onClick={() => setModal('target')}
+              className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+              ⚙ Mục tiêu
+            </button>
           )}
-          {saving && <span className="text-xs text-gray-400">Đang lưu...</span>}
+          {saving && <span className="text-xs text-gray-400 animate-pulse">Đang lưu...</span>}
         </div>
       </div>
 
-      {/* ── Layer 1: Revenue KPIs ── */}
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Lớp 1 · Doanh thu</span>
-          <div className="flex-1 h-px bg-gray-100" />
-        </div>
-        <div className="grid grid-cols-4 gap-4">
-          <KpiCard icon="💰" title="Doanh thu thực tế" actual={fmtB(totalRevenue)} target={0}
-            note={`Mục tiêu: ${fmtB(targets.revenue)}`} color="blue" />
-          <KpiCard icon="🎯" title="Hoàn thành DT" actual={`${pct(totalRevenue, targets.revenue)}%`}
-            target={0} note={`${fmtB(totalRevenue)} / ${fmtB(targets.revenue)}`}
-            color={pct(totalRevenue, targets.revenue) >= 90 ? 'green' : pct(totalRevenue, targets.revenue) >= 70 ? 'orange' : 'red'} />
-          <KpiCard icon="📸" title="Số ca thực tế" actual={totalCases.toLocaleString('vi-VN')}
-            target={0} note={`Mục tiêu break-even: ${breakeven.toLocaleString('vi-VN')} ca (~${dailyBE}/ngày)`} color="purple" />
-          <KpiCard icon="⚖️" title="Tỷ lệ break-even" actual={`${pct(totalCases, breakeven)}%`}
-            target={0} note={`${totalCases.toLocaleString('vi-VN')} / ${breakeven.toLocaleString('vi-VN')} ca`}
-            color={pct(totalCases, breakeven) >= 100 ? 'green' : pct(totalCases, breakeven) >= 80 ? 'orange' : 'red'} />
-        </div>
-      </section>
+      {/* ── Tabs ── */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+        {[
+          { key: 'manager', label: '🏢 Quản lý',        sub: 'Doanh thu · Kênh · Doctor funnel · Team' },
+          { key: 'sales',   label: '👤 Nhân viên Sale',  sub: 'KPI hoạt động · Visit · Conversion' },
+        ].map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${tab === t.key ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>
+            <span>{t.label}</span>
+            <span className={`block text-xs font-normal mt-0.5 ${tab === t.key ? 'text-gray-400' : 'text-gray-400/60'}`}>{t.sub}</span>
+          </button>
+        ))}
+      </div>
 
-      {/* ── Layer 2: Channels ── */}
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Lớp 2 · Kênh</span>
-          <div className="flex-1 h-px bg-gray-100" />
-        </div>
-        <div className="grid grid-cols-4 gap-4">
-          {channelDefs.map(ch => <ChannelBar key={ch.key} {...ch} />)}
-        </div>
-      </section>
-
-      {/* ── Layer 3: Doctor Funnel ── */}
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Lớp 3 · Doctor Funnel</span>
-          <div className="flex-1 h-px bg-gray-100" />
-        </div>
-        <div className="grid grid-cols-4 gap-4">
-          <KpiCard icon="👨‍⚕️" title="Bác sĩ Active"
-            actual={num(monthData.doctors.active)} target={targets.doctorActive}
-            unit="" color="blue"
-            note={`Cần ${targets.doctorActive} để đạt target (${targets.avgPrice > 0 ? Math.round(targets.revenue / targets.avgPrice / 10) : '?'} ca/BS)`} />
-          <KpiCard icon="✨" title="Bác sĩ mới tháng này"
-            actual={num(monthData.doctors.new)} target={targets.doctorNew}
-            color="green" note="Từ hoạt động visit của team sale" />
-          <KpiCard icon="📉" title="Bác sĩ churn"
-            actual={num(monthData.doctors.churn)} target={0}
-            color={num(monthData.doctors.churn) > 5 ? 'red' : 'orange'}
-            note="Bác sĩ ngừng chỉ định trong tháng" />
-          <KpiCard icon="🤝" title="Hợp đồng Hospital"
-            actual={num(monthData.hospitalDeals)} target={0}
-            color="purple" note="Kênh Hospital Partnership" />
-        </div>
-
-        {/* Net doctor growth indicator */}
-        {(num(monthData.doctors.new) > 0 || num(monthData.doctors.churn) > 0) && (
-          <div className="mt-3 bg-white rounded-xl border border-gray-200 px-5 py-3 flex items-center gap-6">
-            <span className="text-xs font-semibold text-gray-500 uppercase">Tăng trưởng bác sĩ net</span>
-            <span className={`text-lg font-extrabold ${num(monthData.doctors.new) - num(monthData.doctors.churn) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-              {num(monthData.doctors.new) - num(monthData.doctors.churn) >= 0 ? '+' : ''}
-              {num(monthData.doctors.new) - num(monthData.doctors.churn)} bác sĩ
-            </span>
-            <span className="text-xs text-gray-400">= {num(monthData.doctors.new)} mới − {num(monthData.doctors.churn)} churn</span>
-            <div className="ml-auto text-xs text-gray-400">
-              Formula: Bác sĩ active = (Visit × Conversion%) − Churn
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* ── Layer 4: Sales Activity ── */}
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Lớp 4 · Sales Activity</span>
-          <div className="flex-1 h-px bg-gray-100" />
-          {isManager && (
-            <button onClick={() => setModal('sales-add')}
-              className="text-xs px-3 py-1 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg font-medium">
-              + Thêm nhân viên
-            </button>
-          )}
-        </div>
-
-        {monthData.sales.length === 0 ? (
-          <div className="bg-white rounded-xl border border-dashed border-gray-300 py-10 text-center">
-            <p className="text-sm text-gray-400">Chưa có dữ liệu nhân viên sale</p>
-            {isManager && (
-              <button onClick={() => setModal('sales-add')}
-                className="mt-3 text-sm px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-                + Thêm nhân viên
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-gray-500 uppercase">Nhân viên</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-gray-500 uppercase">
-                      Visit
-                      <span className="text-gray-300 font-normal ml-1">(mục tiêu {targets.salesVisits})</span>
-                    </th>
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-gray-500 uppercase">Cuộc gọi</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-gray-500 uppercase">
-                      BS mới
-                      <span className="text-gray-300 font-normal ml-1">(/{targets.doctorNew})</span>
-                    </th>
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-gray-500 uppercase">Conversion</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-gray-500 uppercase">
-                      BS Active
-                      <span className="text-gray-300 font-normal ml-1">(/{targets.doctorActive})</span>
-                    </th>
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-gray-500 uppercase">Doanh thu</th>
-                    {isManager && <th className="px-4 py-2.5" />}
-                  </tr>
-                </thead>
-                <tbody>
-                  {monthData.sales.map(rep => (
-                    <SalesRow key={rep.id} rep={rep} targets={targets} isManager={isManager}
-                      onEdit={r => { setEditingRep(r); setModal('sales-edit') }} />
-                  ))}
-                </tbody>
-                {/* Team totals */}
-                {monthData.sales.length > 1 && (() => {
-                  const totals = monthData.sales.reduce((acc, r) => ({
-                    visits: acc.visits + num(r.visits),
-                    calls: acc.calls + num(r.calls),
-                    newDocs: acc.newDocs + num(r.newDocs),
-                    activeDocs: acc.activeDocs + num(r.activeDocs),
-                    revenue: acc.revenue + num(r.revenue),
-                  }), { visits: 0, calls: 0, newDocs: 0, activeDocs: 0, revenue: 0 })
-                  return (
-                    <tfoot className="bg-indigo-50 border-t-2 border-indigo-100">
-                      <tr>
-                        <td className="px-4 py-2.5 text-xs font-bold text-indigo-700 uppercase">Tổng team</td>
-                        <td className="px-4 py-2.5 text-sm font-bold text-indigo-700">{totals.visits}</td>
-                        <td className="px-4 py-2.5 text-sm font-bold text-indigo-700">{totals.calls}</td>
-                        <td className="px-4 py-2.5 text-sm font-bold text-indigo-700">{totals.newDocs}</td>
-                        <td className="px-4 py-2.5 text-sm font-bold text-indigo-700">
-                          {totals.visits > 0 ? Math.round(totals.newDocs / totals.visits * 100) : 0}%
-                        </td>
-                        <td className="px-4 py-2.5 text-sm font-bold text-indigo-700">{totals.activeDocs}</td>
-                        <td className="px-4 py-2.5 text-sm font-bold text-emerald-700">{fmtB(totals.revenue)}</td>
-                        {isManager && <td />}
-                      </tr>
-                    </tfoot>
-                  )
-                })()}
-              </table>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* ── Layer 5: Manager Control ── */}
-      {isManager && (
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Lớp 5 · Manager Control</span>
-            <div className="flex-1 h-px bg-gray-100" />
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            {/* Revenue per sale */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Năng suất Sales</p>
-              {monthData.sales.length > 0 ? (
-                <div className="space-y-2">
-                  {monthData.sales.map(rep => {
-                    const repRev = num(rep.revenue)
-                    const maxRev = Math.max(...monthData.sales.map(r => num(r.revenue)), 1)
-                    return (
-                      <div key={rep.id}>
-                        <div className="flex items-center justify-between text-xs mb-0.5">
-                          <span className="text-gray-700 font-medium">{rep.name}</span>
-                          <span className="text-emerald-700 font-bold">{fmtB(repRev)}</span>
-                        </div>
-                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct(repRev, maxRev)}%` }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : <p className="text-xs text-gray-400">Chưa có dữ liệu</p>}
-            </div>
-
-            {/* Formula box */}
-            <div className="bg-gradient-to-br from-indigo-700 to-indigo-900 rounded-xl p-4 text-white">
-              <p className="text-xs font-bold text-indigo-200 uppercase mb-3">Core Formula</p>
-              <div className="space-y-1.5 font-mono text-sm">
-                <p className="text-white/90">Revenue =</p>
-                <p className="pl-3 text-indigo-200">Bác sĩ active</p>
-                <p className="pl-3 text-indigo-200">× Số ca / bác sĩ</p>
-                <p className="pl-3 text-indigo-200">× Giá / ca</p>
-                <div className="border-t border-indigo-600 my-2" />
-                <p className="text-white/90">BS active =</p>
-                <p className="pl-3 text-indigo-200">(Visit × {targets.salesConversion}%)</p>
-                <p className="pl-3 text-indigo-200">− Churn</p>
-              </div>
-            </div>
-
-            {/* KPI benchmark */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Benchmark chuẩn / Sale</p>
-              <div className="space-y-2 text-sm">
-                {[
-                  { label: 'Visit/tháng', value: '150–200', icon: '🚗' },
-                  { label: 'Bác sĩ mới', value: '20–40', icon: '👨‍⚕️' },
-                  { label: 'BS active maintain', value: '50–80', icon: '🤝' },
-                  { label: 'Doanh thu generate', value: '300–600M', icon: '💰' },
-                  { label: 'Conversion rate', value: '≥20%', icon: '🎯' },
-                  { label: 'Daily visit', value: '8–10', icon: '📅' },
-                ].map(b => (
-                  <div key={b.label} className="flex items-center justify-between">
-                    <span className="text-gray-500 text-xs">{b.icon} {b.label}</span>
-                    <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{b.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+      {/* ── Tab content ── */}
+      {tab === 'manager' && (
+        <ManagerView
+          targets={targets} monthData={monthData}
+          breakeven={breakeven} dailyBE={dailyBE}
+          channelDefs={channelDefs} isManager={isManager}
+          onOpenActuals={() => setModal('actuals')}
+        />
+      )}
+      {tab === 'sales' && (
+        <SalesView
+          targets={targets} monthData={monthData} isManager={isManager}
+          onAdd={() => setModal('sales-add')}
+          onEdit={rep => { setEditRep(rep); setModal('sales-edit') }}
+          onDelete={deleteRep}
+        />
       )}
 
       {/* ── Modals ── */}
-      {modal === 'target'     && <TargetModal  targets={targets}   onClose={() => setModal(null)} onSave={updateTargets} />}
-      {modal === 'actuals'    && <ActualsModal month={monthData}   onClose={() => setModal(null)} onSave={updateMonthActuals} />}
-      {modal === 'sales-add'  && <AddSalesModal                    onClose={() => setModal(null)} onSave={addSalesRep} />}
-      {modal === 'sales-edit' && editingRep && (
-        <EditSalesModal rep={editingRep} onClose={() => { setModal(null); setEditingRep(null) }} onSave={updateSalesRep} />
+      {modal === 'target'    && <TargetModal  targets={targets}   onClose={() => setModal(null)} onSave={updateTargets} />}
+      {modal === 'actuals'   && <ActualsModal month={monthData}   onClose={() => setModal(null)} onSave={patchMonth} />}
+      {modal === 'sales-add' && <AddRepModal                      onClose={() => setModal(null)} onSave={addRep} />}
+      {modal === 'sales-edit' && editRep && (
+        <EditRepModal rep={editRep} onClose={() => { setModal(null); setEditRep(null) }} onSave={updateSalesRep} />
       )}
     </div>
   )
