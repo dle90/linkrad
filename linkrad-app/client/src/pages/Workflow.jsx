@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { getTasks, createTask, updateTask, addComment, deleteTask, getSites } from '../api'
+import { getTasks, createTask, updateTask, addComment, deleteTask, getSites, getWorkCategories, saveWorkCategories } from '../api'
 
 const FIXED_DEPTS = ['Ops', 'HR', 'Kế toán']
 
@@ -96,8 +96,8 @@ function TaskCard({ task, onClick, showAssignee }) {
 }
 
 // ─── Add Task Modal ─────────────────────────────────────────────────────────
-function AddTaskModal({ onClose, onSave, users, userRole, userDept }) {
-  const [form, setForm] = useState({ title: '', description: '', deadline: '', priority: 'medium', assignee: '' })
+function AddTaskModal({ onClose, onSave, users, userRole, userDept, categories }) {
+  const [form, setForm] = useState({ title: '', description: '', deadline: '', priority: 'medium', assignee: '', category: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -110,6 +110,17 @@ function AddTaskModal({ onClose, onSave, users, userRole, userDept }) {
       return true
     })
   }, [users, canAssign, userRole, userDept])
+
+  // Determine which dept to use for category dropdown
+  const assigneeDept = useMemo(() => {
+    if (form.assignee) {
+      const u = users.find(u => u.username === form.assignee)
+      return u?.department || userDept
+    }
+    return userDept
+  }, [form.assignee, users, userDept])
+
+  const deptCategories = (categories || {})[assigneeDept] || []
 
   const setF = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
@@ -177,6 +188,19 @@ function AddTaskModal({ onClose, onSave, users, userRole, userDept }) {
                 <option value="">— Chọn nhân viên —</option>
                 {assignableUsers.map(u => (
                   <option key={u.username} value={u.username}>{u.displayName} ({u.department})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {deptCategories.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Đầu mục công việc</label>
+              <select value={form.category} onChange={e => setF('category', e.target.value)}
+                className="w-full border border-gray-200 rounded px-3 py-2 text-sm outline-none focus:border-blue-400">
+                <option value="">— Chọn đầu mục —</option>
+                {deptCategories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.weight}%)</option>
                 ))}
               </select>
             </div>
@@ -413,9 +437,10 @@ function NhanVienView({ tasks, users, onAddTask, onSelectTask, username }) {
 }
 
 // ─── Trưởng phòng View ───────────────────────────────────────────────────────
-function TruongPhongView({ tasks, users, department, onSelectTask }) {
+function TruongPhongView({ tasks, users, department, onSelectTask, categories, onSaveCategories }) {
   const [selectedUser, setSelectedUser] = useState(null)
   const [viewMode, setViewMode] = useState('board')
+  const [catModal, setCatModal] = useState(null)
 
   const deptUsers = useMemo(() =>
     users.filter(u => u.role === 'nhanvien' && u.department === department),
@@ -515,25 +540,133 @@ function TruongPhongView({ tasks, users, department, onSelectTask }) {
       )}
 
       {/* Task list / list view / gantt */}
-      {viewMode === 'board' && (
-        <div className="space-y-2">
-          {userTasks.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">Chưa có công việc nào</p>
-          ) : (
-            userTasks
-              .sort((a, b) => {
-                const order = { todo: 0, inprogress: 1, done: 2 }
-                return (order[a.status] ?? 3) - (order[b.status] ?? 3)
-              })
-              .map(t => <TaskCard key={t.id} task={t} onClick={onSelectTask} showAssignee={true} />)
-          )}
-        </div>
-      )}
+      {viewMode === 'board' && (() => {
+        const deptCats = (categories || {})[department] || []
+        const catMap = {}
+        deptCats.forEach(c => { catMap[c.id] = c })
+        const grouped = {}
+        const uncategorized = []
+        userTasks.forEach(t => {
+          if (t.category && catMap[t.category]) {
+            if (!grouped[t.category]) grouped[t.category] = []
+            grouped[t.category].push(t)
+          } else {
+            uncategorized.push(t)
+          }
+        })
+        const weightedScore = deptCats.length > 0 ? (() => {
+          let total = 0
+          deptCats.forEach(cat => {
+            const catTasks = grouped[cat.id] || []
+            const done = catTasks.filter(t => t.status === 'done').length
+            const pct = catTasks.length > 0 ? (done / catTasks.length) * 100 : 0
+            total += (cat.weight / 100) * pct
+          })
+          return Math.round(total)
+        })() : null
+
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Công việc — {department}</p>
+              <div className="flex items-center gap-2">
+                {weightedScore !== null && (
+                  <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">
+                    Tiến độ tổng hợp: {weightedScore}%
+                  </span>
+                )}
+                <button onClick={() => setCatModal(department)}
+                  className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg font-medium">
+                  ⚙ Quản lý đầu mục
+                </button>
+              </div>
+            </div>
+
+            {deptCats.length > 0 ? (
+              <>
+                {deptCats.map(cat => {
+                  const catTasks = grouped[cat.id] || []
+                  const done = catTasks.filter(t => t.status === 'done').length
+                  const pct = catTasks.length > 0 ? Math.round((done / catTasks.length) * 100) : 0
+                  return (
+                    <div key={cat.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-indigo-50">
+                        <div className="flex items-center gap-3">
+                          <span className="font-semibold text-indigo-800 text-sm">{cat.name}</span>
+                          <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-bold">
+                            Trọng số {cat.weight}%
+                          </span>
+                          <span className="text-xs text-gray-500">{catTasks.length} công việc</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-xs font-bold text-indigo-600">{pct}%</span>
+                        </div>
+                      </div>
+                      <div className="p-3 space-y-2">
+                        {catTasks.length === 0
+                          ? <p className="text-xs text-gray-400 text-center py-2">Chưa có công việc nào</p>
+                          : catTasks
+                              .sort((a,b) => { const o={todo:0,inprogress:1,done:2}; return (o[a.status]??3)-(o[b.status]??3) })
+                              .map(t => <TaskCard key={t.id} task={t} onClick={onSelectTask} showAssignee={true} />)
+                        }
+                      </div>
+                    </div>
+                  )
+                })}
+                {uncategorized.length > 0 && (
+                  <div className="bg-white rounded-xl border border-dashed border-gray-300 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                      <span className="font-semibold text-gray-500 text-sm">Chưa phân loại</span>
+                      <span className="ml-2 text-xs text-gray-400">{uncategorized.length} công việc</span>
+                    </div>
+                    <div className="p-3 space-y-2">
+                      {uncategorized
+                        .sort((a,b) => { const o={todo:0,inprogress:1,done:2}; return (o[a.status]??3)-(o[b.status]??3) })
+                        .map(t => <TaskCard key={t.id} task={t} onClick={onSelectTask} showAssignee={true} />)
+                      }
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex justify-end">
+                  <button onClick={() => setCatModal(department)}
+                    className="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg font-medium">
+                    + Thiết lập đầu mục công việc
+                  </button>
+                </div>
+                {userTasks.length === 0
+                  ? <p className="text-sm text-gray-400 text-center py-6">Chưa có công việc nào</p>
+                  : userTasks
+                      .sort((a,b) => { const o={todo:0,inprogress:1,done:2}; return (o[a.status]??3)-(o[b.status]??3) })
+                      .map(t => <TaskCard key={t.id} task={t} onClick={onSelectTask} showAssignee={true} />)
+                }
+              </div>
+            )}
+          </div>
+        )
+      })()}
       {viewMode === 'list' && (
         <ListView tasks={userTasks} onSelectTask={onSelectTask} />
       )}
       {viewMode === 'gantt' && (
         <GanttView tasks={userTasks} users={users} onSelectTask={onSelectTask} />
+      )}
+
+      {catModal && (
+        <CategoryManagerModal
+          dept={catModal}
+          categories={categories || {}}
+          onClose={() => setCatModal(null)}
+          onSave={async (dept, cats) => {
+            const updated = { ...(categories || {}), [dept]: cats }
+            await onSaveCategories(updated)
+          }}
+        />
       )}
     </div>
   )
@@ -559,46 +692,95 @@ function ViewToggle({ mode, onChange }) {
 
 // ─── List View ────────────────────────────────────────────────────────────────
 function ListView({ tasks, onSelectTask }) {
-  const sorted = [...tasks].sort((a, b) => {
-    const o = { todo: 0, inprogress: 1, done: 2 }
-    return (o[a.status] ?? 3) - (o[b.status] ?? 3)
+  // Group: dept → assignee → tasks
+  const byDept = {}
+  tasks.forEach(t => {
+    const dept = t.department || '(Chưa phân phòng)'
+    if (!byDept[dept]) byDept[dept] = {}
+    const key = t.assignee
+    if (!byDept[dept][key]) byDept[dept][key] = { name: t.assigneeName || t.assignee, tasks: [] }
+    byDept[dept][key].tasks.push(t)
   })
+  const depts = Object.keys(byDept).sort()
+  const statusOrder = { todo: 0, inprogress: 1, done: 2 }
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b border-gray-200">
-          <tr>
-            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Công việc</th>
-            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Chi nhánh / BP</th>
-            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Nhân viên</th>
-            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Ưu tiên</th>
-            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Trạng thái</th>
-            <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Hạn</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.length === 0 ? (
-            <tr><td colSpan={6} className="text-center py-8 text-gray-400">Chưa có công việc nào</td></tr>
-          ) : sorted.map(task => {
-            const overdue = isOverdue(task.deadline, task.status)
-            return (
-              <tr key={task.id} onClick={() => onSelectTask(task)}
-                className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
-                <td className="px-3 py-2 font-medium text-gray-800 max-w-xs">
-                  <span className="line-clamp-1">{task.title}</span>
-                </td>
-                <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{task.department}</td>
-                <td className="px-3 py-2 text-indigo-600 whitespace-nowrap">{task.assigneeName || task.assignee}</td>
-                <td className="px-3 py-2"><PriorityBadge priority={task.priority} /></td>
-                <td className="px-3 py-2"><StatusBadge status={task.status} /></td>
-                <td className={`px-3 py-2 whitespace-nowrap text-xs ${overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-                  {overdue ? '⚠ ' : ''}{fmtDate(task.deadline)}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      {tasks.length === 0 ? (
+        <p className="text-center py-10 text-sm text-gray-400">Chưa có công việc nào</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Công việc</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Ưu tiên</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Trạng thái</th>
+              <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Hạn</th>
+            </tr>
+          </thead>
+          <tbody>
+            {depts.map(dept => {
+              const assignees = Object.entries(byDept[dept])
+              const deptTasks = assignees.flatMap(([,v]) => v.tasks)
+              const deptDone = deptTasks.filter(t => t.status === 'done').length
+              const deptPct = deptTasks.length ? Math.round(deptDone / deptTasks.length * 100) : 0
+              return (
+                <React.Fragment key={dept}>
+                  {/* Department header */}
+                  <tr className="bg-indigo-700">
+                    <td colSpan={4} className="px-4 py-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-white uppercase tracking-wider">🏢 {dept}</span>
+                        <span className="text-xs text-indigo-200">
+                          {deptDone}/{deptTasks.length} hoàn thành ({deptPct}%)
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                  {assignees.map(([assignee, { name, tasks: aTasks }]) => {
+                    const aDone = aTasks.filter(t => t.status === 'done').length
+                    const sorted = [...aTasks].sort((a,b) => (statusOrder[a.status]??3)-(statusOrder[b.status]??3))
+                    return (
+                      <React.Fragment key={assignee}>
+                        {/* Assignee sub-header */}
+                        <tr className="bg-indigo-50 border-b border-indigo-100">
+                          <td colSpan={4} className="px-4 py-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0">
+                                {name.charAt(0)}
+                              </span>
+                              <span className="text-xs font-semibold text-indigo-800">{name}</span>
+                              <span className="text-xs text-indigo-400">{aDone}/{aTasks.length} công việc</span>
+                            </div>
+                          </td>
+                        </tr>
+                        {/* Task rows */}
+                        {sorted.map(task => {
+                          const overdue = isOverdue(task.deadline, task.status)
+                          return (
+                            <tr key={task.id} onClick={() => onSelectTask(task)}
+                              className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
+                              <td className="pl-10 pr-3 py-2 font-medium text-gray-800 max-w-xs">
+                                <span className="line-clamp-1">{task.title}</span>
+                                {task.description && <span className="block text-xs text-gray-400 truncate">{task.description}</span>}
+                              </td>
+                              <td className="px-3 py-2"><PriorityBadge priority={task.priority} /></td>
+                              <td className="px-3 py-2"><StatusBadge status={task.status} /></td>
+                              <td className={`px-3 py-2 whitespace-nowrap text-xs ${overdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                                {overdue ? '⚠ ' : ''}{fmtDate(task.deadline)}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </React.Fragment>
+                    )
+                  })}
+                </React.Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
     </div>
   )
 }
@@ -641,13 +823,16 @@ function GanttView({ tasks, users, onSelectTask }) {
 
   const todayLeft = toLeft(now)
 
-  // Group tasks by assignee
-  const grouped = {}
+  // Group: dept → assignee → tasks
+  const byDept = {}
   tasks.forEach(t => {
+    const dept = t.department || '(Chưa phân phòng)'
+    if (!byDept[dept]) byDept[dept] = {}
     const key = t.assignee
-    if (!grouped[key]) grouped[key] = { user: users.find(u => u.username === key), tasks: [] }
-    grouped[key].tasks.push(t)
+    if (!byDept[dept][key]) byDept[dept][key] = { user: users.find(u => u.username === key), tasks: [] }
+    byDept[dept][key].tasks.push(t)
   })
+  const depts = Object.keys(byDept).sort()
 
   const barColor = (task) => {
     if (task.status === 'done') return 'bg-green-400'
@@ -662,7 +847,7 @@ function GanttView({ tasks, users, onSelectTask }) {
         <div style={{ minWidth: '700px' }}>
           {/* Month header */}
           <div className="flex border-b border-gray-200 bg-gray-50 text-xs text-gray-500">
-            <div className="w-44 shrink-0 px-3 py-2 font-semibold border-r border-gray-200">Nhân viên / Công việc</div>
+            <div className="w-48 shrink-0 px-3 py-2 font-semibold border-r border-gray-200">Phòng ban / Nhân viên / Công việc</div>
             <div className="flex-1 relative h-8">
               {months.map(m => (
                 <div key={m.getTime()} className="absolute top-0 bottom-0 flex items-center border-l border-gray-200 px-1"
@@ -674,45 +859,64 @@ function GanttView({ tasks, users, onSelectTask }) {
             </div>
           </div>
 
-          {/* Rows */}
-          {Object.entries(grouped).map(([assignee, { user, tasks: aTasks }]) => (
-            <div key={assignee}>
-              {/* Assignee header */}
-              <div className="flex bg-indigo-50 border-b border-gray-100 text-xs font-semibold text-indigo-700">
-                <div className="w-44 shrink-0 px-3 py-1.5 border-r border-gray-200 truncate">
-                  {user?.displayName || assignee}
-                  <span className="ml-1 font-normal text-indigo-400">({aTasks.length})</span>
-                </div>
-                <div className="flex-1 relative" style={{ minHeight: '24px' }}>
-                  <div className="absolute top-0 bottom-0 border-l border-red-300" style={{ left: todayLeft }} />
-                </div>
-              </div>
-              {/* Task bars */}
-              {aTasks.map(task => (
-                <div key={task.id} className="flex border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
-                  onClick={() => onSelectTask(task)}>
-                  <div className="w-44 shrink-0 px-3 py-1 text-xs text-gray-600 border-r border-gray-200 truncate">
-                    {task.title}
+          {/* Rows grouped by dept then assignee */}
+          {depts.map(dept => {
+            const deptAssignees = Object.entries(byDept[dept])
+            return (
+              <React.Fragment key={dept}>
+                {/* Department band */}
+                <div className="flex bg-indigo-700 border-b border-indigo-600">
+                  <div className="w-48 shrink-0 px-3 py-1.5 border-r border-indigo-600">
+                    <span className="text-xs font-bold text-white uppercase tracking-wide">🏢 {dept}</span>
                   </div>
-                  <div className="flex-1 relative" style={{ height: '28px' }}>
-                    {months.map(m => (
-                      <div key={m.getTime()} className="absolute top-0 bottom-0 border-l border-gray-100"
-                        style={{ left: toLeft(m) }} />
+                  <div className="flex-1 relative" style={{ minHeight: '24px' }}>
+                    <div className="absolute top-0 bottom-0 border-l-2 border-red-300 opacity-60" style={{ left: todayLeft }} />
+                  </div>
+                </div>
+                {deptAssignees.map(([assignee, { user, tasks: aTasks }]) => (
+                  <React.Fragment key={assignee}>
+                    {/* Assignee sub-header */}
+                    <div className="flex bg-indigo-50 border-b border-gray-100 text-xs font-semibold text-indigo-700">
+                      <div className="w-48 shrink-0 px-3 py-1.5 border-r border-gray-200 truncate flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-indigo-200 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0">
+                          {(user?.displayName || assignee).charAt(0)}
+                        </span>
+                        <span className="truncate">{user?.displayName || assignee}</span>
+                        <span className="ml-1 font-normal text-indigo-400 shrink-0">({aTasks.length})</span>
+                      </div>
+                      <div className="flex-1 relative" style={{ minHeight: '24px' }}>
+                        <div className="absolute top-0 bottom-0 border-l border-red-300" style={{ left: todayLeft }} />
+                      </div>
+                    </div>
+                    {/* Task bars */}
+                    {aTasks.map(task => (
+                      <div key={task.id} className="flex border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                        onClick={() => onSelectTask(task)}>
+                        <div className="w-48 shrink-0 pl-8 pr-3 py-1 text-xs text-gray-600 border-r border-gray-200 truncate">
+                          {task.title}
+                        </div>
+                        <div className="flex-1 relative" style={{ height: '28px' }}>
+                          {months.map(m => (
+                            <div key={m.getTime()} className="absolute top-0 bottom-0 border-l border-gray-100"
+                              style={{ left: toLeft(m) }} />
+                          ))}
+                          <div className="absolute top-0 bottom-0 border-l border-red-200" style={{ left: todayLeft }} />
+                          {task.createdAt && (
+                            <div
+                              onClick={e => { e.stopPropagation(); onSelectTask(task) }}
+                              className={`absolute top-2 bottom-2 rounded ${barColor(task)} opacity-80 hover:opacity-100 transition-opacity`}
+                              style={{ left: toLeft(task.createdAt), width: toWidth(task.createdAt, task.deadline) }}
+                              title={`${task.title} | ${user?.displayName || assignee} | Hạn: ${fmtDate(task.deadline)}`}
+                            />
+                          )}
+                        </div>
+                      </div>
                     ))}
-                    <div className="absolute top-0 bottom-0 border-l border-red-200" style={{ left: todayLeft }} />
-                    {task.createdAt && (
-                      <div
-                        onClick={e => { e.stopPropagation(); onSelectTask(task) }}
-                        className={`absolute top-2 bottom-2 rounded ${barColor(task)} opacity-80 hover:opacity-100 transition-opacity`}
-                        style={{ left: toLeft(task.createdAt), width: toWidth(task.createdAt, task.deadline) }}
-                        title={`${task.title} | Hạn: ${fmtDate(task.deadline)}`}
-                      />
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ))}
+                  </React.Fragment>
+                ))}
+              </React.Fragment>
+            )
+          })}
 
           {tasks.length === 0 && (
             <div className="text-center py-10 text-sm text-gray-400">Chưa có công việc nào</div>
@@ -723,10 +927,84 @@ function GanttView({ tasks, users, onSelectTask }) {
   )
 }
 
+// ─── Category Manager Modal ──────────────────────────────────────────────────
+function CategoryManagerModal({ dept, categories, onClose, onSave }) {
+  const deptCats = categories[dept] || []
+  const [cats, setCats] = useState(
+    deptCats.length > 0 ? deptCats : [{ id: crypto.randomUUID?.() || Date.now().toString(), name: '', weight: 100 }]
+  )
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const totalWeight = cats.reduce((s, c) => s + (Number(c.weight) || 0), 0)
+
+  const addCat = () => setCats(p => [...p, { id: Date.now().toString(), name: '', weight: 0 }])
+  const removeCat = (id) => setCats(p => p.filter(c => c.id !== id))
+  const updateCat = (id, field, val) => setCats(p => p.map(c => c.id === id ? { ...c, [field]: val } : c))
+
+  const handleSave = async () => {
+    if (cats.some(c => !c.name.trim())) { setError('Tên đầu mục không được trống'); return }
+    if (totalWeight !== 100) { setError(`Tổng trọng số phải là 100% (hiện tại: ${totalWeight}%)`); return }
+    setSaving(true)
+    try {
+      await onSave(dept, cats)
+      onClose()
+    } catch { setError('Lỗi lưu') } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-800">Đầu mục công việc</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{dept}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+        <div className="p-5 space-y-3">
+          {error && <p className="text-sm text-red-600 bg-red-50 rounded px-3 py-2">{error}</p>}
+          <div className="space-y-2">
+            {cats.map((c, i) => (
+              <div key={c.id} className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-5 text-right">{i + 1}.</span>
+                <input value={c.name} onChange={e => updateCat(c.id, 'name', e.target.value)}
+                  placeholder="Tên đầu mục..."
+                  className="flex-1 border border-gray-200 rounded px-2 py-1.5 text-sm outline-none focus:border-indigo-400" />
+                <div className="flex items-center gap-1">
+                  <input type="number" value={c.weight} onChange={e => updateCat(c.id, 'weight', Number(e.target.value))}
+                    min={0} max={100}
+                    className="w-16 border border-gray-200 rounded px-2 py-1.5 text-sm text-center outline-none focus:border-indigo-400" />
+                  <span className="text-xs text-gray-400">%</span>
+                </div>
+                <button onClick={() => removeCat(c.id)} className="text-red-400 hover:text-red-600 text-lg leading-none px-1">×</button>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <button onClick={addCat} className="text-indigo-600 hover:text-indigo-700 font-medium">+ Thêm đầu mục</button>
+            <span className={`font-semibold ${totalWeight === 100 ? 'text-green-600' : 'text-red-500'}`}>
+              Tổng: {totalWeight}%
+            </span>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded">Hủy</button>
+            <button onClick={handleSave} disabled={saving}
+              className="px-5 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 font-medium disabled:opacity-50">
+              {saving ? 'Đang lưu...' : 'Lưu'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Giám đốc View ───────────────────────────────────────────────────────────
-function GiamDocView({ tasks, users, sites, onSelectTask }) {
+function GiamDocView({ tasks, users, sites, onSelectTask, categories, onSaveCategories }) {
   const [selectedDept, setSelectedDept] = useState(null)
   const [viewMode, setViewMode] = useState('board')
+  const [catModal, setCatModal] = useState(null)
 
   const depts = useMemo(() => {
     const all = [...new Set(tasks.map(t => t.department).filter(Boolean))]
@@ -797,6 +1075,20 @@ function GiamDocView({ tasks, users, sites, onSelectTask }) {
           const overdue = dTasks.filter(t => isOverdue(t.deadline, t.status)).length
           const pct     = dTasks.length > 0 ? Math.round((done / dTasks.length) * 100) : 0
           const isBO    = FIXED_DEPTS.includes(dept)
+
+          const weightedPct = (() => {
+            const cats = (categories || {})[dept] || []
+            if (cats.length === 0) return pct
+            let total = 0
+            cats.forEach(cat => {
+              const catTasks = dTasks.filter(t => t.category === cat.id)
+              const catDone = catTasks.filter(t => t.status === 'done').length
+              const catPct = catTasks.length > 0 ? (catDone / catTasks.length) * 100 : 0
+              total += (cat.weight / 100) * catPct
+            })
+            return Math.round(total)
+          })()
+
           return (
             <div key={dept}
               onClick={() => setSelectedDept(selectedDept === dept ? null : dept)}
@@ -813,8 +1105,8 @@ function GiamDocView({ tasks, users, sites, onSelectTask }) {
                   <p className="text-xs text-gray-500 mt-0.5">{dUsers.length} nhân viên · {dTasks.length} công việc</p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className={`text-2xl font-bold ${pct === 100 ? 'text-green-500' : pct > 50 ? 'text-indigo-600' : 'text-gray-400'}`}>{pct}%</p>
-                  <p className="text-xs text-gray-400">hoàn thành</p>
+                  <p className={`text-2xl font-bold ${weightedPct === 100 ? 'text-green-500' : weightedPct > 50 ? 'text-indigo-600' : 'text-gray-400'}`}>{weightedPct}%</p>
+                  <p className="text-xs text-gray-400">% hoàn thành</p>
                 </div>
               </div>
               <ProgressBar tasks={dTasks} />
@@ -836,6 +1128,26 @@ function GiamDocView({ tasks, users, sites, onSelectTask }) {
                             style={{ width: uTasks.length > 0 ? `${(uDone/uTasks.length)*100}%` : '0%' }} />
                         </div>
                         <span className="text-xs text-gray-400 whitespace-nowrap">{uDone}/{uTasks.length}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {((categories || {})[dept] || []).length > 0 && (
+                <div className="border-t border-gray-100 pt-2 space-y-1">
+                  {((categories || {})[dept] || []).map(cat => {
+                    const catTasks = dTasks.filter(t => t.category === cat.id)
+                    const catDone = catTasks.filter(t => t.status === 'done').length
+                    const catPct = catTasks.length > 0 ? Math.round((catDone / catTasks.length) * 100) : 0
+                    return (
+                      <div key={cat.id} className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 w-24 shrink-0 truncate">{cat.name}</span>
+                        <span className="text-xs text-gray-400 w-8 text-right shrink-0">{cat.weight}%</span>
+                        <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                          <div className="h-full bg-indigo-400 rounded-full transition-all"
+                            style={{ width: `${catPct}%` }} />
+                        </div>
+                        <span className="text-xs text-gray-400 whitespace-nowrap w-8 text-right">{catPct}%</span>
                       </div>
                     )
                   })}

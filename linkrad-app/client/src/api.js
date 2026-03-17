@@ -63,4 +63,7 @@ export const updateTask     = (id, data) => api.put(`/tasks/${id}`, data).then(r
 export const addComment     = (id, text) => api.post(`/tasks/${id}/comments`, { text }).then(r => r.data)
 export const deleteTask     = (id) => api.delete(`/tasks/${id}`).then(r => r.data)
 
+export const getWorkCategories  = () => api.get('/work-categories').then(r => r.data)
+export const saveWorkCategories = (data) => api.put('/work-categories', data).then(r => r.data)
+
 export default api

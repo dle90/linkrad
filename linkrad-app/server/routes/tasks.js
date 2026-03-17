@@ -37,7 +37,7 @@ router.post('/', requireAuth, async (req, res) => {
     const { role, username, department } = req.user
     if (role === 'guest') return res.status(403).json({ error: 'Guest không thể tạo công việc' })
 
-    const { title, description, deadline, priority, assignee } = req.body
+    const { title, description, deadline, priority, assignee, category } = req.body
     if (!title || !title.trim()) return res.status(400).json({ error: 'Tiêu đề công việc không được trống' })
 
     let taskAssignee = username
@@ -61,6 +61,7 @@ router.post('/', requireAuth, async (req, res) => {
       assignee: taskAssignee,
       assigneeName: assigneeUser?.displayName || taskAssignee,
       department: taskDept,
+      category: category || '',
       createdAt: now,
       updatedAt: now,
       comments: [],
@@ -82,7 +83,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (role === 'nhanvien' && task.assignee !== username) return res.status(403).json({ error: 'Không có quyền chỉnh sửa công việc của người khác' })
     if (role === 'truongphong' && task.department !== department) return res.status(403).json({ error: 'Không có quyền chỉnh sửa công việc phòng khác' })
 
-    const { status, result, title, description, deadline, priority } = req.body
+    const { status, result, title, description, deadline, priority, category } = req.body
     if (status !== undefined) task.status = status
     if (result !== undefined) task.result = result
     if (role !== 'nhanvien' || task.assignee === username) {
@@ -90,6 +91,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       if (description !== undefined) task.description = description
       if (deadline !== undefined) task.deadline = deadline
       if (priority !== undefined) task.priority = priority
+      if (category !== undefined) task.category = category
     }
     task.updatedAt = new Date().toISOString()
     await task.save()

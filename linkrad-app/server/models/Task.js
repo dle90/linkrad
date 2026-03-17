@@ -19,6 +19,7 @@ const taskSchema = new mongoose.Schema({
   assignee: String,
   assigneeName: String,
   department: String,
+  category: { type: String, default: '' },
   createdAt: String,
   updatedAt: String,
   comments: [commentSchema],
