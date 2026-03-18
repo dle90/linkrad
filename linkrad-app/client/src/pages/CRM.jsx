@@ -2,6 +2,10 @@ import React, { useEffect, useState, useRef, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { getCRM, saveCRM } from '../api'
 import { useAuth } from '../context/AuthContext'
+import {
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend,
+} from 'recharts'
 
 // ── helpers ───────────────────────────────────────────────────────────
 function toYYYYMM(raw) {
@@ -332,6 +336,22 @@ export default function CRM() {
     return { totalKH, totalDocs: docSet.size, totalHosps: hospSet.size, totalSites: sites.length }
   }, [data, months])
 
+  // chart: unique active doctors + total patients per month (always all months for trend visibility)
+  const doctorTrend = useMemo(() => {
+    if (!data) return []
+    return data.months.map(m => {
+      const docSet = new Set()
+      let kh = 0
+      for (const hs of Object.values(data.sites))
+        for (const ds of Object.values(hs))
+          for (const [d, mo] of Object.entries(ds)) {
+            const v = mo[m] || 0
+            if (v > 0) { docSet.add(d); kh += v }
+          }
+      return { month: fmtMo(m), docs: docSet.size, kh }
+    })
+  }, [data])
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -461,6 +481,35 @@ export default function CRM() {
 
           {/* Summary Table */}
           <SummaryTable data={data} months={months} siteList={siteList} BLUE={BLUE} NAVY={NAVY} />
+
+          {/* Doctor trend chart */}
+          {doctorTrend.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-bold text-gray-800">📈 Xu hướng Bác sĩ Active theo tháng</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Số bác sĩ có ít nhất 1 lượt chỉ định · Cột xám = Lượt KH (trục phải)</p>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={240}>
+                <ComposedChart data={doctorTrend} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={36} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={48} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', fontSize: 12 }}
+                    formatter={(v, name) => [v.toLocaleString('vi-VN'), name === 'docs' ? 'Bác sĩ active' : 'Lượt KH']}
+                  />
+                  <Legend formatter={v => v === 'docs' ? 'Bác sĩ active' : 'Lượt KH'} wrapperStyle={{ fontSize: 12 }} />
+                  <Bar yAxisId="right" dataKey="kh" fill="#e0e7ff" radius={[3,3,0,0]} name="kh" />
+                  <Line yAxisId="left" dataKey="docs" type="monotone" stroke={BLUE} strokeWidth={2.5}
+                    dot={{ fill: BLUE, r: 4, strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6 }} name="docs" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           {/* Site selector (2-row wrap) */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3.5">
