@@ -6,9 +6,9 @@ const User = require('../models/User')
 const { requireAuth } = require('../middleware/auth')
 
 const ORTHANC_BASE = process.env.ORTHANC_URL || 'http://localhost:8042'
-// Public URL the browser uses to open the viewer (may differ from server-side ORTHANC_BASE)
-const _rawPublic = process.env.ORTHANC_PUBLIC_URL || process.env.ORTHANC_URL || 'http://localhost:8042'
-const ORTHANC_PUBLIC = _rawPublic.startsWith('http') ? _rawPublic : `https://${_rawPublic}`
+// Public URL the browser uses to open the OHIF viewer
+const _rawOhif = process.env.OHIF_URL || 'http://localhost:3000'
+const OHIF_PUBLIC = _rawOhif.startsWith('http') ? _rawOhif : `https://${_rawOhif}`
 
 // Helper: generate a fake DICOM-style Study UID
 function genStudyUID() {
@@ -348,7 +348,7 @@ router.get('/orthanc/studies', requireAuth, async (req, res) => {
   }
 })
 
-// GET /orthanc/viewer-url/:studyUID — resolve StudyInstanceUID → OE2 viewer URL
+// GET /orthanc/viewer-url/:studyUID — resolve StudyInstanceUID → OHIF viewer URL
 router.get('/orthanc/viewer-url/:studyUID', requireAuth, async (req, res) => {
   try {
     const uid = req.params.studyUID
@@ -357,13 +357,13 @@ router.get('/orthanc/viewer-url/:studyUID', requireAuth, async (req, res) => {
     if (!response.ok) return res.status(502).json({ error: 'Orthanc error' })
     const ids = await response.json()
     if (!ids || ids.length === 0) {
-      return res.json({ url: `${ORTHANC_PUBLIC}/ui/app/`, found: false })
+      return res.json({ url: `${OHIF_PUBLIC}/`, found: false })
     }
     const orthancId = ids[0]
-    const viewerUrl = `${ORTHANC_PUBLIC}/ui/app/#/filtered-studies?StudyInstanceUID=${encodeURIComponent(uid)}`
+    const viewerUrl = `${OHIF_PUBLIC}/viewer?StudyInstanceUIDs=${encodeURIComponent(uid)}`
     res.json({ url: viewerUrl, orthancId, found: true })
   } catch (err) {
-    res.json({ url: `${ORTHANC_PUBLIC}/ui/app/`, found: false, error: err.message })
+    res.json({ url: `${OHIF_PUBLIC}/`, found: false, error: err.message })
   }
 })
 
