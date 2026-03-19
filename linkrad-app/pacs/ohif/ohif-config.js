@@ -1,27 +1,35 @@
 window.config = {
   routerBasename: '/',
+  extensions: [],
+  modes: [],
   showStudyList: true,
+  maxNumberOfWebWorkers: 3,
+  showWarningMessageForCrossOrigin: false,
+  showCPUFallbackMessage: true,
+  showLoadingIndicator: true,
+  strictZSpacingForVolumeViewport: true,
+  defaultDataSourceName: 'dicomweb',
   dataSources: [
     {
       namespace: '@ohif/extension-default.dataSourcesModule.dicomweb',
       sourceName: 'dicomweb',
       configuration: {
-        friendlyName: 'LinkRad Orthanc',
+        friendlyName: 'LinkRad PACS',
         name: 'orthanc',
-        // /wado is proxied to Orthanc by nginx — same origin, no CORS needed
-        wadoUriRoot: window.location.origin + '/wado',
-        qidoRoot: window.location.origin + '/wado',
-        wadoRoot: window.location.origin + '/wado',
+        // nginx in this container proxies /wado/ to Orthanc
+        wadoUriRoot: 'https://linkrad-ohif-production.up.railway.app/wado',
+        qidoRoot: 'https://linkrad-ohif-production.up.railway.app/wado',
+        wadoRoot: 'https://linkrad-ohif-production.up.railway.app/wado',
         qidoSupportsIncludeField: false,
+        supportsReject: false,
         imageRendering: 'wadors',
         thumbnailRendering: 'wadors',
         enableStudyLazyLoad: true,
         supportsFuzzyMatching: false,
         supportsWildcard: true,
-        dicomUploadEnabled: true,
+        dicomUploadEnabled: false,
         omitQuotationForMultipartRequest: true,
       },
     },
   ],
-  defaultDataSourceName: 'dicomweb',
 };
