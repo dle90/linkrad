@@ -1,7 +1,9 @@
 FROM ohif/app:latest
 
-# Replace the default OHIF config with our custom one
-# Points WADO/QIDO directly at the Orthanc cloud URL (CORS is enabled on Orthanc)
+# Replace OHIF config — /wado proxied to Orthanc by nginx (no CORS issue)
 COPY ohif-config.js /usr/share/nginx/html/app-config.js
+
+# Replace nginx config with one that proxies /wado/ to Orthanc
+COPY ohif-nginx-cloud.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
