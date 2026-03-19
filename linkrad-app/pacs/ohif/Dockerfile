@@ -13,8 +13,9 @@ COPY ohif-config.js /usr/share/nginx/html/app-config.js
 COPY ohif-nginx.conf /etc/nginx/conf.d/default.conf.template
 
 # Startup script that runs envsubst then starts nginx
+# Strip Windows CRLF line endings so #!/bin/sh works on Linux
 COPY docker-entrypoint-ohif.sh /docker-entrypoint-ohif.sh
-RUN chmod +x /docker-entrypoint-ohif.sh
+RUN sed -i 's/\r$//' /docker-entrypoint-ohif.sh && chmod +x /docker-entrypoint-ohif.sh
 
 # Set at deploy time via Railway env var:
 #   ORTHANC_BACKEND_URL=https://linkrad-production-2fde.up.railway.app
