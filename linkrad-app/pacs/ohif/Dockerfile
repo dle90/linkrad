@@ -1,4 +1,4 @@
-FROM ohif/app:latest
+FROM ohif/app:v3.8.3
 
 # Replace OHIF config — /wado proxied to Orthanc by nginx (no CORS issue)
 COPY ohif-config.js /usr/share/nginx/html/app-config.js
