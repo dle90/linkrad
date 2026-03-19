@@ -8,10 +8,10 @@ window.config = {
       configuration: {
         friendlyName: 'LinkRad Orthanc',
         name: 'orthanc',
-        // Use window.location.origin so this works on any host (local or cloud)
-        wadoUriRoot: window.location.origin + '/wado',
-        qidoRoot: window.location.origin + '/wado',
-        wadoRoot: window.location.origin + '/wado',
+        // Cloud: OHIF points directly to Orthanc (CORS is enabled on Orthanc)
+        wadoUriRoot: 'https://linkrad-production-2fde.up.railway.app/wado',
+        qidoRoot: 'https://linkrad-production-2fde.up.railway.app/wado',
+        wadoRoot: 'https://linkrad-production-2fde.up.railway.app/wado',
         qidoSupportsIncludeField: false,
         imageRendering: 'wadors',
         thumbnailRendering: 'wadors',
