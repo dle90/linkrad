@@ -15,6 +15,7 @@ import RIS from './pages/RIS'
 import HIS from './pages/HIS'
 import CRM from './pages/CRM'
 import KPISales from './pages/KPISales'
+import Marketing from './pages/Marketing'
 
 function AppRoutes() {
   const { auth } = useAuth()
@@ -39,6 +40,7 @@ function AppRoutes() {
         <Route path="/sites" element={<SiteList />} />
         <Route path="/crm" element={<CRM />} />
         <Route path="/kpi-sales" element={<KPISales />} />
+        <Route path="/marketing" element={<Marketing />} />
       </Routes>
     </Layout>
   )

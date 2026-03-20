@@ -69,4 +69,7 @@ export const saveWorkCategories = (data) => api.put('/work-categories', data).th
 export const getKPI  = () => api.get('/kpi').then(r => r.data)
 export const saveKPI = (data) => api.put('/kpi', data).then(r => r.data)
 
+export const getMarketing  = () => api.get('/marketing').then(r => r.data)
+export const saveMarketing = (data) => api.put('/marketing', data).then(r => r.data)
+
 export default api

@@ -33,8 +33,9 @@ const NAV = [
   {
     group: 'CRM',
     items: [
-      { path: '/crm',       label: 'Phân tích KH',  icon: '👥' },
-      { path: '/kpi-sales', label: 'KPI Sales',      icon: '🎯' }
+      { path: '/crm',        label: 'Phân tích KH',  icon: '👥' },
+      { path: '/kpi-sales',  label: 'KPI Sales',     icon: '🎯' },
+      { path: '/marketing',  label: 'Marketing',     icon: '📣' }
     ]
   },
 ]
