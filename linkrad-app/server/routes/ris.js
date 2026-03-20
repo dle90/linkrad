@@ -140,8 +140,10 @@ router.post('/studies', requireAuth, async (req, res) => {
 
     const now = new Date().toISOString()
 
+    const uid = genStudyUID()
     const study = new Study({
-      studyUID: genStudyUID(),
+      _id: uid,
+      studyUID: uid,
       patientName,
       patientId,
       dob,
