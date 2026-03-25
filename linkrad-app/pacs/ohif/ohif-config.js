@@ -17,9 +17,9 @@ window.config = {
         friendlyName: 'LinkRad PACS',
         name: 'orthanc',
         // nginx in this container proxies /wado/ to Orthanc
-        wadoUriRoot: 'https://linkrad-ohif-production.up.railway.app/wado',
-        qidoRoot: 'https://linkrad-ohif-production.up.railway.app/wado',
-        wadoRoot: 'https://linkrad-ohif-production.up.railway.app/wado',
+        wadoUriRoot: '/wado',
+        qidoRoot: '/wado',
+        wadoRoot: '/wado',
         qidoSupportsIncludeField: false,
         supportsReject: false,
         imageRendering: 'wadors',

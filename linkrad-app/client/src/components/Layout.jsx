@@ -15,8 +15,11 @@ const NAV = [
     group: 'Hoạt động',
     items: [
       { path: '/workflow', label: 'Công việc', icon: '✅', workflowOnly: true },
-      { path: '/his',      label: 'HIS',        icon: '🏥', workflowOnly: true },
+      { path: '/registration', label: 'Đăng ký', icon: '🏥', workflowOnly: true },
       { path: '/ris',      label: 'RIS',        icon: '🩻', workflowOnly: true },
+      { path: '/teleradiology', label: 'Đọc phim', icon: '🖥️', workflowOnly: true },
+      { path: '/telerad-admin', label: 'Quản lý đọc hộ', icon: '📋', adminOnly: true },
+      { path: '/telerad-reading', label: 'Đọc phim --', icon: '🔬', workflowOnly: true },
     ]
   },
   {
@@ -54,6 +57,7 @@ export default function Layout({ children }) {
   const isAdmin = auth?.role === 'admin'
   const isFinancialsUser = auth?.role === 'admin' || auth?.role === 'giamdoc'
   const isWorkflowUser = auth?.role && auth.role !== 'guest'
+  const [sidebarOpen, setSidebarOpen] = React.useState(true)
 
   const handleLogout = async () => {
     try { await logoutUser() } catch {}
@@ -63,7 +67,7 @@ export default function Layout({ children }) {
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 flex flex-col overflow-y-auto" style={{ backgroundColor: '#1e3a5f' }}>
+      <aside className={`${sidebarOpen ? 'w-56' : 'w-0'} flex-shrink-0 flex flex-col overflow-y-auto overflow-x-hidden transition-all duration-200`} style={{ backgroundColor: '#1e3a5f' }}>
         {/* Logo */}
         <div className="px-4 py-4 border-b border-blue-800">
           <div className="text-white font-bold text-lg tracking-wide">LinkRad</div>
@@ -133,7 +137,18 @@ export default function Layout({ children }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top header */}
         <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0">
-          <h1 className="text-lg font-semibold text-gray-800">LinkRad Financial Model 2025-2026</h1>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(prev => !prev)}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+              title={sidebarOpen ? 'Ẩn menu' : 'Hiện menu'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+            <h1 className="text-lg font-semibold text-gray-800">LinkRad Financial Model 2025-2026</h1>
+          </div>
           <div className="flex items-center gap-3">
             {!isAdmin && (
               <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">Chế độ xem</span>

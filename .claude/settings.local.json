@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(powershell -Command \"Stop-Process -Name node -Force -ErrorAction SilentlyContinue\")"
+      "Bash(powershell -Command \"Stop-Process -Name node -Force -ErrorAction SilentlyContinue\")",
+      "mcp__playwright__browser_press_key"
     ]
   }
 }

@@ -209,7 +209,7 @@ router.put('/studies/:id', requireAuth, async (req, res) => {
     } else if (role === 'admin' || role === 'giamdoc') {
       // Can set any field
       const allowedFields = [
-        'status', 'verifiedAt', 'patientName', 'patientId', 'dob', 'gender',
+        'status', 'teleradStatus', 'verifiedAt', 'patientName', 'patientId', 'dob', 'gender',
         'modality', 'bodyPart', 'clinicalInfo', 'site', 'scheduledDate', 'studyDate',
         'priority', 'technician', 'technicianName', 'radiologist', 'radiologistName',
         'reportText', 'reportedAt', 'imageStatus', 'imageCount', 'studyUID',
@@ -224,7 +224,15 @@ router.put('/studies/:id', requireAuth, async (req, res) => {
       if (study.radiologist !== req.user.username) {
         return res.status(403).json({ error: 'Ca chụp không được giao cho bạn' })
       }
-      if (body.status !== undefined) {
+      if (body.teleradStatus !== undefined) {
+        if (!['reading', 'reported'].includes(body.teleradStatus)) {
+          return res.status(403).json({ error: 'Bác sĩ chỉ được cập nhật teleradStatus reading hoặc reported' })
+        }
+        updates.teleradStatus = body.teleradStatus
+        if (body.teleradStatus === 'reported') {
+          updates.status = 'reported'
+        }
+      } else if (body.status !== undefined) {
         if (!['reading', 'reported'].includes(body.status)) {
           return res.status(403).json({ error: 'Bác sĩ chỉ được cập nhật trạng thái reading hoặc reported' })
         }
@@ -257,7 +265,23 @@ router.get('/radiologists', requireAuth, async (req, res) => {
   }
 })
 
-// POST /studies/:id/assign — assign study to a radiologist
+// POST /studies/:id/request-telerad — NV cơ sở gửi yêu cầu đọc hộ
+router.post('/studies/:id/request-telerad', requireAuth, async (req, res) => {
+  try {
+    const now = new Date().toISOString()
+    const updated = await Study.findByIdAndUpdate(
+      req.params.id,
+      { $set: { teleradStatus: 'pending', teleradRequested: true, teleradRequestedAt: now, teleradRequestedBy: req.user.username, updatedAt: now } },
+      { new: true }
+    )
+    if (!updated) return res.status(404).json({ error: 'Không tìm thấy ca chụp' })
+    res.json(updated)
+  } catch (err) {
+    res.status(500).json({ error: 'Lỗi server' })
+  }
+})
+
+// POST /studies/:id/assign — admin nền tảng phân công BS đọc hộ
 router.post('/studies/:id/assign', requireAuth, async (req, res) => {
   try {
     const role = req.user.role
@@ -266,12 +290,20 @@ router.post('/studies/:id/assign', requireAuth, async (req, res) => {
     }
     const { radiologistId, radiologistName } = req.body
     const now = new Date().toISOString()
+    const study = await Study.findById(req.params.id)
+    if (!study) return res.status(404).json({ error: 'Không tìm thấy ca chụp' })
+    // Determine next status based on current
+    const setFields = { radiologist: radiologistId, radiologistName, assignedAt: now, updatedAt: now }
+    if (study.teleradRequested) {
+      setFields.teleradStatus = 'assigned'
+    } else {
+      setFields.status = 'pending_read'
+    }
     const updated = await Study.findByIdAndUpdate(
       req.params.id,
-      { $set: { radiologist: radiologistId, radiologistName, assignedAt: now, status: 'pending_read', updatedAt: now } },
+      { $set: setFields },
       { new: true }
     )
-    if (!updated) return res.status(404).json({ error: 'Không tìm thấy ca chụp' })
     res.json(updated)
   } catch (err) {
     res.status(500).json({ error: 'Lỗi server' })
@@ -324,12 +356,23 @@ router.post('/reports', requireAuth, async (req, res) => {
       })
     }
 
-    // Sync study status
-    const studyStatus = status === 'final' ? 'reported' : 'reading'
-    await Study.findByIdAndUpdate(studyId, {
-      $set: { status: studyStatus, reportId: String(report._id), updatedAt: now,
-              ...(status === 'final' ? { reportedAt: now } : {}) }
-    })
+    // Sync study status — if telerad case, update teleradStatus instead of status
+    const studyDoc = await Study.findById(studyId)
+    if (studyDoc && studyDoc.teleradRequested) {
+      const teleradSt = status === 'final' ? 'reported' : 'reading'
+      const setObj = { teleradStatus: teleradSt, reportId: String(report._id), updatedAt: now }
+      if (status === 'final') {
+        setObj.status = 'reported'
+        setObj.reportedAt = now
+      }
+      await Study.findByIdAndUpdate(studyId, { $set: setObj })
+    } else {
+      const studyStatus = status === 'final' ? 'reported' : 'reading'
+      await Study.findByIdAndUpdate(studyId, {
+        $set: { status: studyStatus, reportId: String(report._id), updatedAt: now,
+                ...(status === 'final' ? { reportedAt: now } : {}) }
+      })
+    }
 
     res.json(report)
   } catch (err) {

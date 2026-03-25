@@ -14,7 +14,7 @@ const actualsRouter = require('./routes/actuals')
 const tasksRouter = require('./routes/tasks')
 const risRouter = require('./routes/ris')
 const crmRouter = require('./routes/crm')
-const hisRouter = require('./routes/his')
+const registrationRouter = require('./routes/registration')
 const workCatRouter = require('./routes/work-categories')
 const kpiRouter = require('./routes/kpi')
 const marketingRouter = require('./routes/marketing')
@@ -46,8 +46,8 @@ app.use('/api/tasks', tasksRouter)
 // RIS: auth handled inside the router per endpoint
 app.use('/api/ris', risRouter)
 app.use('/api/crm', guardWrites, crmRouter)
-// HIS: auth handled inside the router per endpoint
-app.use('/api/his', hisRouter)
+// Registration: auth handled inside the router per endpoint
+app.use('/api/registration', registrationRouter)
 // Work categories: auth handled inside the router per endpoint
 app.use('/api/work-categories', workCatRouter)
 // KPI: auth handled inside the router

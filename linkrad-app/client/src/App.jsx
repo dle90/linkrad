@@ -12,10 +12,13 @@ import SiteList from './pages/SiteList'
 import Actuals from './pages/Actuals'
 import Workflow from './pages/Workflow'
 import RIS from './pages/RIS'
-import HIS from './pages/HIS'
+import Registration from './pages/Registration'
 import CRM from './pages/CRM'
 import KPISales from './pages/KPISales'
 import Marketing from './pages/Marketing'
+import Teleradiology, { StudyDetailPage } from './pages/Teleradiology'
+import TeleradAdmin from './pages/TeleradAdmin'
+import TeleradReading from './pages/TeleradReading'
 
 function AppRoutes() {
   const { auth } = useAuth()
@@ -26,23 +29,34 @@ function AppRoutes() {
   const isRISUser = auth.role && auth.role !== 'guest'
 
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        {auth.role === 'admin' && <Route path="/actuals" element={<Actuals />} />}
-        {isWorkflowUser && <Route path="/workflow" element={<Workflow />} />}
-        {isRISUser && <Route path="/ris" element={<RIS />} />}
-        {isWorkflowUser && <Route path="/his" element={<HIS />} />}
-        <Route path="/pl" element={<PL />} />
-        <Route path="/cf" element={<CF />} />
-        <Route path="/bs" element={<BalanceSheet />} />
-        <Route path="/breakeven" element={<Breakeven />} />
-        <Route path="/sites" element={<SiteList />} />
-        <Route path="/crm" element={<CRM />} />
-        <Route path="/kpi-sales" element={<KPISales />} />
-        <Route path="/marketing" element={<Marketing />} />
-      </Routes>
-    </Layout>
+    <Routes>
+      {/* Full-screen study detail (opens in new tab) */}
+      {isWorkflowUser && <Route path="/teleradiology/study/:studyId" element={<StudyDetailPage />} />}
+
+      {/* All other routes wrapped in Layout */}
+      <Route path="*" element={
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            {auth.role === 'admin' && <Route path="/actuals" element={<Actuals />} />}
+            {isWorkflowUser && <Route path="/workflow" element={<Workflow />} />}
+            {isRISUser && <Route path="/ris" element={<RIS />} />}
+            {isWorkflowUser && <Route path="/registration" element={<Registration />} />}
+            {isWorkflowUser && <Route path="/teleradiology" element={<Teleradiology />} />}
+            {auth.role === 'admin' && <Route path="/telerad-admin" element={<TeleradAdmin />} />}
+            {isWorkflowUser && <Route path="/telerad-reading" element={<TeleradReading />} />}
+            <Route path="/pl" element={<PL />} />
+            <Route path="/cf" element={<CF />} />
+            <Route path="/bs" element={<BalanceSheet />} />
+            <Route path="/breakeven" element={<Breakeven />} />
+            <Route path="/sites" element={<SiteList />} />
+            <Route path="/crm" element={<CRM />} />
+            <Route path="/kpi-sales" element={<KPISales />} />
+            <Route path="/marketing" element={<Marketing />} />
+          </Routes>
+        </Layout>
+      } />
+    </Routes>
   )
 }
 

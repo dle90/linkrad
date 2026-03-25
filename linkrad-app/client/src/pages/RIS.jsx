@@ -24,89 +24,39 @@ class ErrorBoundary extends React.Component {
 const fmtDate = (iso) => {
   if (!iso) return '—'
   const d = new Date(iso)
-  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 }
 
-const fmtTime = (iso) => {
+const fmtDateTime = (iso) => {
   if (!iso) return '—'
   const d = new Date(iso)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return `${fmtDate(iso)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-const todayStr = () => {
-  const d = new Date()
-  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
+const todayISO = () => new Date().toISOString().slice(0, 10)
+
+const calcWaitTime = (iso) => {
+  if (!iso) return '—'
+  const diff = Date.now() - new Date(iso).getTime()
+  if (diff < 0) return '—'
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins} phút`
+  const hrs = Math.floor(mins / 60)
+  const remMins = mins % 60
+  return `${hrs} giờ ${remMins} phút`
 }
 
-const isToday = (iso) => {
-  if (!iso) return false
-  const d = new Date(iso)
-  const now = new Date()
-  return d.getDate() === now.getDate() &&
-    d.getMonth() === now.getMonth() &&
-    d.getFullYear() === now.getFullYear()
-}
+// ─── Status Tab Config ────────────────────────────────────────────────────────
 
-const isThisWeek = (iso) => {
-  if (!iso) return false
-  const d = new Date(iso)
-  const now = new Date()
-  const startOfWeek = new Date(now)
-  startOfWeek.setDate(now.getDate() - now.getDay())
-  startOfWeek.setHours(0, 0, 0, 0)
-  const endOfWeek = new Date(startOfWeek)
-  endOfWeek.setDate(startOfWeek.getDate() + 6)
-  endOfWeek.setHours(23, 59, 59, 999)
-  return d >= startOfWeek && d <= endOfWeek
-}
+const STATUS_TABS = [
+  { key: 'waiting',      label: 'CHỜ THỰC HIỆN',   statuses: ['scheduled'] },
+  { key: 'in_progress',  label: 'ĐANG THỰC HIỆN',  statuses: ['in_progress'] },
+  { key: 'pending_read', label: 'CHỜ KẾT QUẢ',     statuses: ['pending_read', 'reading'] },
+  { key: 'completed',    label: 'HOÀN THÀNH',       statuses: ['reported', 'verified'] },
+  { key: 'cancelled',    label: 'HUỶ',              statuses: ['cancelled'] },
+]
 
-// ─── Shared Badge Components ───────────────────────────────────────────────────
-
-function StatusBadge({ status }) {
-  const CONFIG = {
-    scheduled:    { label: 'Đã lên lịch', cls: 'bg-gray-100 text-gray-600' },
-    in_progress:  { label: 'Đang chụp',   cls: 'bg-blue-100 text-blue-700' },
-    pending_read: { label: 'Chờ đọc',     cls: 'bg-yellow-100 text-yellow-700' },
-    reading:      { label: 'Đang đọc',    cls: 'bg-orange-100 text-orange-700' },
-    reported:     { label: 'Có kết quả',  cls: 'bg-green-100 text-green-700' },
-    verified:     { label: 'Đã xác nhận', cls: 'bg-emerald-100 text-emerald-800' },
-  }
-  const c = CONFIG[status] || { label: status, cls: 'bg-gray-100 text-gray-500' }
-  return (
-    <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium ${c.cls}`}>
-      {c.label}
-    </span>
-  )
-}
-
-function PriorityBadge({ priority }) {
-  const CONFIG = {
-    routine: { label: 'Thường',   cls: 'bg-gray-100 text-gray-600' },
-    urgent:  { label: 'Khẩn',    cls: 'bg-orange-100 text-orange-700' },
-    stat:    { label: 'Cấp cứu', cls: 'bg-red-100 text-red-700' },
-  }
-  const c = CONFIG[priority] || { label: priority, cls: 'bg-gray-100 text-gray-500' }
-  return (
-    <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium ${c.cls}`}>
-      {c.label}
-    </span>
-  )
-}
-
-function ModalityBadge({ modality }) {
-  const CONFIG = {
-    CT:  'bg-blue-100 text-blue-700',
-    MRI: 'bg-purple-100 text-purple-700',
-    XR:  'bg-gray-100 text-gray-600',
-    US:  'bg-teal-100 text-teal-700',
-  }
-  const cls = CONFIG[modality] || 'bg-gray-100 text-gray-500'
-  return (
-    <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-semibold ${cls}`}>
-      {modality}
-    </span>
-  )
-}
+// ─── Shared Badges ────────────────────────────────────────────────────────────
 
 function ImageStatusBadge({ imageStatus, imageCount, studyUID }) {
   const CONFIG = {
@@ -134,29 +84,11 @@ function ImageStatusBadge({ imageStatus, imageCount, studyUID }) {
         {c.label}{imageCount > 0 ? ` (${imageCount})` : ''}
       </span>
       {imageStatus === 'available' && (
-        <button
-          onClick={openViewer}
-          disabled={opening}
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white transition-colors whitespace-nowrap"
-        >
+        <button onClick={openViewer} disabled={opening}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white transition-colors whitespace-nowrap">
           {opening ? '...' : 'Xem ảnh'}
         </button>
       )}
-    </div>
-  )
-}
-
-// ─── Stat Card ─────────────────────────────────────────────────────────────────
-
-function StatCard({ label, value, colorBar, sub }) {
-  return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <div className={`h-1 ${colorBar}`} />
-      <div className="px-4 py-3">
-        <div className="text-xs text-gray-500 font-medium">{label}</div>
-        <div className="text-2xl font-bold text-gray-800 mt-1">{value}</div>
-        {sub && <div className="text-xs text-gray-400 mt-0.5">{sub}</div>}
-      </div>
     </div>
   )
 }
@@ -192,22 +124,18 @@ function ReportEditor({ study, onClose, onSaved }) {
     }
   }
 
-  const Field = ({ label, name, rows = 3 }) => (
+  const TextField = ({ label, name, rows = 3 }) => (
     <div>
       <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
-      <textarea
-        rows={rows}
-        value={form[name]}
+      <textarea rows={rows} value={form[name]}
         onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 resize-y"
-      />
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 resize-y" />
     </div>
   )
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-        {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
           <div>
             <h2 className="text-base font-bold text-gray-800">Kết quả đọc phim</h2>
@@ -215,36 +143,27 @@ function ReportEditor({ study, onClose, onSaved }) {
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
         </div>
-
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {loading ? (
             <div className="text-center py-8 text-gray-400 text-sm">Đang tải...</div>
           ) : (
             <>
-              <Field label="Kỹ thuật chụp" name="technique" rows={2} />
-              <Field label="Thông tin lâm sàng" name="clinicalInfo" rows={2} />
-              <Field label="Mô tả hình ảnh (Findings)" name="findings" rows={5} />
-              <Field label="Kết luận (Impression)" name="impression" rows={3} />
-              <Field label="Đề nghị (Recommendation)" name="recommendation" rows={2} />
+              <TextField label="Kỹ thuật chụp" name="technique" rows={2} />
+              <TextField label="Thông tin lâm sàng" name="clinicalInfo" rows={2} />
+              <TextField label="Mô tả hình ảnh (Findings)" name="findings" rows={5} />
+              <TextField label="Kết luận (Impression)" name="impression" rows={3} />
+              <TextField label="Đề nghị (Recommendation)" name="recommendation" rows={2} />
             </>
           )}
         </div>
-
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-200 flex items-center gap-3 flex-shrink-0">
-          <button
-            onClick={() => save('final')}
+          <button onClick={() => save('final')}
             disabled={saving || !form.findings.trim() || !form.impression.trim()}
-            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-colors"
-          >
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-colors">
             {saving ? 'Đang lưu...' : 'Hoàn thành & Ký'}
           </button>
-          <button
-            onClick={() => save('preliminary')}
-            disabled={saving}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 text-sm rounded-lg font-medium transition-colors"
-          >
+          <button onClick={() => save('preliminary')} disabled={saving}
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 text-sm rounded-lg font-medium transition-colors">
             Lưu tạm
           </button>
           <button onClick={onClose} className="ml-auto px-4 py-2 text-gray-400 hover:text-gray-600 text-sm">Hủy</button>
@@ -279,16 +198,14 @@ function AssignModal({ study, onClose, onAssigned }) {
       })
       onAssigned()
       onClose()
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-base font-bold text-gray-800">Phân công bác sĩ</h2>
+          <h2 className="text-base font-bold text-gray-800">Gửi đọc hộ</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
         </div>
         <div className="px-6 py-4 space-y-4">
@@ -297,11 +214,8 @@ function AssignModal({ study, onClose, onAssigned }) {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Chọn bác sĩ đọc phim</label>
-            <select
-              value={selected}
-              onChange={e => setSelected(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            >
+            <select value={selected} onChange={e => setSelected(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50">
               <option value="">— Chọn bác sĩ —</option>
               {radiologists.map(r => (
                 <option key={r.username} value={r.username}>
@@ -310,16 +224,13 @@ function AssignModal({ study, onClose, onAssigned }) {
               ))}
             </select>
             {radiologists.length === 0 && (
-              <p className="text-xs text-red-400 mt-1">Chưa có tài khoản bác sĩ nào. Vui lòng tạo tài khoản với role "bacsi".</p>
+              <p className="text-xs text-red-400 mt-1">Chưa có tài khoản bác sĩ nào.</p>
             )}
           </div>
         </div>
         <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
-          <button
-            onClick={assign}
-            disabled={saving || !selected}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-colors"
-          >
+          <button onClick={assign} disabled={saving || !selected}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-colors">
             {saving ? 'Đang lưu...' : 'Phân công'}
           </button>
           <button onClick={onClose} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm rounded-lg font-medium transition-colors">Hủy</button>
@@ -329,664 +240,230 @@ function AssignModal({ study, onClose, onAssigned }) {
   )
 }
 
-// ─── BacsiView ─────────────────────────────────────────────────────────────────
+// ─── Worklist Table (shared across all roles) ─────────────────────────────────
 
-function BacsiView({ studies, auth, onRefresh }) {
-  const [tab, setTab] = useState('pending')
+function WorklistView({ studies, updateStudy, onRefresh, auth }) {
+  const [activeTab, setActiveTab] = useState('waiting')
+  const [dateFrom, setDateFrom] = useState(todayISO())
+  const [dateTo, setDateTo] = useState(todayISO())
+  const [serviceFilter, setServiceFilter] = useState('')
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
   const [reportStudy, setReportStudy] = useState(null)
 
-  const pending   = studies.filter(s => s.status === 'pending_read' || s.status === 'reading')
-  const completed = studies.filter(s => s.status === 'reported' || s.status === 'verified')
-  const list      = tab === 'pending' ? pending : completed
+  const tabConfig = STATUS_TABS.find(t => t.key === activeTab)
+
+  // Filter studies by tab status + date range
+  const filtered = studies.filter(s => {
+    if (!tabConfig.statuses.includes(s.status)) return false
+    const d = (s.appointmentTime || s.createdAt || '').slice(0, 10)
+    if (dateFrom && d && d < dateFrom) return false
+    if (dateTo && d && d > dateTo) return false
+    if (serviceFilter && s.modality !== serviceFilter) return false
+    return true
+  })
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const paged = filtered.slice(page * pageSize, (page + 1) * pageSize)
+
+  // Reset page on tab/filter change
+  useEffect(() => { setPage(0) }, [activeTab, dateFrom, dateTo, serviceFilter])
+
+  // Count per tab
+  const tabCounts = STATUS_TABS.map(t => ({
+    ...t,
+    count: studies.filter(s => {
+      if (!t.statuses.includes(s.status)) return false
+      const d = (s.appointmentTime || s.createdAt || '').slice(0, 10)
+      if (dateFrom && d && d < dateFrom) return false
+      if (dateTo && d && d > dateTo) return false
+      return true
+    }).length,
+  }))
+
+  const handleCancel = async (study) => {
+    if (!confirm(`Hủy ca chụp của ${study.patientName}?`)) return
+    await updateStudy(study._id, { status: 'cancelled' })
+  }
+
+  const handleComplete = async (study) => {
+    await updateStudy(study._id, { status: 'reported' })
+  }
+
+  const handleRequestTelerad = async (study) => {
+    if (!confirm(`Gửi yêu cầu đọc hộ cho ca của ${study.patientName}?`)) return
+    try {
+      await api.post(`/ris/studies/${study._id}/request-telerad`)
+      onRefresh()
+    } catch {}
+  }
+
+  const iconBtn = 'p-1.5 rounded hover:bg-gray-100 transition-colors text-base leading-none'
+
+  // Action icons per tab
+  const renderActions = (study) => {
+    switch (activeTab) {
+      case 'waiting':
+        return (
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
+          </div>
+        )
+      case 'in_progress':
+        return (
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
+          </div>
+        )
+      case 'pending_read':
+        // Case đang trong luồng đọc hộ → chỉ hiện Xem KQ
+        if (study.teleradStatus && study.teleradStatus !== 'none') {
+          return (
+            <div className="flex items-center gap-0.5">
+              <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-gray-500 hover:text-gray-700`} title="Xem kết quả">👁</button>
+            </div>
+          )
+        }
+        // Case chưa gửi đọc hộ → đầy đủ actions
+        return (
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Nhập kết quả">✎</button>
+            {!study.teleradRequested && (
+              <button onClick={() => handleRequestTelerad(study)} className={`${iconBtn} text-purple-500 hover:text-purple-700`} title="Gửi đọc hộ">↗</button>
+            )}
+            <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-gray-500 hover:text-gray-700`} title="Xem kết quả">👁</button>
+            <button onClick={() => handleComplete(study)} className={`${iconBtn} text-green-500 hover:text-green-700`} title="Chuyển hoàn thành">✓</button>
+            <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
+          </div>
+        )
+      case 'completed':
+        return (
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Xem kết quả">👁</button>
+          </div>
+        )
+      default:
+        return null
+    }
+  }
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-5 py-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800">Danh sách ca đọc phim</h2>
-          <p className="text-xs text-gray-400 mt-0.5">BS. {auth.displayName || auth.username}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-medium">{pending.length} ca chờ đọc</span>
-          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">{completed.length} hoàn thành</span>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2">
-        {[{ key: 'pending', label: 'Chờ đọc' }, { key: 'done', label: 'Đã hoàn thành' }].map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === t.key ? 'bg-teal-700 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-            }`}
-          >
+      {/* Status Tabs */}
+      <div className="flex gap-0 border-b border-gray-200">
+        {tabCounts.map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            className={`px-5 py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
+              activeTab === t.key
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}>
             {t.label}
+            {t.count > 0 && <span className="ml-1.5 text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{t.count}</span>}
           </button>
         ))}
       </div>
 
+      {/* Filters */}
+      <div className="flex items-center gap-3 text-sm text-gray-600">
+        <span>Ngày:</span>
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+        <span>-</span>
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+        <select value={serviceFilter} onChange={e => setServiceFilter(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400">
+          <option value="">Chọn nhóm dịch vụ</option>
+          <option value="CT">CT</option>
+          <option value="MRI">MRI</option>
+          <option value="XR">X-Ray</option>
+          <option value="US">Siêu âm</option>
+        </select>
+        <button onClick={onRefresh} className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors" title="Làm mới">⟳</button>
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {['Bệnh nhân', 'Loại chụp', 'Bộ phận', 'Ưu tiên', 'Trạng thái', 'Ảnh PACS', 'Ngày phân công', 'Thao tác'].map(h => (
+                {['STT', 'Thời gian đến', 'Thời gian chờ', 'Mã chỉ định', 'Mã phiếu', 'Bệnh nhân', 'Dịch vụ', 'Ảnh PACS', 'Ghi chú', 'Tác vụ'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {list.length === 0 ? (
-                <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400 text-sm">Không có ca nào</td></tr>
-              ) : list.map((s, i) => (
-                <tr key={s._id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-teal-50 transition-colors`}>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-800">{s.patientName || '—'}</div>
-                    <div className="text-xs text-gray-400">{s.patientId}</div>
-                  </td>
-                  <td className="px-4 py-3"><ModalityBadge modality={s.modality} /></td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{s.bodyPart || '—'}</td>
-                  <td className="px-4 py-3"><PriorityBadge priority={s.priority} /></td>
-                  <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                  <td className="px-4 py-3">
-                    <ImageStatusBadge imageStatus={s.imageStatus} imageCount={s.imageCount} studyUID={s.studyUID} />
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{fmtDate(s.assignedAt)}</td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => setReportStudy(s)}
-                      className={`px-3 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
-                        tab === 'pending'
-                          ? 'bg-teal-600 hover:bg-teal-700 text-white'
-                          : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
-                      }`}
-                    >
-                      {tab === 'pending' ? 'Đọc phim' : 'Xem kết quả'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {reportStudy && (
-        <ReportEditor
-          study={reportStudy}
-          onClose={() => setReportStudy(null)}
-          onSaved={onRefresh}
-        />
-      )}
-    </div>
-  )
-}
-
-// ─── NhanVienView ──────────────────────────────────────────────────────────────
-
-function NhanVienView({ studies, updateStudy, auth }) {
-  const [period, setPeriod] = useState('today')
-  const [updating, setUpdating] = useState(null)
-
-  const site = auth.department || 'Chi nhánh'
-
-  const filtered = studies.filter(s => {
-    const appt = s.appointmentTime || s.createdAt
-    if (period === 'today') return isToday(appt)
-    if (period === 'week') return isThisWeek(appt)
-    return true
-  })
-
-  const handleAction = async (study) => {
-    const nextStatus = study.status === 'scheduled' ? 'in_progress' : 'pending_read'
-    setUpdating(study._id)
-    try {
-      await updateStudy(study._id, { status: nextStatus })
-    } finally {
-      setUpdating(null)
-    }
-  }
-
-  const TABS = [
-    { key: 'today', label: 'Hôm nay' },
-    { key: 'week',  label: 'Tuần này' },
-    { key: 'all',   label: 'Tất cả' },
-  ]
-
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-5 py-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800">Danh sách ca chụp — {site}</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Ngày {todayStr()}</p>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
-          {filtered.length} ca
-        </div>
-      </div>
-
-      {/* Filter tabs */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-5 py-3">
-        <div className="flex gap-1">
-          {TABS.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setPeriod(t.key)}
-              className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-                period === t.key
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                {['STT', 'Bệnh nhân', 'Loại chụp', 'Bộ phận', 'Ưu tiên', 'Trạng thái', 'Ảnh PACS', 'Giờ hẹn', 'Thao tác'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-gray-400 text-sm">
-                    Không có ca chụp nào
-                  </td>
-                </tr>
-              ) : filtered.map((s, i) => (
+              {paged.length === 0 ? (
+                <tr><td colSpan={10} className="px-4 py-10 text-center text-gray-400 text-sm">Không có dữ liệu</td></tr>
+              ) : paged.map((s, i) => (
                 <tr key={s._id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{i + 1}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{page * pageSize + i + 1}</td>
+                  <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">{fmtDateTime(s.appointmentTime || s.createdAt)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{calcWaitTime(s.appointmentTime || s.createdAt)}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{s._id?.slice(-8)?.toUpperCase()}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-400">{s.patientId || '—'}</td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-800">{s.patientName || '—'}</div>
-                    <div className="text-xs text-gray-400">{s.patientId || ''}</div>
-                  </td>
-                  <td className="px-4 py-3"><ModalityBadge modality={s.modality} /></td>
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{s.bodyPart || '—'}</td>
-                  <td className="px-4 py-3"><PriorityBadge priority={s.priority} /></td>
-                  <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                  <td className="px-4 py-3">
-                    <ImageStatusBadge imageStatus={s.imageStatus} imageCount={s.imageCount} studyUID={s.studyUID} />
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap text-xs">{fmtTime(s.appointmentTime)}</td>
-                  <td className="px-4 py-3">
-                    {(s.status === 'scheduled' || s.status === 'in_progress') ? (
-                      <button
-                        onClick={() => handleAction(s)}
-                        disabled={updating === s._id}
-                        className={`px-3 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
-                          s.status === 'scheduled'
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                            : 'bg-green-600 hover:bg-green-700 text-white'
-                        } disabled:opacity-50`}
-                      >
-                        {updating === s._id ? '...' : s.status === 'scheduled' ? 'Bắt đầu' : 'Hoàn thành'}
-                      </button>
-                    ) : (
-                      <span className="text-xs text-gray-400">—</span>
+                    {s.teleradRequested && (
+                      <span className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-0.5 ${
+                        s.teleradStatus === 'pending' ? 'bg-purple-100 text-purple-700' :
+                        s.teleradStatus === 'assigned' ? 'bg-blue-100 text-blue-700' :
+                        s.teleradStatus === 'reading' ? 'bg-orange-100 text-orange-700' :
+                        s.teleradStatus === 'reported' ? 'bg-green-100 text-green-700' :
+                        'bg-purple-100 text-purple-700'
+                      }`}>
+                        {s.teleradStatus === 'pending' ? 'Chờ đọc hộ' :
+                         s.teleradStatus === 'assigned' ? 'Đã phân công BS' :
+                         s.teleradStatus === 'reading' ? 'Đang đọc hộ' :
+                         s.teleradStatus === 'reported' ? 'Có KQ đọc hộ' : 'Đọc hộ'}
+                      </span>
                     )}
                   </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── TruongPhongView ───────────────────────────────────────────────────────────
-
-function TruongPhongView({ studies, stats, updateStudy, onRefresh }) {
-  const [modalityFilter, setModalityFilter] = useState('all')
-  const [reportPanel, setReportPanel] = useState(null) // study._id
-  const [reportText, setReportText] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [assignStudy, setAssignStudy] = useState(null)
-
-  const MODALITIES = ['Tất cả', 'CT', 'MRI', 'XR', 'US']
-
-  const todayStudies  = studies.filter(s => isToday(s.appointmentTime || s.createdAt))
-  const pendingRead   = studies.filter(s => s.status === 'pending_read')
-  const reported      = studies.filter(s => s.status === 'reported' || s.status === 'verified')
-
-  const filtered = studies.filter(s =>
-    modalityFilter === 'all' || s.modality === modalityFilter
-  )
-
-  const openReport = (study) => {
-    setReportPanel(study._id)
-    setReportText(study.reportText || '')
-  }
-
-  const submitReport = async (study) => {
-    if (!reportText.trim()) return
-    setSubmitting(true)
-    try {
-      await updateStudy(study._id, { status: 'reported', reportText: reportText.trim() })
-      setReportPanel(null)
-      setReportText('')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Stats Row */}
-      <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Hôm nay"      value={todayStudies.length} colorBar="bg-blue-500"   sub="ca chụp" />
-        <StatCard label="Chờ đọc"      value={pendingRead.length}  colorBar="bg-yellow-400" sub="cần đọc kết quả" />
-        <StatCard label="Có kết quả"   value={reported.length}     colorBar="bg-green-500"  sub="đã báo cáo" />
-        <StatCard label="Tổng tháng"   value={studies.length}      colorBar="bg-purple-500" sub="tất cả ca" />
-      </div>
-
-      {/* Modality filter */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-5 py-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 font-semibold mr-1">Loại chụp:</span>
-          {MODALITIES.map(m => {
-            const key = m === 'Tất cả' ? 'all' : m
-            return (
-              <button
-                key={key}
-                onClick={() => setModalityFilter(key)}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                  modalityFilter === key
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {m}
-              </button>
-            )
-          })}
-          <span className="ml-auto text-xs text-gray-400">{filtered.length} ca</span>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-700">Danh sách ca chụp</h3>
-          <span className="text-xs text-gray-400">{fmtDate(new Date().toISOString())}</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                {['Bệnh nhân', 'Loại chụp', 'Ưu tiên', 'Trạng thái', 'Ảnh PACS', 'Bác sĩ', 'Thao tác'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400 text-sm">
-                    Không có ca nào
+                  <td className="px-4 py-3 text-gray-600 text-xs">
+                    <div>{s.modality} {s.bodyPart ? `- ${s.bodyPart}` : ''}</div>
+                    {s.clinicalInfo && <div className="text-gray-400 truncate max-w-[200px]">{s.clinicalInfo}</div>}
                   </td>
-                </tr>
-              ) : filtered.map((s, i) => (
-                <tr key={s._id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-800">{s.patientName || '—'}</div>
-                    <div className="text-xs text-gray-400">{s.patientId || ''}</div>
-                  </td>
-                  <td className="px-4 py-3"><ModalityBadge modality={s.modality} /></td>
-                  <td className="px-4 py-3"><PriorityBadge priority={s.priority} /></td>
-                  <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
                   <td className="px-4 py-3">
                     <ImageStatusBadge imageStatus={s.imageStatus} imageCount={s.imageCount} studyUID={s.studyUID} />
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                    {s.radiologistName || <span className="text-gray-300">Chưa phân công</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      {s.status === 'pending_read' || !s.radiologist ? (
-                        <button
-                          onClick={() => setAssignStudy(s)}
-                          className="px-2 py-1 rounded text-xs font-medium bg-blue-100 hover:bg-blue-200 text-blue-700 transition-colors whitespace-nowrap"
-                        >
-                          Phân công
-                        </button>
-                      ) : null}
-                      {(s.status === 'reported' || s.status === 'reading') && (
-                        <button
-                          onClick={() => { setReportPanel(s._id); setReportText(s.reportText || '') }}
-                          className="px-2 py-1 rounded text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors whitespace-nowrap"
-                        >
-                          Xem KQ
-                        </button>
-                      )}
-                    </div>
-                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-400 max-w-[150px] truncate">{s.notes || '—'}</td>
+                  <td className="px-4 py-3">{renderActions(s)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
 
-      {assignStudy && (
-        <AssignModal
-          study={assignStudy}
-          onClose={() => setAssignStudy(null)}
-          onAssigned={() => { onRefresh(); setAssignStudy(null) }}
-        />
-      )}
-    </div>
-  )
-}
-
-// ─── GiamDocView ───────────────────────────────────────────────────────────────
-
-function GiamDocView({ studies, stats, onRefresh }) {
-  const todayStudies  = studies.filter(s => isToday(s.appointmentTime || s.createdAt))
-  const pendingRead   = studies.filter(s => s.status === 'pending_read')
-  const verified      = studies.filter(s => s.status === 'verified')
-  const [assignStudy, setAssignStudy] = useState(null)
-  const [assignTab, setAssignTab] = useState('pending')
-
-  // Modality breakdown
-  const modCounts = ['CT', 'MRI', 'XR', 'US'].map(m => ({
-    modality: m,
-    count: studies.filter(s => s.modality === m).length,
-  }))
-
-  const MODALITY_STYLE = {
-    CT:  { bar: 'bg-blue-500',   icon: '🔵', label: 'CT Scan' },
-    MRI: { bar: 'bg-purple-500', icon: '🟣', label: 'MRI' },
-    XR:  { bar: 'bg-gray-400',   icon: '⚪', label: 'X-Ray' },
-    US:  { bar: 'bg-teal-500',   icon: '🟦', label: 'Siêu âm' },
-  }
-
-  // Site performance
-  const siteMap = {}
-  studies.forEach(s => {
-    const site = s.site || 'Chưa phân'
-    if (!siteMap[site]) siteMap[site] = { total: 0, today: 0, pendingRead: 0, done: 0 }
-    siteMap[site].total++
-    if (isToday(s.appointmentTime || s.createdAt)) siteMap[site].today++
-    if (s.status === 'pending_read') siteMap[site].pendingRead++
-    if (s.status === 'reported' || s.status === 'verified') siteMap[site].done++
-  })
-  const sitePerf = Object.entries(siteMap).map(([site, d]) => ({
-    site,
-    ...d,
-    rate: d.total > 0 ? Math.round((d.done / d.total) * 100) : 0,
-  })).sort((a, b) => b.total - a.total)
-
-  // Recent urgent/stat
-  const urgentStudies = studies
-    .filter(s => s.priority === 'urgent' || s.priority === 'stat')
-    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-    .slice(0, 20)
-
-  return (
-    <div className="space-y-4">
-      {/* Top stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Tổng ca (toàn hệ thống)" value={studies.length}      colorBar="bg-blue-600"   sub="tất cả thời gian" />
-        <StatCard label="Hôm nay"                  value={todayStudies.length} colorBar="bg-indigo-500" sub="ca chụp hôm nay" />
-        <StatCard label="Chờ đọc kết quả"          value={pendingRead.length}  colorBar="bg-yellow-400" sub="cần xử lý" />
-        <StatCard label="Đã xác nhận"              value={verified.length}     colorBar="bg-green-500"  sub="kết quả verified" />
-      </div>
-
-      {/* Modality breakdown */}
-      <div className="grid grid-cols-4 gap-4">
-        {modCounts.map(({ modality, count }) => {
-          const style = MODALITY_STYLE[modality] || { bar: 'bg-gray-400', icon: '⬜', label: modality }
-          const pct = studies.length > 0 ? Math.round((count / studies.length) * 100) : 0
-          return (
-            <div key={modality} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <div className={`h-1.5 ${style.bar}`} />
-              <div className="px-4 py-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-base">{style.icon}</span>
-                  <span className="text-xs font-semibold text-gray-500 uppercase">{style.label}</span>
-                </div>
-                <div className="text-2xl font-bold text-gray-800">{count}</div>
-                <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div className={`h-full ${style.bar} rounded-full`} style={{ width: `${pct}%` }} />
-                </div>
-                <div className="text-xs text-gray-400 mt-1">{pct}% tổng ca</div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Site performance table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-700">Hiệu suất theo Chi nhánh</h3>
-          <span className="text-xs text-gray-400">{sitePerf.length} chi nhánh</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                {['Chi nhánh', 'Tổng ca', 'Hôm nay', 'Chờ đọc', 'Tỷ lệ hoàn thành (%)'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {sitePerf.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-sm">Không có dữ liệu</td>
-                </tr>
-              ) : sitePerf.map((row, i) => (
-                <tr key={row.site} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
-                  <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">{row.site}</td>
-                  <td className="px-4 py-3 text-blue-700 font-semibold">{row.total}</td>
-                  <td className="px-4 py-3 text-gray-600">{row.today}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-medium ${row.pendingRead > 0 ? 'text-yellow-600' : 'text-gray-400'}`}>
-                      {row.pendingRead}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden max-w-[80px]">
-                        <div
-                          className={`h-full rounded-full ${row.rate >= 70 ? 'bg-green-500' : row.rate >= 40 ? 'bg-yellow-400' : 'bg-red-400'}`}
-                          style={{ width: `${row.rate}%` }}
-                        />
-                      </div>
-                      <span className={`text-xs font-semibold ${row.rate >= 70 ? 'text-green-600' : row.rate >= 40 ? 'text-yellow-600' : 'text-red-500'}`}>
-                        {row.rate}%
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {sitePerf.length > 1 && (
-                <tr className="border-t-2 border-gray-300 bg-blue-50 font-bold">
-                  <td className="px-4 py-3 text-blue-800">Tổng cộng</td>
-                  <td className="px-4 py-3 text-blue-800">{studies.length}</td>
-                  <td className="px-4 py-3 text-blue-800">{todayStudies.length}</td>
-                  <td className="px-4 py-3 text-yellow-600">{pendingRead.length}</td>
-                  <td className="px-4 py-3">
-                    {(() => {
-                      const done = studies.filter(s => s.status === 'reported' || s.status === 'verified').length
-                      const rate = studies.length > 0 ? Math.round((done / studies.length) * 100) : 0
-                      return (
-                        <span className={`text-sm font-bold ${rate >= 70 ? 'text-green-600' : rate >= 40 ? 'text-yellow-600' : 'text-red-500'}`}>
-                          {rate}%
-                        </span>
-                      )
-                    })()}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Today's worklist */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
-            <h3 className="text-sm font-semibold text-gray-700">Ca chụp hôm nay</h3>
-          </div>
-          <span className="text-xs text-gray-400">{todayStudies.length} ca</span>
-        </div>
-        {todayStudies.length === 0 ? (
-          <div className="px-5 py-8 text-center text-gray-400 text-sm">Chưa có ca chụp nào hôm nay</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  {['Bệnh nhân', 'Chi nhánh', 'Loại chụp', 'Ưu tiên', 'Trạng thái', 'Hình ảnh'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {todayStudies.map((s, i) => (
-                  <tr key={s._id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-800">{s.patientName || '—'}</div>
-                      <div className="text-xs text-gray-400">{s.patientId}</div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{s.site || '—'}</td>
-                    <td className="px-4 py-3"><ModalityBadge modality={s.modality} /></td>
-                    <td className="px-4 py-3"><PriorityBadge priority={s.priority} /></td>
-                    <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                    <td className="px-4 py-3">
-                      <ImageStatusBadge imageStatus={s.imageStatus} imageCount={s.imageCount} studyUID={s.studyUID} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Recent urgent/stat studies */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-red-500 inline-block animate-pulse" />
-          <h3 className="text-sm font-semibold text-gray-700">Ca Khẩn / Cấp cứu gần đây</h3>
-          <span className="ml-auto text-xs text-gray-400">{urgentStudies.length} ca</span>
-        </div>
-        {urgentStudies.length === 0 ? (
-          <div className="px-5 py-8 text-center text-gray-400 text-sm">Không có ca khẩn nào</div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {urgentStudies.map((s, i) => (
-              <div key={s._id} className="px-5 py-3 flex items-center gap-4 hover:bg-red-50 transition-colors">
-                <span className="text-xs text-gray-400 w-5 text-center">{i + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-800 text-sm truncate">{s.patientName || '—'}</div>
-                  <div className="text-xs text-gray-400">{s.site || '—'}</div>
-                </div>
-                <ModalityBadge modality={s.modality} />
-                <StatusBadge status={s.status} />
-                <ImageStatusBadge imageStatus={s.imageStatus} imageCount={s.imageCount} studyUID={s.studyUID} />
-                <PriorityBadge priority={s.priority} />
-                <div className="text-xs text-gray-400 whitespace-nowrap w-20 text-right">
-                  {fmtDate(s.createdAt)}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Assignment management */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
-          <h3 className="text-sm font-semibold text-gray-700">Phân công bác sĩ đọc phim</h3>
-          <div className="flex gap-1 ml-2">
-            {[{ key: 'pending', label: 'Chờ phân công' }, { key: 'all', label: 'Tất cả' }].map(t => (
-              <button key={t.key} onClick={() => setAssignTab(t.key)}
-                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${assignTab === t.key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                {t.label}
+        {/* Pagination */}
+        <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
+          <div className="flex items-center gap-1">
+            {[5, 10, 20].map(s => (
+              <button key={s} onClick={() => { setPageSize(s); setPage(0) }}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-all ${pageSize === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                {s}
               </button>
             ))}
           </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                {['Bệnh nhân', 'Chi nhánh', 'Loại chụp', 'Ưu tiên', 'Trạng thái', 'Bác sĩ', 'Thao tác'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {(() => {
-                const list = assignTab === 'pending'
-                  ? studies.filter(s => s.status === 'pending_read' || !s.radiologist)
-                  : studies
-                if (list.length === 0) return (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400 text-sm">Không có ca nào</td></tr>
-                )
-                return list.map((s, i) => (
-                  <tr key={s._id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-800">{s.patientName || '—'}</div>
-                      <div className="text-xs text-gray-400">{s.patientId}</div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{s.site || '—'}</td>
-                    <td className="px-4 py-3"><ModalityBadge modality={s.modality} /></td>
-                    <td className="px-4 py-3"><PriorityBadge priority={s.priority} /></td>
-                    <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                      {s.radiologistName || <span className="text-gray-300">Chưa phân công</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => setAssignStudy(s)}
-                        className="px-2 py-1 rounded text-xs font-medium bg-blue-100 hover:bg-blue-200 text-blue-700 transition-colors whitespace-nowrap"
-                      >
-                        Phân công
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              })()}
-            </tbody>
-          </table>
+          <div className="flex items-center gap-2">
+            <span>Page {page + 1} of {totalPages} ({filtered.length} items)</span>
+            <div className="flex gap-1">
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => (
+                <button key={i} onClick={() => setPage(i)}
+                  className={`w-7 h-7 rounded-lg font-medium transition-all ${page === i ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      {assignStudy && (
-        <AssignModal
-          study={assignStudy}
-          onClose={() => setAssignStudy(null)}
-          onAssigned={() => { onRefresh(); setAssignStudy(null) }}
-        />
+      {/* Modals */}
+      {reportStudy && (
+        <ReportEditor study={reportStudy} onClose={() => setReportStudy(null)} onSaved={onRefresh} />
       )}
     </div>
   )
@@ -997,7 +474,6 @@ function GiamDocView({ studies, stats, onRefresh }) {
 export default function RIS() {
   const { auth } = useAuth()
   const [studies, setStudies] = useState([])
-  const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
 
@@ -1005,12 +481,8 @@ export default function RIS() {
 
   const load = async () => {
     try {
-      const [studiesRes, statsRes] = await Promise.all([
-        api.get('/ris/studies'),
-        api.get('/ris/stats'),
-      ])
-      setStudies(studiesRes.data)
-      setStats(statsRes.data)
+      const res = await api.get('/ris/studies')
+      setStudies(res.data)
     } catch (e) {
       console.error('RIS load error:', e)
       if (e?.response?.status !== 401) {
@@ -1024,7 +496,7 @@ export default function RIS() {
   const updateStudy = async (id, data) => {
     const res = await api.put(`/ris/studies/${id}`, data)
     setStudies(prev => prev.map(s => s._id === id ? res.data : s))
-    load() // refresh stats
+    load()
   }
 
   if (loading) {
@@ -1044,7 +516,6 @@ export default function RIS() {
         <div className="text-center space-y-2">
           <div className="text-4xl">🔒</div>
           <div className="text-red-500 font-medium">Không có quyền truy cập</div>
-          <div className="text-xs text-gray-400">Vui lòng liên hệ quản trị viên</div>
         </div>
       </div>
     )
@@ -1059,11 +530,9 @@ export default function RIS() {
     )
   }
 
-  const sharedProps = { studies, stats, updateStudy, auth, onRefresh: load }
-
   return (
     <div className="space-y-4">
-      {/* Page title bar */}
+      {/* Page title */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-800">Hệ thống RIS</h1>
@@ -1076,12 +545,14 @@ export default function RIS() {
         </div>
       </div>
 
-      {/* Role-based view */}
+      {/* Shared worklist view for all roles */}
       <ErrorBoundary>
-        {auth.role === 'bacsi' && <BacsiView studies={studies} auth={auth} onRefresh={load} />}
-        {auth.role === 'nhanvien' && <NhanVienView {...sharedProps} />}
-        {auth.role === 'truongphong' && <TruongPhongView {...sharedProps} />}
-        {(auth.role === 'giamdoc' || auth.role === 'admin') && <GiamDocView {...sharedProps} />}
+        <WorklistView
+          studies={studies}
+          updateStudy={updateStudy}
+          onRefresh={load}
+          auth={auth}
+        />
       </ErrorBoundary>
     </div>
   )
