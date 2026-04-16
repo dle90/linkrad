@@ -1,8 +1,11 @@
 const express = require('express')
+const crypto = require('crypto')
 const router = express.Router()
 const Study = require('../models/Study')
 const Report = require('../models/Report')
 const User = require('../models/User')
+const StudyAnnotation = require('../models/StudyAnnotation')
+const KeyImage = require('../models/KeyImage')
 const { requireAuth } = require('../middleware/auth')
 
 const ORTHANC_BASE = process.env.ORTHANC_URL || 'http://localhost:8042'
@@ -421,6 +424,177 @@ router.get('/orthanc/status', requireAuth, async (req, res) => {
     res.json({ online: true, version: data.Version, dicomAet: data.DicomAet })
   } catch (err) {
     res.json({ online: false, error: err.message })
+  }
+})
+
+// ═══════════════════════════════════════════════════════
+// MEASUREMENT PERSISTENCE (annotations)
+// ═══════════════════════════════════════════════════════
+
+// GET /annotations/:studyId — load saved measurements
+router.get('/annotations/:studyId', requireAuth, async (req, res) => {
+  try {
+    const ann = await StudyAnnotation.findOne({ studyId: req.params.studyId }).lean()
+    if (!ann) return res.json({ measurements: null })
+    res.json(ann)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /annotations — save measurements for a study
+router.post('/annotations', requireAuth, async (req, res) => {
+  try {
+    const { studyId, studyUID, measurements, measurementCount } = req.body
+    if (!studyId) return res.status(400).json({ error: 'studyId required' })
+
+    const now = new Date().toISOString()
+    const ann = await StudyAnnotation.findOneAndUpdate(
+      { studyId },
+      {
+        $setOnInsert: { _id: crypto.randomUUID(), studyId, studyUID: studyUID || '', createdAt: now },
+        $set: {
+          measurements: typeof measurements === 'string' ? measurements : JSON.stringify(measurements),
+          measurementCount: measurementCount || 0,
+          savedBy: req.user.username,
+          savedByName: req.user.displayName,
+          updatedAt: now,
+        },
+      },
+      { upsert: true, new: true }
+    )
+    res.json({ ok: true, annotation: ann })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ═══════════════════════════════════════════════════════
+// KEY IMAGE FLAGGING
+// ═══════════════════════════════════════════════════════
+
+// GET /key-images/:studyId — list key images for a study
+router.get('/key-images/:studyId', requireAuth, async (req, res) => {
+  try {
+    const images = await KeyImage.find({ studyId: req.params.studyId }).sort({ createdAt: 1 }).lean()
+    res.json(images)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /key-images — flag a key image
+router.post('/key-images', requireAuth, async (req, res) => {
+  try {
+    const { studyId, studyUID, seriesUID, instanceUID, frameNumber, description } = req.body
+    if (!studyId) return res.status(400).json({ error: 'studyId required' })
+
+    const ki = new KeyImage({
+      _id: crypto.randomUUID(),
+      studyId, studyUID: studyUID || '',
+      seriesUID: seriesUID || '', instanceUID: instanceUID || '',
+      frameNumber: frameNumber || 0,
+      description: description || '',
+      flaggedBy: req.user.username,
+      flaggedByName: req.user.displayName,
+      createdAt: new Date().toISOString(),
+    })
+    await ki.save()
+    res.status(201).json({ ok: true, keyImage: ki.toObject() })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /key-images/:id — unflag a key image
+router.delete('/key-images/:id', requireAuth, async (req, res) => {
+  try {
+    await KeyImage.findByIdAndDelete(req.params.id)
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ═══════════════════════════════════════════════════════
+// PRIOR STUDY COMPARISON
+// ═══════════════════════════════════════════════════════
+
+// GET /priors/:patientId — find prior studies for comparison
+router.get('/priors/:patientId', requireAuth, async (req, res) => {
+  try {
+    const { modality, excludeStudyId } = req.query
+    const filter = { patientId: req.params.patientId }
+    if (modality) filter.modality = modality
+    if (excludeStudyId) filter._id = { $ne: excludeStudyId }
+    // Only studies that have been reported/verified and have images
+    filter.status = { $in: ['reported', 'verified'] }
+
+    const priors = await Study.find(filter)
+      .sort({ studyDate: -1, createdAt: -1 })
+      .limit(10)
+      .lean()
+
+    res.json(priors)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /compare-url — generate OHIF URL for multi-study comparison
+router.get('/compare-url', requireAuth, async (req, res) => {
+  try {
+    const { studyUIDs } = req.query // comma-separated UIDs
+    if (!studyUIDs) return res.status(400).json({ error: 'studyUIDs required' })
+
+    const uids = studyUIDs.split(',').map(u => u.trim()).filter(Boolean)
+    // OHIF supports multiple StudyInstanceUIDs as comma-separated
+    const viewerUrl = `${OHIF_PUBLIC}/viewer?StudyInstanceUIDs=${uids.map(u => encodeURIComponent(u)).join(',')}`
+    res.json({ url: viewerUrl, count: uids.length })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ═══════════════════════════════════════════════════════
+// DICOM UPLOAD PROXY
+// ═══════════════════════════════════════════════════════
+
+// POST /orthanc/upload — proxy DICOM file upload to Orthanc
+router.post('/orthanc/upload', requireAuth, async (req, res) => {
+  try {
+    // Forward the raw body to Orthanc's /instances endpoint
+    const chunks = []
+    for await (const chunk of req) { chunks.push(chunk) }
+    const body = Buffer.concat(chunks)
+
+    const response = await fetch(`${ORTHANC_BASE}/instances`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/dicom' },
+      body,
+    })
+
+    if (!response.ok) {
+      const text = await response.text()
+      return res.status(response.status).json({ error: 'Orthanc upload failed', detail: text })
+    }
+
+    const data = await response.json()
+    res.json({ ok: true, ...data })
+  } catch (err) {
+    res.status(503).json({ error: 'Không thể upload lên Orthanc', detail: err.message })
+  }
+})
+
+// POST /orthanc/upload-zip — proxy ZIP file upload to Orthanc
+router.post('/orthanc/upload-zip', requireAuth, async (req, res) => {
+  try {
+    const chunks = []
+    for await (const chunk of req) { chunks.push(chunk) }
+    const body = Buffer.concat(chunks)
+
+    // Orthanc accepts ZIP uploads at /instances too
+    const response = await fetch(`${ORTHANC_BASE}/instances`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/zip' },
+      body,
+    })
+
+    if (!response.ok) {
+      const text = await response.text()
+      return res.status(response.status).json({ error: 'Orthanc upload failed', detail: text })
+    }
+
+    const data = await response.json()
+    res.json({ ok: true, ...data })
+  } catch (err) {
+    res.status(503).json({ error: 'Không thể upload lên Orthanc', detail: err.message })
   }
 })
 

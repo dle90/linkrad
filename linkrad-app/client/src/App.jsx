@@ -23,7 +23,11 @@ import Billing from './pages/Billing'
 import Inventory from './pages/Inventory'
 import Catalogs from './pages/Catalogs'
 import BookingForm from './pages/BookingForm'
-// Promotions is now inside Catalogs page
+import PatientLogin from './pages/PatientLogin'
+import PatientPortal from './pages/PatientPortal'
+import PartnerLogin from './pages/PartnerLogin'
+import PartnerPortal from './pages/PartnerPortal'
+import HRManagement from './pages/HRManagement'
 
 function AuthenticatedRoutes() {
   const { auth } = useAuth()
@@ -54,6 +58,7 @@ function AuthenticatedRoutes() {
 
             {isWorkflowUser && <Route path="/inventory" element={<Inventory />} />}
             {isWorkflowUser && <Route path="/catalogs" element={<Catalogs />} />}
+            {auth.role === 'admin' && <Route path="/hr" element={<HRManagement />} />}
             <Route path="/pl" element={<PL />} />
             <Route path="/cf" element={<CF />} />
             <Route path="/bs" element={<BalanceSheet />} />
@@ -74,6 +79,10 @@ function AppRoutes() {
     <Routes>
       {/* Public routes - no auth required */}
       <Route path="/booking" element={<BookingForm />} />
+      <Route path="/patient-login" element={<PatientLogin />} />
+      <Route path="/patient-portal" element={<PatientPortal />} />
+      <Route path="/partner-login" element={<PartnerLogin />} />
+      <Route path="/partner-portal" element={<PartnerPortal />} />
       {/* All other routes require auth */}
       <Route path="/*" element={<AuthenticatedRoutes />} />
     </Routes>

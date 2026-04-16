@@ -52,6 +52,12 @@ const NAV = [
     ]
   },
   {
+    group: 'Quản lý',
+    items: [
+      { path: '/hr', label: 'Nhân sự & Phân quyền', icon: '👥', adminOnly: true },
+    ]
+  },
+  {
     group: 'CRM',
     items: [
       { path: '/crm',        label: 'Phân tích KH',  icon: '👥' },

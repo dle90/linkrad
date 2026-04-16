@@ -1,6 +1,7 @@
 const express = require('express')
 const crypto = require('crypto')
 const User = require('../models/User')
+const RolePermission = require('../models/RolePermission')
 
 const router = express.Router()
 const SECRET = process.env.SESSION_SECRET || 'linkrad-secret-2024'
@@ -31,7 +32,16 @@ router.post('/login', async (req, res) => {
     if (!user || user.password !== password) {
       return res.status(401).json({ error: 'Sai tên đăng nhập hoặc mật khẩu' })
     }
-    const session = { username, role: user.role, department: user.department || null, displayName: user.displayName || username }
+    // Load role permissions
+    const rolePerm = await RolePermission.findById(user.role).lean()
+    const permissions = rolePerm ? rolePerm.permissions : []
+    const session = {
+      username, role: user.role,
+      department: user.department || null,
+      departmentId: user.departmentId || null,
+      displayName: user.displayName || username,
+      permissions,
+    }
     const token = sign(session)
     res.json({ token, ...session })
   } catch (err) {
@@ -82,4 +92,4 @@ router.get('/users', async (req, res) => {
   }
 })
 
-module.exports = { router, verify }
+module.exports = { router, sign, verify }

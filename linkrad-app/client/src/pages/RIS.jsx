@@ -153,6 +153,7 @@ function ReportEditor({ study, onClose, onSaved }) {
               <TextField label="Mô tả hình ảnh (Findings)" name="findings" rows={5} />
               <TextField label="Kết luận (Impression)" name="impression" rows={3} />
               <TextField label="Đề nghị (Recommendation)" name="recommendation" rows={2} />
+              <AnnotationPanel study={study} />
             </>
           )}
         </div>
@@ -168,6 +169,327 @@ function ReportEditor({ study, onClose, onSaved }) {
           </button>
           <button onClick={onClose} className="ml-auto px-4 py-2 text-gray-400 hover:text-gray-600 text-sm">Hủy</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Prior Study Comparison ───────────────────────────────────────────────────
+
+function PriorComparisonModal({ study, onClose }) {
+  const [priors, setPriors] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState(new Set())
+
+  useEffect(() => {
+    api.get(`/ris/priors/${study.patientId}`, {
+      params: { modality: study.modality, excludeStudyId: study._id }
+    }).then(r => setPriors(r.data)).catch(() => {}).finally(() => setLoading(false))
+  }, [study])
+
+  const openComparison = async () => {
+    const uids = [study.studyUID, ...Array.from(selected)].filter(Boolean)
+    if (uids.length < 2) return
+    try {
+      const res = await api.get('/ris/compare-url', { params: { studyUIDs: uids.join(',') } })
+      window.open(res.data.url, '_blank', 'noopener,noreferrer')
+    } catch {}
+  }
+
+  const toggle = (uid) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(uid) ? next.delete(uid) : next.add(uid)
+      return next
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-gray-800">So sánh với lần trước</h2>
+            <p className="text-xs text-gray-400">{study.patientName} — {study.modality}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {loading ? <div className="text-center text-gray-400 py-8">Đang tải...</div> :
+           priors.length === 0 ? <div className="text-center text-gray-400 py-8">Không có ca chụp trước để so sánh</div> : (
+            <div className="space-y-2">
+              {priors.map(p => (
+                <label key={p._id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selected.has(p.studyUID) ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <input type="checkbox" checked={selected.has(p.studyUID)} onChange={() => toggle(p.studyUID)} className="w-4 h-4 accent-blue-600" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">{p.modality} — {p.bodyPart || '—'}</div>
+                    <div className="text-xs text-gray-400">{fmtDate(p.studyDate || p.createdAt)} — {p.status}</div>
+                    {p.reportText && <div className="text-xs text-gray-500 mt-1 truncate">{p.reportText.slice(0, 80)}...</div>}
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
+          <button onClick={openComparison} disabled={selected.size === 0}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium">
+            Mở so sánh ({selected.size + 1} ca)
+          </button>
+          <button onClick={onClose} className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">Đóng</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Key Image Panel ─────────────────────────────────────────────────────────
+
+function KeyImageModal({ study, onClose }) {
+  const [keyImages, setKeyImages] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [form, setForm] = useState({ seriesUID: '', instanceUID: '', description: '' })
+  const [saving, setSaving] = useState(false)
+
+  const load = () => {
+    api.get(`/ris/key-images/${study._id}`).then(r => setKeyImages(r.data)).catch(() => {}).finally(() => setLoading(false))
+  }
+  useEffect(load, [study._id])
+
+  const addKeyImage = async () => {
+    setSaving(true)
+    try {
+      await api.post('/ris/key-images', {
+        studyId: study._id, studyUID: study.studyUID,
+        ...form,
+      })
+      setForm({ seriesUID: '', instanceUID: '', description: '' })
+      load()
+    } catch {}
+    setSaving(false)
+  }
+
+  const removeKeyImage = async (id) => {
+    await api.delete(`/ris/key-images/${id}`)
+    load()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-gray-800">Key Images</h2>
+            <p className="text-xs text-gray-400">{study.patientName} — {study.modality}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {/* Add new */}
+          <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+            <div className="text-xs font-semibold text-gray-600">Đánh dấu ảnh quan trọng</div>
+            <div className="grid grid-cols-2 gap-2">
+              <input placeholder="Series UID" value={form.seriesUID} onChange={e => setForm(p => ({ ...p, seriesUID: e.target.value }))}
+                className="border border-gray-200 rounded px-2 py-1.5 text-xs outline-none" />
+              <input placeholder="Instance UID" value={form.instanceUID} onChange={e => setForm(p => ({ ...p, instanceUID: e.target.value }))}
+                className="border border-gray-200 rounded px-2 py-1.5 text-xs outline-none" />
+            </div>
+            <input placeholder="Mô tả (vd: U phổi thùy trên phải)" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+              className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs outline-none" />
+            <button onClick={addKeyImage} disabled={saving || !form.description}
+              className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50">
+              {saving ? 'Đang lưu...' : 'Thêm'}
+            </button>
+          </div>
+
+          {/* List */}
+          {loading ? <div className="text-center text-gray-400 py-4">Đang tải...</div> :
+           keyImages.length === 0 ? <div className="text-center text-gray-400 py-4 text-sm">Chưa có key image</div> : (
+            <div className="space-y-2">
+              {keyImages.map(ki => (
+                <div key={ki._id} className="flex items-center gap-3 p-2 border border-gray-200 rounded-lg">
+                  <div className="w-8 h-8 bg-yellow-100 rounded flex items-center justify-center text-yellow-600 text-lg flex-shrink-0">&#9733;</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">{ki.description || '—'}</div>
+                    <div className="text-[10px] text-gray-400 truncate">
+                      {ki.seriesUID && `Series: ${ki.seriesUID.slice(-12)}`}
+                      {ki.instanceUID && ` / Instance: ${ki.instanceUID.slice(-12)}`}
+                    </div>
+                    <div className="text-[10px] text-gray-400">{ki.flaggedByName} — {fmtDateTime(ki.createdAt)}</div>
+                  </div>
+                  <button onClick={() => removeKeyImage(ki._id)} className="text-red-400 hover:text-red-600 text-sm" title="Xóa">&times;</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="px-6 py-3 border-t border-gray-200">
+          <button onClick={onClose} className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">Đóng</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── DICOM Upload Modal ──────────────────────────────────────────────────────
+
+function DicomUploadModal({ onClose, onUploaded }) {
+  const [files, setFiles] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [results, setResults] = useState([])
+  const [dragOver, setDragOver] = useState(false)
+
+  const handleFiles = (fileList) => {
+    const arr = Array.from(fileList).filter(f =>
+      f.name.endsWith('.dcm') || f.name.endsWith('.DCM') || f.name.endsWith('.zip') || f.name.endsWith('.ZIP') || !f.name.includes('.')
+    )
+    setFiles(prev => [...prev, ...arr])
+  }
+
+  const handleDrop = (e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }
+  const handleInput = (e) => handleFiles(e.target.files)
+
+  const upload = async () => {
+    setUploading(true)
+    const newResults = []
+    for (const file of files) {
+      try {
+        const isZip = file.name.endsWith('.zip') || file.name.endsWith('.ZIP')
+        const endpoint = isZip ? '/ris/orthanc/upload-zip' : '/ris/orthanc/upload'
+        const buf = await file.arrayBuffer()
+        const res = await api.post(endpoint, buf, {
+          headers: { 'Content-Type': isZip ? 'application/zip' : 'application/dicom' },
+        })
+        newResults.push({ name: file.name, ok: true, data: res.data })
+      } catch (err) {
+        newResults.push({ name: file.name, ok: false, error: err.response?.data?.error || err.message })
+      }
+    }
+    setResults(newResults)
+    setUploading(false)
+    if (newResults.some(r => r.ok)) onUploaded?.()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-base font-bold text-gray-800">Upload DICOM</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div className="px-6 py-4 space-y-4">
+          {/* Drop zone */}
+          <div
+            className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${dragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}`}
+            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => document.getElementById('dicom-file-input').click()}
+          >
+            <div className="text-3xl text-gray-400 mb-2">&#128194;</div>
+            <div className="text-sm text-gray-600">Kéo thả file DICOM (.dcm) hoặc ZIP vào đây</div>
+            <div className="text-xs text-gray-400 mt-1">hoặc click để chọn file</div>
+            <input id="dicom-file-input" type="file" multiple accept=".dcm,.DCM,.zip,.ZIP,*" onChange={handleInput} className="hidden" />
+          </div>
+
+          {/* File list */}
+          {files.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-xs font-semibold text-gray-600">{files.length} file</div>
+              <div className="max-h-32 overflow-y-auto space-y-0.5">
+                {files.map((f, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
+                    <span className="truncate">{f.name}</span>
+                    <span className="text-gray-400">{(f.size / 1024).toFixed(0)} KB</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Results */}
+          {results.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-xs font-semibold text-gray-600">Kết quả:</div>
+              {results.map((r, i) => (
+                <div key={i} className={`text-xs px-2 py-1 rounded ${r.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                  {r.name}: {r.ok ? 'OK' : r.error}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
+          <button onClick={upload} disabled={uploading || files.length === 0}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium">
+            {uploading ? 'Đang upload...' : `Upload ${files.length} file`}
+          </button>
+          <button onClick={() => { setFiles([]); setResults([]) }} disabled={files.length === 0}
+            className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">Xóa danh sách</button>
+          <button onClick={onClose} className="ml-auto px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">Đóng</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Annotation Save Button (used in ReportEditor) ───────────────────────────
+
+function AnnotationPanel({ study }) {
+  const [annotation, setAnnotation] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [measurementJson, setMeasurementJson] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    api.get(`/ris/annotations/${study._id}`)
+      .then(r => {
+        if (r.data.measurements) {
+          setAnnotation(r.data)
+          setMeasurementJson(r.data.measurements)
+        }
+      }).catch(() => {}).finally(() => setLoading(false))
+  }, [study._id])
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      let parsed
+      try { parsed = JSON.parse(measurementJson) } catch { parsed = measurementJson }
+      const count = Array.isArray(parsed) ? parsed.length : (parsed?.measurements?.length || 0)
+      await api.post('/ris/annotations', {
+        studyId: study._id, studyUID: study.studyUID,
+        measurements: measurementJson,
+        measurementCount: count,
+      })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {}
+    setSaving(false)
+  }
+
+  if (loading) return null
+
+  return (
+    <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold text-gray-600">Measurements / Annotations</div>
+        {annotation && <span className="text-[10px] text-gray-400">Lưu bởi {annotation.savedByName} — {fmtDateTime(annotation.updatedAt)}</span>}
+      </div>
+      <textarea
+        value={measurementJson}
+        onChange={e => setMeasurementJson(e.target.value)}
+        placeholder='Paste JSON measurements từ OHIF (Export Measurements)...'
+        className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs font-mono outline-none focus:border-blue-400 resize-y"
+        rows={3}
+      />
+      <div className="flex items-center gap-2">
+        <button onClick={save} disabled={saving || !measurementJson.trim()}
+          className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50">
+          {saving ? 'Đang lưu...' : 'Lưu annotations'}
+        </button>
+        {saved && <span className="text-xs text-green-600">Đã lưu!</span>}
       </div>
     </div>
   )
@@ -250,6 +572,9 @@ function WorklistView({ studies, updateStudy, onRefresh, auth }) {
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(10)
   const [reportStudy, setReportStudy] = useState(null)
+  const [priorStudy, setPriorStudy] = useState(null)
+  const [keyImageStudy, setKeyImageStudy] = useState(null)
+  const [showUpload, setShowUpload] = useState(false)
 
   const tabConfig = STATUS_TABS.find(t => t.key === activeTab)
 
@@ -322,6 +647,8 @@ function WorklistView({ studies, updateStudy, onRefresh, auth }) {
           return (
             <div className="flex items-center gap-0.5">
               <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-gray-500 hover:text-gray-700`} title="Xem kết quả">👁</button>
+              <button onClick={() => setPriorStudy(study)} className={`${iconBtn} text-cyan-500 hover:text-cyan-700`} title="So sánh lần trước">⇔</button>
+              <button onClick={() => setKeyImageStudy(study)} className={`${iconBtn} text-yellow-500 hover:text-yellow-700`} title="Key images">★</button>
             </div>
           )
         }
@@ -332,7 +659,8 @@ function WorklistView({ studies, updateStudy, onRefresh, auth }) {
             {!study.teleradRequested && (
               <button onClick={() => handleRequestTelerad(study)} className={`${iconBtn} text-purple-500 hover:text-purple-700`} title="Gửi đọc hộ">↗</button>
             )}
-            <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-gray-500 hover:text-gray-700`} title="Xem kết quả">👁</button>
+            <button onClick={() => setPriorStudy(study)} className={`${iconBtn} text-cyan-500 hover:text-cyan-700`} title="So sánh lần trước">⇔</button>
+            <button onClick={() => setKeyImageStudy(study)} className={`${iconBtn} text-yellow-500 hover:text-yellow-700`} title="Key images">★</button>
             <button onClick={() => handleComplete(study)} className={`${iconBtn} text-green-500 hover:text-green-700`} title="Chuyển hoàn thành">✓</button>
             <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
           </div>
@@ -341,6 +669,8 @@ function WorklistView({ studies, updateStudy, onRefresh, auth }) {
         return (
           <div className="flex items-center gap-0.5">
             <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Xem kết quả">👁</button>
+            <button onClick={() => setPriorStudy(study)} className={`${iconBtn} text-cyan-500 hover:text-cyan-700`} title="So sánh lần trước">⇔</button>
+            <button onClick={() => setKeyImageStudy(study)} className={`${iconBtn} text-yellow-500 hover:text-yellow-700`} title="Key images">★</button>
           </div>
         )
       default:
@@ -382,6 +712,7 @@ function WorklistView({ studies, updateStudy, onRefresh, auth }) {
           <option value="US">Siêu âm</option>
         </select>
         <button onClick={onRefresh} className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors" title="Làm mới">⟳</button>
+        <button onClick={() => setShowUpload(true)} className="px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium text-gray-600" title="Upload DICOM">&#128194; Upload DICOM</button>
       </div>
 
       {/* Table */}
@@ -464,6 +795,15 @@ function WorklistView({ studies, updateStudy, onRefresh, auth }) {
       {/* Modals */}
       {reportStudy && (
         <ReportEditor study={reportStudy} onClose={() => setReportStudy(null)} onSaved={onRefresh} />
+      )}
+      {priorStudy && (
+        <PriorComparisonModal study={priorStudy} onClose={() => setPriorStudy(null)} />
+      )}
+      {keyImageStudy && (
+        <KeyImageModal study={keyImageStudy} onClose={() => setKeyImageStudy(null)} />
+      )}
+      {showUpload && (
+        <DicomUploadModal onClose={() => setShowUpload(false)} onUploaded={onRefresh} />
       )}
     </div>
   )
