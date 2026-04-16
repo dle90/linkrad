@@ -52,61 +52,143 @@ function CrudModal({ title, fields, record, onClose, onSave }) {
 }
 
 // ── Transaction (Import/Export) Modal ────────────────────
-function TransactionModal({ type, supplies, suppliers, cancelReasons, userDept, onClose, onSaved }) {
+function TransactionModal({ type, supplies, suppliers, warehouses, cancelReasons, userDept, onClose, onSaved }) {
   const [site, setSite] = useState(userDept || '')
+  const [warehouseId, setWarehouseId] = useState('')
+  const [accountingPeriod, setAccountingPeriod] = useState(() => {
+    const d = new Date(); return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+  })
   const [supplierId, setSupplierId] = useState('')
   const [supplierName, setSupplierName] = useState('')
   const [reason, setReason] = useState('')
-  const [items, setItems] = useState([{ supplyId: '', supplyName: '', quantity: 1, unitPrice: 0, lotNumber: '', expiryDate: '' }])
+  const [txNotes, setTxNotes] = useState('')
+  const emptyItem = { supplyId: '', supplyName: '', supplyCode: '', unit: '', packagingSpec: '', quantity: 1, conversionQuantity: 0, purchasePrice: 0, lotNumber: '', manufacturingDate: '', expiryDate: '', vatRate: 10, discountPercent: 0, discountAmount: 0, notes: '' }
+  const [items, setItems] = useState([{ ...emptyItem }])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const addItem = () => setItems(p => [...p, { supplyId: '', supplyName: '', quantity: 1, unitPrice: 0, lotNumber: '', expiryDate: '' }])
+  const addItem = () => setItems(p => [...p, { ...emptyItem }])
   const removeItem = (i) => setItems(p => p.filter((_, idx) => idx !== i))
   const updateItem = (i, field, val) => setItems(p => p.map((it, idx) => idx === i ? { ...it, [field]: val } : it))
-  const selectSupply = (i, id) => { const s = supplies.find(s => s._id === id); updateItem(i, 'supplyId', id); updateItem(i, 'supplyName', s?.name || '') }
-  const totalAmount = items.reduce((s, it) => s + (it.unitPrice || 0) * (it.quantity || 0), 0)
+  const selectSupply = (i, id) => {
+    const s = supplies.find(s => s._id === id)
+    setItems(p => p.map((it, idx) => idx === i ? { ...it, supplyId: id, supplyName: s?.name || '', supplyCode: s?.code || '', unit: s?.unit || '', packagingSpec: s?.packagingSpec || '', conversionQuantity: (it.quantity || 1) * (s?.conversionRate || 1) } : it))
+  }
+  // Auto-calc conversion when quantity changes
+  const updateQuantity = (i, qty) => {
+    const s = supplies.find(s => s._id === items[i].supplyId)
+    setItems(p => p.map((it, idx) => idx === i ? { ...it, quantity: qty, conversionQuantity: qty * (s?.conversionRate || 1) } : it))
+  }
+
+  // Computed totals per item
+  const calcItem = (it) => {
+    const amtBefore = (it.purchasePrice || 0) * (it.quantity || 0)
+    const vatAmt = Math.round(amtBefore * (it.vatRate || 0) / 100)
+    const amtAfter = amtBefore + vatAmt
+    const discAmt = it.discountAmount || Math.round(amtAfter * (it.discountPercent || 0) / 100)
+    return { amtBefore, vatAmt, amtAfter, discAmt, total: amtAfter - discAmt }
+  }
+  const totals = items.reduce((acc, it) => {
+    const c = calcItem(it); return { before: acc.before + c.amtBefore, vat: acc.vat + c.vatAmt, disc: acc.disc + c.discAmt, total: acc.total + c.total }
+  }, { before: 0, vat: 0, disc: 0, total: 0 })
 
   const handleSave = async () => {
     if (items.some(it => !it.supplyId || !it.quantity)) return setError('Vui lòng chọn vật tư và số lượng')
     setSaving(true)
-    try { await api.post('/inventory/transactions', { type, site, items, supplierId, supplierName, reason }); onSaved() }
-    catch (err) { setError(err.response?.data?.error || 'Lỗi'); setSaving(false) }
+    const wh = warehouses.find(w => w._id === warehouseId)
+    try {
+      await api.post('/inventory/transactions', {
+        type, site, warehouseId, warehouseName: wh?.name || '', warehouseCode: wh?.code || '',
+        accountingPeriod, items, supplierId, supplierName, reason, notes: txNotes,
+      })
+      onSaved()
+    } catch (err) { setError(err.response?.data?.error || 'Lỗi'); setSaving(false) }
   }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b flex justify-between"><h3 className="font-semibold text-gray-800">{type === 'import' ? 'Tạo phiếu nhập kho' : 'Tạo phiếu xuất kho'}</h3><button onClick={onClose} className="text-gray-400 hover:text-gray-600">&times;</button></div>
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b flex justify-between">
+          <h3 className="font-semibold text-gray-800">{type === 'import' ? 'Tạo phiếu nhập kho' : 'Tạo phiếu xuất kho'}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">&times;</button>
+        </div>
         <div className="p-6 space-y-4">
           {error && <div className="text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Header fields */}
+          <div className="grid grid-cols-4 gap-3">
             <div><label className="block text-xs font-medium text-gray-600 mb-1">Chi nhánh</label><input className="w-full border rounded px-2 py-1.5 text-sm" value={site} onChange={e => setSite(e.target.value)} /></div>
+            <div><label className="block text-xs font-medium text-gray-600 mb-1">Kho</label>
+              <select className="w-full border rounded px-2 py-1.5 text-sm" value={warehouseId} onChange={e => setWarehouseId(e.target.value)}>
+                <option value="">-- Tất cả --</option>{warehouses.map(w => <option key={w._id} value={w._id}>{w.code} - {w.name}</option>)}
+              </select></div>
+            <div><label className="block text-xs font-medium text-gray-600 mb-1">Kỳ kế toán</label><input className="w-full border rounded px-2 py-1.5 text-sm" value={accountingPeriod} onChange={e => setAccountingPeriod(e.target.value)} placeholder="MM/YYYY" /></div>
             {type === 'import' && <div><label className="block text-xs font-medium text-gray-600 mb-1">Nhà cung cấp</label>
               <select className="w-full border rounded px-2 py-1.5 text-sm" value={supplierId} onChange={e => { setSupplierId(e.target.value); setSupplierName(suppliers.find(s => s._id === e.target.value)?.name || '') }}>
                 <option value="">-- Chọn --</option>{suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
               </select></div>}
             <div><label className="block text-xs font-medium text-gray-600 mb-1">Lý do</label><input className="w-full border rounded px-2 py-1.5 text-sm" value={reason} onChange={e => setReason(e.target.value)} /></div>
+            <div className="col-span-2"><label className="block text-xs font-medium text-gray-600 mb-1">Ghi chú phiếu</label><input className="w-full border rounded px-2 py-1.5 text-sm" value={txNotes} onChange={e => setTxNotes(e.target.value)} /></div>
           </div>
+
+          {/* Items table */}
           <div>
             <div className="flex justify-between items-center mb-2"><label className="text-sm font-medium text-gray-700">Danh sách vật tư</label><button onClick={addItem} className="text-sm text-blue-600 hover:text-blue-800">+ Thêm dòng</button></div>
-            <table className="w-full text-sm">
-              <thead><tr className="bg-gray-50 text-gray-600">
-                <th className="text-left px-2 py-1">Vật tư</th><th className="text-right px-2 py-1">SL</th>
-                {type === 'import' && <><th className="text-right px-2 py-1">Đơn giá</th><th className="text-left px-2 py-1">Số lô</th><th className="text-left px-2 py-1">Hạn SD</th></>}
-                <th className="px-2 py-1"></th>
-              </tr></thead>
-              <tbody>{items.map((it, i) => (
-                <tr key={i} className="border-b">
-                  <td className="px-2 py-1"><select className="w-full border rounded px-2 py-1" value={it.supplyId} onChange={e => selectSupply(i, e.target.value)}><option value="">-- Chọn --</option>{supplies.map(s => <option key={s._id} value={s._id}>{s.name} ({s.code})</option>)}</select></td>
-                  <td className="px-2 py-1"><input type="number" className="w-20 border rounded px-2 py-1 text-right" value={it.quantity} onChange={e => updateItem(i, 'quantity', +e.target.value)} min={1} /></td>
-                  {type === 'import' && <><td className="px-2 py-1"><input type="number" className="w-24 border rounded px-2 py-1 text-right" value={it.unitPrice} onChange={e => updateItem(i, 'unitPrice', +e.target.value)} /></td>
-                  <td className="px-2 py-1"><input className="w-24 border rounded px-2 py-1" value={it.lotNumber} onChange={e => updateItem(i, 'lotNumber', e.target.value)} /></td>
-                  <td className="px-2 py-1"><input type="date" className="border rounded px-2 py-1" value={it.expiryDate} onChange={e => updateItem(i, 'expiryDate', e.target.value)} /></td></>}
-                  <td className="px-2 py-1">{items.length > 1 && <button onClick={() => removeItem(i)} className="text-red-400 hover:text-red-600">&times;</button>}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-            {type === 'import' && <div className="text-right mt-2 text-sm font-medium text-gray-600">Tổng tiền: <span className="text-blue-700 font-semibold">{fmtMoney(totalAmount)}</span></div>}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs min-w-[1100px]">
+                <thead><tr className="bg-gray-50 text-gray-600">
+                  <th className="text-left px-1.5 py-1.5">Vật tư</th>
+                  <th className="text-left px-1.5 py-1.5 w-16">ĐVT</th>
+                  <th className="text-left px-1.5 py-1.5 w-20">Quy cách</th>
+                  <th className="text-right px-1.5 py-1.5 w-14">SL</th>
+                  <th className="text-right px-1.5 py-1.5 w-16">SL CĐ</th>
+                  {type === 'import' && <>
+                    <th className="text-left px-1.5 py-1.5 w-20">Mã lô</th>
+                    <th className="text-left px-1.5 py-1.5 w-24">Ngày SX</th>
+                    <th className="text-left px-1.5 py-1.5 w-24">Hạn SD</th>
+                    <th className="text-right px-1.5 py-1.5 w-20">Giá mua</th>
+                    <th className="text-right px-1.5 py-1.5 w-16">Giá/ĐV</th>
+                    <th className="text-right px-1.5 py-1.5 w-20">Trước thuế</th>
+                    <th className="text-right px-1.5 py-1.5 w-12">VAT%</th>
+                    <th className="text-right px-1.5 py-1.5 w-12">CK%</th>
+                    <th className="text-right px-1.5 py-1.5 w-20">Tổng tiền</th>
+                  </>}
+                  <th className="text-left px-1.5 py-1.5 w-20">Ghi chú</th>
+                  <th className="px-1 py-1.5 w-6"></th>
+                </tr></thead>
+                <tbody>{items.map((it, i) => {
+                  const c = calcItem(it)
+                  return (
+                    <tr key={i} className="border-b">
+                      <td className="px-1.5 py-1"><select className="w-full border rounded px-1 py-1 text-xs" value={it.supplyId} onChange={e => selectSupply(i, e.target.value)}><option value="">-- Chọn --</option>{supplies.map(s => <option key={s._id} value={s._id}>{s.name} ({s.code})</option>)}</select></td>
+                      <td className="px-1.5 py-1 text-gray-500">{it.unit || '-'}</td>
+                      <td className="px-1.5 py-1 text-gray-500">{it.packagingSpec || '-'}</td>
+                      <td className="px-1.5 py-1"><input type="number" className="w-14 border rounded px-1 py-1 text-right text-xs" value={it.quantity} onChange={e => updateQuantity(i, +e.target.value)} min={1} /></td>
+                      <td className="px-1.5 py-1 text-right text-gray-500">{it.conversionQuantity || '-'}</td>
+                      {type === 'import' && <>
+                        <td className="px-1.5 py-1"><input className="w-20 border rounded px-1 py-1 text-xs" value={it.lotNumber} onChange={e => updateItem(i, 'lotNumber', e.target.value)} /></td>
+                        <td className="px-1.5 py-1"><input type="date" className="border rounded px-1 py-1 text-xs" value={it.manufacturingDate} onChange={e => updateItem(i, 'manufacturingDate', e.target.value)} /></td>
+                        <td className="px-1.5 py-1"><input type="date" className="border rounded px-1 py-1 text-xs" value={it.expiryDate} onChange={e => updateItem(i, 'expiryDate', e.target.value)} /></td>
+                        <td className="px-1.5 py-1"><input type="number" className="w-20 border rounded px-1 py-1 text-right text-xs" value={it.purchasePrice} onChange={e => updateItem(i, 'purchasePrice', +e.target.value)} /></td>
+                        <td className="px-1.5 py-1 text-right text-gray-500">{it.conversionQuantity > 0 ? fmtMoney(Math.round((it.purchasePrice || 0) * (it.quantity || 0) / it.conversionQuantity)) : '-'}</td>
+                        <td className="px-1.5 py-1 text-right">{fmtMoney(c.amtBefore)}</td>
+                        <td className="px-1.5 py-1"><input type="number" className="w-12 border rounded px-1 py-1 text-right text-xs" value={it.vatRate} onChange={e => updateItem(i, 'vatRate', +e.target.value)} /></td>
+                        <td className="px-1.5 py-1"><input type="number" className="w-12 border rounded px-1 py-1 text-right text-xs" value={it.discountPercent} onChange={e => updateItem(i, 'discountPercent', +e.target.value)} /></td>
+                        <td className="px-1.5 py-1 text-right font-medium">{fmtMoney(c.total)}</td>
+                      </>}
+                      <td className="px-1.5 py-1"><input className="w-20 border rounded px-1 py-1 text-xs" value={it.notes || ''} onChange={e => updateItem(i, 'notes', e.target.value)} /></td>
+                      <td className="px-1 py-1">{items.length > 1 && <button onClick={() => removeItem(i)} className="text-red-400 hover:text-red-600">&times;</button>}</td>
+                    </tr>
+                  )
+                })}</tbody>
+              </table>
+            </div>
+            {type === 'import' && (
+              <div className="flex justify-end gap-6 mt-3 text-sm">
+                <span className="text-gray-500">Trước thuế: <span className="font-medium text-gray-700">{fmtMoney(totals.before)}</span></span>
+                <span className="text-gray-500">VAT: <span className="font-medium text-blue-600">{fmtMoney(totals.vat)}</span></span>
+                <span className="text-gray-500">Chiết khấu: <span className="font-medium text-orange-600">{fmtMoney(totals.disc)}</span></span>
+                <span className="text-gray-700 font-semibold">Tổng tiền: <span className="text-blue-700">{fmtMoney(totals.total)}</span></span>
+              </div>
+            )}
           </div>
         </div>
         <div className="px-6 py-3 border-t flex justify-end gap-2">
@@ -307,29 +389,37 @@ export default function Inventory() {
 
   // ── Render transaction table ───────────────────────────
   const renderTxTable = (txs, type) => (
-    <div className="bg-white rounded-lg border overflow-hidden">
+    <div className="bg-white rounded-lg border overflow-hidden overflow-x-auto">
       <table className="w-full text-sm">
         <thead><tr className="bg-gray-50 text-gray-600 text-left">
-          <th className="px-4 py-3">Số phiếu</th><th className="px-4 py-3">Chi nhánh</th>
-          {type === 'import' && <th className="px-4 py-3">NCC</th>}
-          <th className="px-4 py-3">Lý do</th><th className="px-4 py-3 text-right">Tổng tiền</th>
-          <th className="px-4 py-3 text-center">Số mặt hàng</th><th className="px-4 py-3">Trạng thái</th>
-          <th className="px-4 py-3">Ngày tạo</th><th className="px-4 py-3">Người tạo</th><th className="px-4 py-3"></th>
+          <th className="px-3 py-3">Số phiếu</th><th className="px-3 py-3">Ngày lập</th>
+          <th className="px-3 py-3">Mã kho</th><th className="px-3 py-3">Tên kho</th>
+          <th className="px-3 py-3">Chi nhánh</th><th className="px-3 py-3">Kỳ KT</th>
+          {type === 'import' && <th className="px-3 py-3">NCC</th>}
+          <th className="px-3 py-3 text-right">Trước thuế</th><th className="px-3 py-3 text-right">VAT</th>
+          <th className="px-3 py-3 text-right">CK</th><th className="px-3 py-3 text-right">Tổng tiền</th>
+          <th className="px-3 py-3 text-center">SL dòng</th><th className="px-3 py-3">Trạng thái</th>
+          <th className="px-3 py-3">Người tạo</th><th className="px-3 py-3"></th>
         </tr></thead>
-        <tbody>{loading ? <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
-          : txs.length === 0 ? <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">Chưa có phiếu</td></tr>
+        <tbody>{loading ? <tr><td colSpan={15} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
+          : txs.length === 0 ? <tr><td colSpan={15} className="px-4 py-8 text-center text-gray-400">Chưa có phiếu</td></tr>
           : txs.map(tx => (
           <tr key={tx._id} className="border-t hover:bg-blue-50/50">
-            <td className="px-4 py-2.5 font-medium text-blue-600">{tx.transactionNumber}</td>
-            <td className="px-4 py-2.5">{tx.site || '-'}</td>
-            {type === 'import' && <td className="px-4 py-2.5">{tx.supplierName || '-'}</td>}
-            <td className="px-4 py-2.5 text-gray-500 truncate max-w-[150px]">{tx.reason || '-'}</td>
-            <td className="px-4 py-2.5 text-right font-medium">{fmtMoney(tx.totalAmount)}</td>
-            <td className="px-4 py-2.5 text-center">{tx.items?.length || 0}</td>
-            <td className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${ST_CLS[tx.status]}`}>{ST_LBL[tx.status]}</span></td>
-            <td className="px-4 py-2.5 text-gray-500">{tx.createdAt?.slice(0, 10)}</td>
-            <td className="px-4 py-2.5 text-gray-500">{tx.createdBy}</td>
-            <td className="px-4 py-2.5 flex gap-2">
+            <td className="px-3 py-2.5 font-medium text-blue-600 whitespace-nowrap">{tx.transactionNumber}</td>
+            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{tx.createdAt?.slice(0, 10)}</td>
+            <td className="px-3 py-2.5 font-mono text-xs">{tx.warehouseCode || '-'}</td>
+            <td className="px-3 py-2.5">{tx.warehouseName || '-'}</td>
+            <td className="px-3 py-2.5">{tx.site || '-'}</td>
+            <td className="px-3 py-2.5 text-gray-500">{tx.accountingPeriod || '-'}</td>
+            {type === 'import' && <td className="px-3 py-2.5">{tx.supplierName || '-'}</td>}
+            <td className="px-3 py-2.5 text-right">{fmtMoney(tx.totalAmountBeforeTax || 0)}</td>
+            <td className="px-3 py-2.5 text-right text-blue-600">{fmtMoney(tx.totalVat || 0)}</td>
+            <td className="px-3 py-2.5 text-right text-orange-600">{fmtMoney(tx.totalDiscount || 0)}</td>
+            <td className="px-3 py-2.5 text-right font-medium">{fmtMoney(tx.totalAmount)}</td>
+            <td className="px-3 py-2.5 text-center">{tx.items?.length || 0}</td>
+            <td className="px-3 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${ST_CLS[tx.status]}`}>{ST_LBL[tx.status]}</span></td>
+            <td className="px-3 py-2.5 text-gray-500">{tx.createdBy}</td>
+            <td className="px-3 py-2.5 flex gap-2">
               {tx.status === 'draft' && <>
                 <button onClick={() => handleConfirmTx(tx._id)} className="text-green-600 hover:text-green-800 text-xs">Xác nhận</button>
                 <button onClick={() => handleCancelTx(tx._id)} className="text-red-500 hover:text-red-700 text-xs">Hủy</button>
@@ -402,15 +492,18 @@ export default function Inventory() {
               <div className="bg-white rounded-lg border overflow-hidden">
                 <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
                   <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Tên</th><th className="px-4 py-3">Nhóm</th><th className="px-4 py-3">ĐVT</th>
+                  <th className="px-4 py-3">Quy cách</th><th className="px-4 py-3 text-right">SL CĐ</th>
                   <th className="px-4 py-3 text-right">Tồn kho</th><th className="px-4 py-3 text-right">Tối thiểu</th><th className="px-4 py-3">Chi nhánh</th><th className="px-4 py-3"></th>
                 </tr></thead><tbody>
-                  {filteredSupplies.length === 0 ? <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Chưa có hàng hóa</td></tr>
+                  {filteredSupplies.length === 0 ? <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">Chưa có hàng hóa</td></tr>
                   : filteredSupplies.map(s => (
                     <tr key={s._id} className={`border-t hover:bg-blue-50/50 ${s.currentStock <= s.minimumStock ? 'bg-red-50/50' : ''}`}>
                       <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{s.code}</td>
                       <td className="px-4 py-2.5 font-medium">{s.name}</td>
                       <td className="px-4 py-2.5 text-gray-500">{categories.find(c => c._id === s.categoryId)?.name || '-'}</td>
                       <td className="px-4 py-2.5">{s.unit}</td>
+                      <td className="px-4 py-2.5 text-gray-500">{s.packagingSpec || '-'}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-500">{s.conversionRate || 1}</td>
                       <td className={`px-4 py-2.5 text-right font-medium ${s.currentStock <= s.minimumStock ? 'text-red-600' : 'text-green-600'}`}>{s.currentStock}</td>
                       <td className="px-4 py-2.5 text-right text-gray-500">{s.minimumStock}</td>
                       <td className="px-4 py-2.5 text-gray-500">{s.site || '-'}</td>
@@ -536,24 +629,28 @@ export default function Inventory() {
 
           {/* Lots */}
           {khoSub === 'lots' && (
-            <div className="bg-white rounded-lg border overflow-hidden">
+            <div className="bg-white rounded-lg border overflow-hidden overflow-x-auto">
               <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
-                <th className="px-4 py-3">Số lô</th><th className="px-4 py-3">Vật tư</th><th className="px-4 py-3">Chi nhánh</th>
+                <th className="px-4 py-3">Mã lô</th><th className="px-4 py-3">Vật tư</th><th className="px-4 py-3">Kho</th><th className="px-4 py-3">Chi nhánh</th>
+                <th className="px-4 py-3">Ngày SX</th><th className="px-4 py-3">Hạn SD</th>
                 <th className="px-4 py-3 text-right">SL ban đầu</th><th className="px-4 py-3 text-right">SL hiện tại</th>
-                <th className="px-4 py-3">Hạn SD</th><th className="px-4 py-3 text-right">Đơn giá</th><th className="px-4 py-3">Trạng thái</th>
+                <th className="px-4 py-3 text-right">Đơn giá</th><th className="px-4 py-3">Trạng thái</th>
               </tr></thead><tbody>
-                {lots.length === 0 ? <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Chưa có lô hàng</td></tr>
+                {lots.length === 0 ? <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">Chưa có lô hàng</td></tr>
                 : lots.map(l => {
                   const spl = supplies.find(s => s._id === l.supplyId)
+                  const wh = warehouses.find(w => w._id === l.warehouseId)
                   const isExpiring = l.expiryDate && l.expiryDate <= new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
                   return (
                     <tr key={l._id} className={`border-t hover:bg-blue-50/50 ${isExpiring ? 'bg-orange-50/50' : ''}`}>
                       <td className="px-4 py-2.5 font-mono text-xs">{l.lotNumber}</td>
                       <td className="px-4 py-2.5">{spl?.name || l.supplyId}</td>
+                      <td className="px-4 py-2.5 text-gray-500">{wh?.name || '-'}</td>
                       <td className="px-4 py-2.5">{l.site || '-'}</td>
+                      <td className="px-4 py-2.5 text-gray-500">{l.manufacturingDate || '-'}</td>
+                      <td className={`px-4 py-2.5 ${isExpiring ? 'text-orange-600 font-medium' : 'text-gray-500'}`}>{l.expiryDate || '-'}</td>
                       <td className="px-4 py-2.5 text-right">{l.initialQuantity}</td>
                       <td className="px-4 py-2.5 text-right font-medium">{l.currentQuantity}</td>
-                      <td className={`px-4 py-2.5 ${isExpiring ? 'text-orange-600 font-medium' : 'text-gray-500'}`}>{l.expiryDate || '-'}</td>
                       <td className="px-4 py-2.5 text-right">{fmtMoney(l.unitPrice)}</td>
                       <td className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${l.status === 'available' ? 'bg-green-100 text-green-700' : l.status === 'expired' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{l.status === 'available' ? 'Còn hàng' : l.status === 'expired' ? 'Hết hạn' : 'Đã hết'}</span></td>
                     </tr>
@@ -709,7 +806,7 @@ export default function Inventory() {
       )}
 
       {/* ════════════ MODALS ════════════ */}
-      {showTxModal && <TransactionModal type={showTxModal} supplies={supplies} suppliers={suppliers} cancelReasons={cancelReasons} userDept={auth.department} onClose={() => setShowTxModal(null)} onSaved={() => { setShowTxModal(null); tab === 'import' ? loadImportTxs() : loadExportTxs(); loadBase() }} />}
+      {showTxModal && <TransactionModal type={showTxModal} supplies={supplies} suppliers={suppliers} warehouses={warehouses} cancelReasons={cancelReasons} userDept={auth.department} onClose={() => setShowTxModal(null)} onSaved={() => { setShowTxModal(null); tab === 'import' ? loadImportTxs() : loadExportTxs(); loadBase() }} />}
       {showStockCard && <StockCardModal supply={showStockCard} onClose={() => setShowStockCard(null)} />}
       {showHisModal && <HisMappingModal services={services} supplies={supplies} onClose={() => setShowHisModal(false)} onSaved={() => { setShowHisModal(false); loadHisData() }} />}
 
@@ -722,7 +819,8 @@ export default function Inventory() {
       {editModal?.type === 'supply' && <CrudModal title={editModal.record?._id ? 'Sửa hàng hóa' : 'Thêm hàng hóa'}
         fields={[{ key: 'name', label: 'Tên', required: true }, { key: 'code', label: 'Mã' },
           { key: 'categoryId', label: 'Nhóm', type: 'select', options: categories.map(c => ({ value: c._id, label: c.name })) },
-          { key: 'unit', label: 'ĐVT' }, { key: 'minimumStock', label: 'Tồn tối thiểu', type: 'number' }, { key: 'site', label: 'Chi nhánh' }]}
+          { key: 'unit', label: 'ĐVT' }, { key: 'packagingSpec', label: 'Quy cách đóng gói' }, { key: 'conversionRate', label: 'SL chuyển đổi (1 gói = N đơn vị)', type: 'number' },
+          { key: 'minimumStock', label: 'Tồn tối thiểu', type: 'number' }, { key: 'site', label: 'Chi nhánh' }]}
         record={editModal.record} onClose={() => setEditModal(null)}
         onSave={async (form) => { if (editModal.record?._id) await api.put(`/inventory/supplies/${editModal.record._id}`, form); else await api.post('/inventory/supplies', form); setEditModal(null); loadBase() }} />}
 

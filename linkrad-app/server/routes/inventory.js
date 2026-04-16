@@ -111,12 +111,14 @@ router.get('/supplies', requireAuth, async (req, res) => {
 
 router.post('/supplies', requireAdmin, async (req, res) => {
   try {
-    const { code, name, categoryId, unit, minimumStock, site, supplierId } = req.body
+    const { code, name, categoryId, unit, packagingSpec, conversionRate, minimumStock, site, supplierId } = req.body
     if (!name) return res.status(400).json({ error: 'Tên vật tư là bắt buộc' })
     const supply = new Supply({
       _id: `SPL-${Date.now()}`,
       code: code || `VT-${Date.now().toString().slice(-6)}`,
-      name, categoryId, unit: unit || 'cái', minimumStock: minimumStock || 0,
+      name, categoryId, unit: unit || 'cái', packagingSpec: packagingSpec || '',
+      conversionRate: conversionRate || 1,
+      minimumStock: minimumStock || 0,
       currentStock: 0, site, supplierId,
       status: 'active',
       createdAt: now(), updatedAt: now(),
@@ -154,7 +156,9 @@ router.get('/transactions', requireAuth, async (req, res) => {
     const filter = {}
     if (req.query.type) filter.type = req.query.type
     if (req.query.site) filter.site = req.query.site
+    if (req.query.warehouseId) filter.warehouseId = req.query.warehouseId
     if (req.query.status) filter.status = req.query.status
+    if (req.query.accountingPeriod) filter.accountingPeriod = req.query.accountingPeriod
     if (req.query.dateFrom || req.query.dateTo) {
       filter.createdAt = {}
       if (req.query.dateFrom) filter.createdAt.$gte = req.query.dateFrom
@@ -167,25 +171,61 @@ router.get('/transactions', requireAuth, async (req, res) => {
 
 router.post('/transactions', requireAuth, async (req, res) => {
   try {
-    const { type, site, items, supplierId, supplierName, reason } = req.body
+    const { type, site, items, supplierId, supplierName, reason, notes,
+            warehouseId, warehouseName, warehouseCode, accountingPeriod } = req.body
     if (!type || !items || items.length === 0) {
       return res.status(400).json({ error: 'Thiếu loại phiếu hoặc danh sách vật tư' })
     }
-    const totalAmount = items.reduce((s, it) => s + (it.unitPrice || 0) * (it.quantity || 0), 0)
+    // Calculate item-level totals
+    const mappedItems = items.map(it => {
+      const qty = it.quantity || 0
+      const convQty = it.conversionQuantity || 0
+      const purchasePrice = it.purchasePrice || it.unitPrice || 0
+      const unitPr = convQty > 0 ? purchasePrice / (convQty / qty || 1) : purchasePrice
+      const amtBefore = purchasePrice * qty
+      const vatRate = it.vatRate || 0
+      const vatAmt = Math.round(amtBefore * vatRate / 100)
+      const amtAfter = amtBefore + vatAmt
+      const discPct = it.discountPercent || 0
+      const discAmt = it.discountAmount || Math.round(amtAfter * discPct / 100)
+      const finalAmt = amtAfter - discAmt
+      return {
+        supplyId: it.supplyId,
+        supplyName: it.supplyName,
+        supplyCode: it.supplyCode || '',
+        unit: it.unit || '',
+        packagingSpec: it.packagingSpec || '',
+        lotNumber: it.lotNumber || '',
+        manufacturingDate: it.manufacturingDate || '',
+        expiryDate: it.expiryDate || '',
+        quantity: qty,
+        conversionQuantity: convQty,
+        purchasePrice,
+        unitPrice: unitPr,
+        amountBeforeTax: amtBefore,
+        vatRate,
+        vatAmount: vatAmt,
+        amountAfterTax: amtAfter,
+        discountPercent: discPct,
+        discountAmount: discAmt,
+        amount: finalAmt,
+        notes: it.notes || '',
+      }
+    })
+    const totalAmountBeforeTax = mappedItems.reduce((s, it) => s + it.amountBeforeTax, 0)
+    const totalVat = mappedItems.reduce((s, it) => s + it.vatAmount, 0)
+    const totalDiscount = mappedItems.reduce((s, it) => s + it.discountAmount, 0)
+    const totalAmount = mappedItems.reduce((s, it) => s + it.amount, 0)
+
     const tx = new InventoryTransaction({
       _id: `TX-${Date.now()}-${crypto.randomUUID().slice(0, 4)}`,
       transactionNumber: await nextTxNumber(type),
       type, site: site || req.user.department,
-      items: items.map(it => ({
-        supplyId: it.supplyId,
-        supplyName: it.supplyName,
-        lotNumber: it.lotNumber || '',
-        expiryDate: it.expiryDate || '',
-        quantity: it.quantity,
-        unitPrice: it.unitPrice || 0,
-        amount: (it.unitPrice || 0) * (it.quantity || 0),
-      })),
-      totalAmount, supplierId, supplierName, reason,
+      warehouseId: warehouseId || '', warehouseName: warehouseName || '', warehouseCode: warehouseCode || '',
+      accountingPeriod: accountingPeriod || '',
+      items: mappedItems,
+      totalAmountBeforeTax, totalVat, totalDiscount, totalAmount,
+      supplierId, supplierName, reason, notes: notes || '',
       status: 'draft',
       createdBy: req.user.username,
       createdAt: now(), updatedAt: now(),
@@ -213,7 +253,9 @@ router.put('/transactions/:id/confirm', requireAuth, async (req, res) => {
           _id: `LOT-${Date.now()}-${crypto.randomUUID().slice(0, 4)}`,
           supplyId: item.supplyId,
           site: tx.site,
+          warehouseId: tx.warehouseId || '',
           lotNumber: item.lotNumber || `L-${Date.now().toString().slice(-6)}`,
+          manufacturingDate: item.manufacturingDate || '',
           expiryDate: item.expiryDate || '',
           importTransactionId: tx._id,
           importDate: today(),

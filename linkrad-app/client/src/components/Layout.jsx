@@ -41,6 +41,12 @@ const NAV = [
     ]
   },
   {
+    group: 'Quản lý',
+    items: [
+      { path: '/hr', label: 'Nhân sự & Phân quyền', icon: '👥', adminOnly: true },
+    ]
+  },
+  {
     group: 'Tài chính',
     financialsOnly: true,
     items: [
@@ -49,12 +55,6 @@ const NAV = [
       { path: '/cf',        label: 'Dòng tiền',             icon: '💰' },
       { path: '/bs',        label: 'Bảng cân đối kế toán',  icon: '⚖️' },
       { path: '/breakeven', label: 'Điểm hòa vốn',          icon: '📈' }
-    ]
-  },
-  {
-    group: 'Quản lý',
-    items: [
-      { path: '/hr', label: 'Nhân sự & Phân quyền', icon: '👥', adminOnly: true },
     ]
   },
   {
