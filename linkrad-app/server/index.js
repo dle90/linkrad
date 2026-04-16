@@ -18,6 +18,11 @@ const registrationRouter = require('./routes/registration')
 const workCatRouter = require('./routes/work-categories')
 const kpiRouter = require('./routes/kpi')
 const marketingRouter = require('./routes/marketing')
+const billingRouter = require('./routes/billing')
+const inventoryRouter = require('./routes/inventory')
+const catalogsRouter = require('./routes/catalogs')
+const bookingRouter = require('./routes/booking')
+const promotionsRouter = require('./routes/promotions')
 const { requireAdmin } = require('./middleware/auth')
 
 const app = express()
@@ -54,6 +59,16 @@ app.use('/api/work-categories', workCatRouter)
 app.use('/api/kpi', kpiRouter)
 // Marketing: auth handled inside the router
 app.use('/api/marketing', marketingRouter)
+// Billing: auth handled inside the router
+app.use('/api/billing', billingRouter)
+// Inventory: auth handled inside the router
+app.use('/api/inventory', inventoryRouter)
+// Catalogs: auth handled inside the router (has one public endpoint)
+app.use('/api/catalogs', catalogsRouter)
+// Booking: public routes (no auth required)
+app.use('/api/booking', bookingRouter)
+// Promotions: auth handled inside the router
+app.use('/api/promotions', promotionsRouter)
 
 // Serve React build in production
 const clientDist = path.join(__dirname, '../client/dist')

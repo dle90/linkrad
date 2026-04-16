@@ -19,8 +19,13 @@ import Marketing from './pages/Marketing'
 import Teleradiology, { StudyDetailPage } from './pages/Teleradiology'
 import TeleradAdmin from './pages/TeleradAdmin'
 import TeleradReading from './pages/TeleradReading'
+import Billing from './pages/Billing'
+import Inventory from './pages/Inventory'
+import Catalogs from './pages/Catalogs'
+import BookingForm from './pages/BookingForm'
+// Promotions is now inside Catalogs page
 
-function AppRoutes() {
+function AuthenticatedRoutes() {
   const { auth } = useAuth()
 
   if (!auth) return <Login />
@@ -45,6 +50,10 @@ function AppRoutes() {
             {isWorkflowUser && <Route path="/teleradiology" element={<Teleradiology />} />}
             {auth.role === 'admin' && <Route path="/telerad-admin" element={<TeleradAdmin />} />}
             {isWorkflowUser && <Route path="/telerad-reading" element={<TeleradReading />} />}
+            {isWorkflowUser && <Route path="/billing" element={<Billing />} />}
+
+            {isWorkflowUser && <Route path="/inventory" element={<Inventory />} />}
+            {isWorkflowUser && <Route path="/catalogs" element={<Catalogs />} />}
             <Route path="/pl" element={<PL />} />
             <Route path="/cf" element={<CF />} />
             <Route path="/bs" element={<BalanceSheet />} />
@@ -56,6 +65,17 @@ function AppRoutes() {
           </Routes>
         </Layout>
       } />
+    </Routes>
+  )
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Public routes - no auth required */}
+      <Route path="/booking" element={<BookingForm />} />
+      {/* All other routes require auth */}
+      <Route path="/*" element={<AuthenticatedRoutes />} />
     </Routes>
   )
 }

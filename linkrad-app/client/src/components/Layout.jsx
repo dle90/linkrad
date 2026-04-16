@@ -23,6 +23,24 @@ const NAV = [
     ]
   },
   {
+    group: 'Viện phí',
+    items: [
+      { path: '/billing', label: 'Phiếu thu', icon: '💳', workflowOnly: true },
+    ]
+  },
+  {
+    group: 'Kho',
+    items: [
+      { path: '/inventory', label: 'Quản lý kho', icon: '📦', workflowOnly: true },
+    ]
+  },
+  {
+    group: 'Danh mục',
+    items: [
+      { path: '/catalogs', label: 'Danh mục', icon: '📂', workflowOnly: true },
+    ]
+  },
+  {
     group: 'Tài chính',
     financialsOnly: true,
     items: [
@@ -147,7 +165,7 @@ export default function Layout({ children }) {
                 <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </button>
-            <h1 className="text-lg font-semibold text-gray-800">LinkRad Financial Model 2025-2026</h1>
+            <h1 className="text-lg font-semibold text-gray-800">LinkRad ERP</h1>
           </div>
           <div className="flex items-center gap-3">
             {!isAdmin && (

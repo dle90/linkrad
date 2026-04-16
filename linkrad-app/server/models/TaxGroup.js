@@ -1,0 +1,11 @@
+const mongoose = require('mongoose')
+const schema = new mongoose.Schema({
+  _id: String,
+  code: String,
+  name: String,
+  rate: { type: Number, default: 0 },
+  branchCode: { type: String, default: 'all' },
+  status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+  createdAt: String, updatedAt: String,
+}, { _id: false })
+module.exports = mongoose.model('TaxGroup', schema)
