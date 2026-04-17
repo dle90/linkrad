@@ -6,6 +6,7 @@ const schema = new mongoose.Schema({
   level: { type: String, enum: ['trung_uong', 'tinh', 'huyen', 'xa', 'phong_kham', 'other'], default: 'other' },
   address: String,
   phone: String,
+  description: String,      // Mô tả
   provinceCode: String,
   status: { type: String, enum: ['active', 'inactive'], default: 'active' },
   createdAt: String, updatedAt: String,

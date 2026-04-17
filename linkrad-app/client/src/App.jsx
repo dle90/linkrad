@@ -28,6 +28,7 @@ import PatientPortal from './pages/PatientPortal'
 import PartnerLogin from './pages/PartnerLogin'
 import PartnerPortal from './pages/PartnerPortal'
 import HRManagement from './pages/HRManagement'
+import Reports from './pages/Reports'
 
 function AuthenticatedRoutes() {
   const { auth } = useAuth()
@@ -58,7 +59,11 @@ function AuthenticatedRoutes() {
 
             {isWorkflowUser && <Route path="/inventory" element={<Inventory />} />}
             {isWorkflowUser && <Route path="/catalogs" element={<Catalogs />} />}
+            {isWorkflowUser && <Route path="/catalogs/:catalogKey" element={<Catalogs />} />}
+            {isWorkflowUser && <Route path="/reports" element={<Reports />} />}
+            {isWorkflowUser && <Route path="/reports/:reportKey" element={<Reports />} />}
             {auth.role === 'admin' && <Route path="/hr" element={<HRManagement />} />}
+            {auth.role === 'admin' && <Route path="/hr/:hrKey" element={<HRManagement />} />}
             <Route path="/pl" element={<PL />} />
             <Route path="/cf" element={<CF />} />
             <Route path="/bs" element={<BalanceSheet />} />

@@ -26,21 +26,21 @@ async function seed() {
 
   // ── Referral Doctors ───────────────────────────────────
   await upsertAll(ReferralDoctor, [
-    { _id: 'RD-1', code: 'BS-001', name: 'BS. Nguyễn Thanh Hải', phone: '0901001001', specialty: 'Nội tổng quát', hospital: 'BV Việt Tiệp HP' },
-    { _id: 'RD-2', code: 'BS-002', name: 'BS. Trần Thị Phương', phone: '0901001002', specialty: 'Ngoại thần kinh', hospital: 'BV Kiến An' },
-    { _id: 'RD-3', code: 'BS-003', name: 'BS. Lê Văn Đức', phone: '0901001003', specialty: 'Chấn thương chỉnh hình', hospital: 'BV Bạch Mai' },
-    { _id: 'RD-4', code: 'BS-004', name: 'PGS. Phạm Minh Tuấn', phone: '0901001004', specialty: 'Ung bướu', hospital: 'BV K Hà Nội' },
-    { _id: 'RD-5', code: 'BS-005', name: 'BS. Vũ Thị Lan', phone: '0901001005', specialty: 'Sản phụ khoa', hospital: 'BV Phụ sản HP' },
+    { _id: 'RD-1', code: 'BS-001', name: 'BS. Nguyễn Thanh Hải', phone: '0901001001', email: 'hai.nt@viettiep.vn', idCard: '031085001234', address: '12 Lạch Tray, Lê Chân, HP', gender: 'M', dob: '1975-03-15', specialty: 'Nội tổng quát', workplace: 'BV Việt Tiệp HP', area: 'Hải Phòng', paymentMethod: 'transfer', bankAccount: '0901001001', bankName: 'Vietcombank', assignedStaff: 'Nguyễn Thị Mai', firstReferralDate: '2024-01-10', contractDate: '2024-01-01', notes: 'Đối tác lâu năm' },
+    { _id: 'RD-2', code: 'BS-002', name: 'BS. Trần Thị Phương', phone: '0901001002', email: 'phuong.tt@kienan.vn', idCard: '031090005678', address: '45 Trần Nhân Tông, Kiến An, HP', gender: 'F', dob: '1980-07-22', specialty: 'Ngoại thần kinh', workplace: 'BV Kiến An', area: 'Hải Phòng', paymentMethod: 'transfer', bankAccount: '0901001002', bankName: 'Techcombank', assignedStaff: 'Lê Văn Hoàng', firstReferralDate: '2024-02-15', contractDate: '2024-02-01' },
+    { _id: 'RD-3', code: 'BS-003', name: 'BS. Lê Văn Đức', phone: '0901001003', email: 'duc.lv@bachmai.vn', idCard: '001078009012', address: '78 Giải Phóng, Đống Đa, HN', gender: 'M', dob: '1968-11-05', specialty: 'Chấn thương chỉnh hình', workplace: 'BV Bạch Mai', area: 'Hà Nội', paymentMethod: 'cash', bankAccount: '', bankName: '', assignedStaff: 'Nguyễn Thị Mai', firstReferralDate: '2024-03-01', contractDate: '2024-03-01' },
+    { _id: 'RD-4', code: 'BS-004', name: 'PGS. Phạm Minh Tuấn', phone: '0901001004', email: 'tuan.pm@bvk.vn', idCard: '001070003456', address: '43 Quán Sứ, Hoàn Kiếm, HN', gender: 'M', dob: '1965-05-20', specialty: 'Ung bướu', workplace: 'BV K Hà Nội', area: 'Hà Nội', paymentMethod: 'transfer', bankAccount: '19001234567', bankName: 'BIDV', assignedStaff: 'Trần Minh Đức', firstReferralDate: '2024-04-10', contractDate: '2024-04-01', notes: 'PGS, chuyên gia đầu ngành' },
+    { _id: 'RD-5', code: 'BS-005', name: 'BS. Vũ Thị Lan', phone: '0901001005', email: 'lan.vt@phusan.vn', idCard: '031082007890', address: '9 Lê Lợi, Ngô Quyền, HP', gender: 'F', dob: '1982-12-08', specialty: 'Sản phụ khoa', workplace: 'BV Phụ sản HP', area: 'Hải Phòng', paymentMethod: 'both', bankAccount: '0905001005', bankName: 'MB Bank', assignedStaff: 'Lê Văn Hoàng', firstReferralDate: '2024-05-20', contractDate: '2024-05-15' },
   ])
   console.log('✓ 5 bác sĩ giới thiệu')
 
   // ── Partner Facilities ─────────────────────────────────
   await upsertAll(PartnerFacility, [
-    { _id: 'PF-1', code: 'DT-001', name: 'Bệnh viện Việt Tiệp Hải Phòng', type: 'hospital', phone: '02253747373', contactPerson: 'BS. Nguyễn Văn A', address: '1 Nhà Thương, Lê Chân, HP' },
-    { _id: 'PF-2', code: 'DT-002', name: 'Bệnh viện Kiến An', type: 'hospital', phone: '02253877777', contactPerson: 'BS. Trần Văn B', address: 'Kiến An, HP' },
-    { _id: 'PF-3', code: 'DT-003', name: 'Phòng khám Đa khoa An Dương', type: 'clinic', phone: '02253666666', contactPerson: 'Lê Thị C', address: 'An Dương, HP' },
-    { _id: 'PF-4', code: 'DT-004', name: 'BV Bạch Mai Hà Nội', type: 'hospital', phone: '02438693731', contactPerson: 'Phòng CĐHA', address: '78 Giải Phóng, HN' },
-    { _id: 'PF-5', code: 'DT-005', name: 'Xét nghiệm Medlatec HP', type: 'lab', phone: '02253888888', contactPerson: 'Nguyễn Thị D', address: 'Ngô Quyền, HP' },
+    { _id: 'PF-1', code: 'DT-001', name: 'Bệnh viện Việt Tiệp Hải Phòng', type: 'hospital', phone: '02253747373', address: '1 Nhà Thương, Lê Chân, HP', specialty: 'Đa khoa', clinicHeadName: 'PGS. Trần Quang Minh', contactPerson: 'BS. Nguyễn Văn A', area: 'Hải Phòng', paymentMethod: 'transfer', bankAccount: '1234567890', bankName: 'Vietcombank', firstReferralDate: '2024-01-05', contractDate: '2024-01-01', assignedStaff: 'Nguyễn Thị Mai', notes: 'Đối tác chiến lược' },
+    { _id: 'PF-2', code: 'DT-002', name: 'Bệnh viện Kiến An', type: 'hospital', phone: '02253877777', address: 'Kiến An, HP', specialty: 'Đa khoa', clinicHeadName: 'BS. Lê Hữu Trọng', contactPerson: 'BS. Trần Văn B', area: 'Hải Phòng', paymentMethod: 'transfer', bankAccount: '0987654321', bankName: 'BIDV', firstReferralDate: '2024-02-10', contractDate: '2024-02-01', assignedStaff: 'Lê Văn Hoàng' },
+    { _id: 'PF-3', code: 'DT-003', name: 'Phòng khám Đa khoa An Dương', type: 'clinic', phone: '02253666666', address: 'An Dương, HP', specialty: 'Đa khoa', clinicHeadName: 'BS. Phạm Văn Hùng', contactPerson: 'Lê Thị C', area: 'Hải Phòng', paymentMethod: 'cash', bankAccount: '', bankName: '', firstReferralDate: '2024-03-15', contractDate: '2024-03-01', assignedStaff: 'Nguyễn Thị Mai' },
+    { _id: 'PF-4', code: 'DT-004', name: 'BV Bạch Mai Hà Nội', type: 'hospital', phone: '02438693731', address: '78 Giải Phóng, HN', specialty: 'CĐHA', clinicHeadName: 'GS. Nguyễn Duy Huề', contactPerson: 'Phòng CĐHA', area: 'Hà Nội', paymentMethod: 'transfer', bankAccount: '5566778899', bankName: 'Agribank', firstReferralDate: '2024-04-01', contractDate: '2024-04-01', assignedStaff: 'Trần Minh Đức' },
+    { _id: 'PF-5', code: 'DT-005', name: 'Xét nghiệm Medlatec HP', type: 'lab', phone: '02253888888', address: 'Ngô Quyền, HP', specialty: 'Xét nghiệm', clinicHeadName: 'TS. Vũ Minh Châu', contactPerson: 'Nguyễn Thị D', area: 'Hải Phòng', paymentMethod: 'both', bankAccount: '1122334455', bankName: 'Techcombank', firstReferralDate: '2024-05-01', contractDate: '2024-05-01', assignedStaff: 'Lê Văn Hoàng', notes: 'Đối tác XN' },
   ])
   console.log('✓ 5 cơ sở y tế đối tác')
 
@@ -85,21 +85,22 @@ async function seed() {
 
   // ── Medical Facilities ─────────────────────────────────
   await upsertAll(MedicalFacility, [
-    { _id: 'MF-1', code: 'CSYT-001', name: 'Bệnh viện Việt Tiệp', level: 'tinh', phone: '02253747373', address: 'Lê Chân, Hải Phòng' },
-    { _id: 'MF-2', code: 'CSYT-002', name: 'Bệnh viện Bạch Mai', level: 'trung_uong', phone: '02438693731', address: 'Giải Phóng, Hà Nội' },
-    { _id: 'MF-3', code: 'CSYT-003', name: 'Bệnh viện Chợ Rẫy', level: 'trung_uong', phone: '02838554137', address: 'Q5, TP HCM' },
-    { _id: 'MF-4', code: 'CSYT-004', name: 'Bệnh viện Kiến An', level: 'huyen', phone: '02253877777', address: 'Kiến An, HP' },
-    { _id: 'MF-5', code: 'CSYT-005', name: 'Trạm Y tế Đường An', level: 'xa', phone: '02253000001', address: 'An Dương, HP' },
-    { _id: 'MF-6', code: 'CSYT-006', name: 'Phòng khám Đa khoa Hải Phòng', level: 'phong_kham', phone: '02253111111', address: 'Ngô Quyền, HP' },
+    { _id: 'MF-1', code: 'CSYT-001', name: 'Bệnh viện Việt Tiệp', level: 'tinh', phone: '02253747373', address: 'Lê Chân, Hải Phòng', description: 'BV đa khoa hạng I tuyến tỉnh' },
+    { _id: 'MF-2', code: 'CSYT-002', name: 'Bệnh viện Bạch Mai', level: 'trung_uong', phone: '02438693731', address: 'Giải Phóng, Hà Nội', description: 'BV đa khoa tuyến trung ương' },
+    { _id: 'MF-3', code: 'CSYT-003', name: 'Bệnh viện Chợ Rẫy', level: 'trung_uong', phone: '02838554137', address: 'Q5, TP HCM', description: 'BV đa khoa tuyến trung ương phía Nam' },
+    { _id: 'MF-4', code: 'CSYT-004', name: 'Bệnh viện Kiến An', level: 'huyen', phone: '02253877777', address: 'Kiến An, HP', description: 'BV đa khoa tuyến huyện' },
+    { _id: 'MF-5', code: 'CSYT-005', name: 'Trạm Y tế Đường An', level: 'xa', phone: '02253000001', address: 'An Dương, HP', description: 'Trạm y tế tuyến xã' },
+    { _id: 'MF-6', code: 'CSYT-006', name: 'Phòng khám Đa khoa Hải Phòng', level: 'phong_kham', phone: '02253111111', address: 'Ngô Quyền, HP', description: 'Phòng khám đa khoa tư nhân' },
   ])
   console.log('✓ 6 cơ sở y tế (theo BYT)')
 
   // ── Tax Groups ─────────────────────────────────────────
   await upsertAll(TaxGroup, [
-    { _id: 'TG-1', code: 'VAT0', name: 'Không chịu thuế', rate: 0, branchCode: 'all' },
-    { _id: 'TG-2', code: 'VAT5', name: 'Thuế GTGT 5%', rate: 5, branchCode: 'all' },
-    { _id: 'TG-3', code: 'VAT8', name: 'Thuế GTGT 8%', rate: 8, branchCode: 'all' },
-    { _id: 'TG-4', code: 'VAT10', name: 'Thuế GTGT 10%', rate: 10, branchCode: 'all' },
+    { _id: 'TG-1', code: 'NotTaxable', name: 'Nhóm không chịu thuế', description: 'KCT', vatType: 'exempt', rate: 0, branchCode: 'all' },
+    { _id: 'TG-2', code: 'VAT10', name: 'Nhóm 10%', description: '', vatType: 'percentage', rate: 10, branchCode: 'all' },
+    { _id: 'TG-3', code: 'VAT8', name: 'Nhóm 8%', description: '', vatType: 'percentage', rate: 8, branchCode: 'all' },
+    { _id: 'TG-4', code: 'VAT5', name: 'Nhóm 5%', description: '', vatType: 'percentage', rate: 5, branchCode: 'all' },
+    { _id: 'TG-5', code: 'VAT0', name: 'Nhóm 0%', description: '', vatType: 'percentage', rate: 0, branchCode: 'all' },
   ])
   console.log('✓ 4 nhóm thuế dịch vụ')
 

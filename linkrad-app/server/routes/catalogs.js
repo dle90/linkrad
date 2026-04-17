@@ -108,6 +108,33 @@ router.get('/users', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// ── Update user (admin) ─────────────────────────────────
+router.put('/users/:id', requireAdmin, async (req, res) => {
+  try {
+    const update = { ...req.body }
+    delete update._id
+    delete update.password
+    const user = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('-password').lean()
+    if (!user) return res.status(404).json({ error: 'Không tìm thấy' })
+    res.json(user)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Create user (admin) ─────────────────────────────────
+router.post('/users', requireAdmin, async (req, res) => {
+  try {
+    const { _id, password, ...rest } = req.body
+    if (!_id) return res.status(400).json({ error: 'Mã nhân viên là bắt buộc' })
+    const existing = await User.findById(_id)
+    if (existing) return res.status(400).json({ error: 'Mã nhân viên đã tồn tại' })
+    const user = new User({ _id, password: password || _id, ...rest })
+    await user.save()
+    const result = user.toObject()
+    delete result.password
+    res.status(201).json(result)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // ── Patients list (read-only for catalog) ────────────────
 router.get('/patients', requireAuth, async (req, res) => {
   try {

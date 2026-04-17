@@ -5,9 +5,19 @@ const schema = new mongoose.Schema({
   name: String,
   phone: String,
   email: String,
-  specialty: String,
-  hospital: String,
+  idCard: String,          // Số CCCD
   address: String,
+  gender: String,          // Giới tính: M / F
+  dob: String,             // Ngày sinh
+  specialty: String,       // Chuyên khoa
+  workplace: String,       // Nơi làm việc
+  area: String,            // Địa bàn
+  paymentMethod: String,   // Hình thức thanh toán
+  bankAccount: String,     // STK
+  bankName: String,        // Ngân hàng
+  assignedStaff: String,   // Nhân viên theo dõi
+  firstReferralDate: String, // Ngày gửi đầu tiên
+  contractDate: String,    // Ngày hợp đồng
   notes: String,
   status: { type: String, enum: ['active', 'inactive'], default: 'active' },
   createdAt: String, updatedAt: String,

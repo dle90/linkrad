@@ -25,10 +25,15 @@ async function seed() {
   // SERVICE TYPES
   // ═══════════════════════════════════════════════════════
   const serviceTypes = [
-    { _id: 'SVT-1', code: 'CDHA', name: 'Chẩn đoán hình ảnh', sortOrder: 1 },
-    { _id: 'SVT-2', code: 'XN', name: 'Xét nghiệm', sortOrder: 2 },
-    { _id: 'SVT-3', code: 'TDCN', name: 'Thăm dò chức năng', sortOrder: 3 },
-    { _id: 'SVT-4', code: 'KH', name: 'Khác', sortOrder: 4 },
+    { _id: 'SVT-HC', code: 'HC', name: 'HỘI CHẨN', abbreviation: 'HỘI CHẨN', taxGroupName: 'Nhóm không chịu thuế', taxGroupId: 'TG-1', sortOrder: 1 },
+    { _id: 'SVT-KB', code: 'KB', name: 'KHÁM CHUYÊN KHOA', abbreviation: 'KB', taxGroupName: 'Nhóm không chịu thuế', taxGroupId: 'TG-1', sortOrder: 2 },
+    { _id: 'SVT-DVK', code: 'DVK', name: 'DỊCH VỤ KHÁC', abbreviation: 'DV KHÁC', taxGroupName: 'Nhóm không chịu thuế', taxGroupId: 'TG-1', sortOrder: 3 },
+    { _id: 'SVT-TT', code: 'TT', name: 'THỦ THUẬT', abbreviation: 'THỦ THUẬT', taxGroupName: 'Nhóm không chịu thuế', taxGroupId: 'TG-1', sortOrder: 4 },
+    { _id: 'SVT-MG', code: 'MG', name: 'MAMMO', abbreviation: 'MAMMO', taxGroupName: 'Nhóm không chịu thuế', taxGroupId: 'TG-1', sortOrder: 5 },
+    { _id: 'SVT-CR', code: 'CR', name: 'XQUANG', abbreviation: 'XQUANG', taxGroupName: 'Nhóm không chịu thuế', taxGroupId: 'TG-1', sortOrder: 6 },
+    { _id: 'SVT-US', code: 'US', name: 'SIÊU ÂM', abbreviation: 'SIÊU ÂM', taxGroupName: 'Nhóm không chịu thuế', taxGroupId: 'TG-1', sortOrder: 7 },
+    { _id: 'SVT-CT', code: 'CT', name: 'CT SCANNER', abbreviation: 'CT', taxGroupName: 'Nhóm không chịu thuế', taxGroupId: 'TG-1', sortOrder: 8 },
+    { _id: 'SVT-MR', code: 'MR', name: 'CHỤP CỘNG HƯỞNG TỪ', abbreviation: 'MRI', taxGroupName: 'Nhóm không chịu thuế', taxGroupId: 'TG-1', sortOrder: 9 },
   ]
   for (const st of serviceTypes) {
     await ServiceType.findByIdAndUpdate(st._id, {
@@ -41,22 +46,22 @@ async function seed() {
   // SERVICES
   // ═══════════════════════════════════════════════════════
   const services = [
-    { _id: 'SVC-1', code: 'SA020', name: 'Siêu âm ổ bụng', serviceTypeCode: 'CDHA', modality: 'US', basePrice: 150000 },
-    { _id: 'SVC-2', code: 'SA026', name: 'Siêu âm tuyến giáp', serviceTypeCode: 'CDHA', modality: 'US', basePrice: 150000 },
-    { _id: 'SVC-3', code: 'SA028', name: 'Siêu âm vú', serviceTypeCode: 'CDHA', modality: 'US', basePrice: 150000 },
-    { _id: 'SVC-4', code: 'CT001', name: 'Chụp CT sọ não', serviceTypeCode: 'CDHA', modality: 'CT', basePrice: 800000 },
-    { _id: 'SVC-5', code: 'CT002', name: 'Chụp CT ngực', serviceTypeCode: 'CDHA', modality: 'CT', basePrice: 900000 },
-    { _id: 'SVC-6', code: 'CT003', name: 'Chụp CT bụng chậu', serviceTypeCode: 'CDHA', modality: 'CT', basePrice: 1200000 },
-    { _id: 'SVC-7', code: 'MRI01', name: 'Chụp MRI sọ não', serviceTypeCode: 'CDHA', modality: 'MRI', basePrice: 1500000 },
-    { _id: 'SVC-8', code: 'MRI02', name: 'Chụp MRI cột sống', serviceTypeCode: 'CDHA', modality: 'MRI', basePrice: 1500000 },
-    { _id: 'SVC-9', code: 'MRI03', name: 'Chụp MRI khớp gối', serviceTypeCode: 'CDHA', modality: 'MRI', basePrice: 1800000 },
-    { _id: 'SVC-10', code: 'XQ001', name: 'X-Quang ngực thẳng', serviceTypeCode: 'CDHA', modality: 'XR', basePrice: 100000 },
-    { _id: 'SVC-11', code: 'XQ002', name: 'X-Quang cột sống', serviceTypeCode: 'CDHA', modality: 'XR', basePrice: 120000 },
-    { _id: 'SVC-12', code: 'XN001', name: 'Xét nghiệm máu tổng quát', serviceTypeCode: 'XN', modality: 'LAB', basePrice: 200000 },
-    { _id: 'SVC-13', code: 'XN002', name: 'Xét nghiệm đường huyết', serviceTypeCode: 'XN', modality: 'LAB', basePrice: 50000 },
-    { _id: 'SVC-14', code: 'XN003', name: 'Xét nghiệm chức năng gan', serviceTypeCode: 'XN', modality: 'LAB', basePrice: 300000 },
-    { _id: 'SVC-15', code: 'ECG01', name: 'Điện tâm đồ', serviceTypeCode: 'TDCN', modality: 'OTHER', basePrice: 100000 },
-    { _id: 'SVC-16', code: 'KH001', name: 'Khám tổng quát', serviceTypeCode: 'KH', modality: 'OTHER', basePrice: 200000 },
+    { _id: 'SVC-1', code: 'SA020', name: 'Siêu âm ổ bụng', technicalInfo: 'Hội đ.ước qp.phần mềm đơn hướng dẫn siêu âm', serviceTypeCode: 'US', modality: 'US', basePrice: 150000, points: 4 },
+    { _id: 'SVC-2', code: 'SA026', name: 'Siêu âm tuyến giáp', technicalInfo: 'Hội đ.ước phần mềm siêu âm tuyến giáp', serviceTypeCode: 'US', modality: 'US', basePrice: 150000, points: 4 },
+    { _id: 'SVC-3', code: 'SA028', name: 'Siêu âm vú', technicalInfo: 'Hội đ.ước phần mềm siêu âm vú', serviceTypeCode: 'US', modality: 'US', basePrice: 150000, points: 4 },
+    { _id: 'SVC-4', code: 'CT001', name: 'Chụp CT sọ não', technicalInfo: 'Hội đ.ước qp.phần mềm chẩn hướng dẫn siêu âm', serviceTypeCode: 'CT', modality: 'CT', basePrice: 800000, points: 8 },
+    { _id: 'SVC-5', code: 'CT002', name: 'Chụp CT ngực', technicalInfo: 'Hội đ.ước phần mềm chẩn hướng dẫn CT ngực', serviceTypeCode: 'CT', modality: 'CT', basePrice: 900000, points: 8 },
+    { _id: 'SVC-6', code: 'CT003', name: 'Chụp CT bụng chậu', technicalInfo: 'Hội đ.ước cắt lớp chụp bụng chậu có tiêm', serviceTypeCode: 'CT', modality: 'CT', basePrice: 1200000, points: 10 },
+    { _id: 'SVC-7', code: 'MRI01', name: 'Chụp MRI sọ não', technicalInfo: 'Chụp cộng hưởng từ sọ não không tiêm', serviceTypeCode: 'MR', modality: 'MRI', basePrice: 1500000, points: 12 },
+    { _id: 'SVC-8', code: 'MRI02', name: 'Chụp MRI cột sống', technicalInfo: 'Chụp cộng hưởng từ cột sống thắt lưng', serviceTypeCode: 'MR', modality: 'MRI', basePrice: 1500000, points: 12 },
+    { _id: 'SVC-9', code: 'MRI03', name: 'Chụp MRI khớp gối', technicalInfo: 'Chụp cộng hưởng từ khớp gối 2 bên', serviceTypeCode: 'MR', modality: 'MRI', basePrice: 1800000, points: 14 },
+    { _id: 'SVC-10', code: 'XQ001', name: 'X-Quang ngực thẳng', technicalInfo: 'Chụp X-Quang ngực thẳng 1 phim', serviceTypeCode: 'CR', modality: 'XR', basePrice: 100000, points: 2 },
+    { _id: 'SVC-11', code: 'XQ002', name: 'X-Quang cột sống', technicalInfo: 'Chụp X-Quang cột sống thẳng nghiêng', serviceTypeCode: 'CR', modality: 'XR', basePrice: 120000, points: 3 },
+    { _id: 'SVC-12', code: 'XN001', name: 'Xét nghiệm máu tổng quát', technicalInfo: 'Xét nghiệm công thức máu toàn phần', serviceTypeCode: 'DVK', modality: 'LAB', basePrice: 200000, points: 3 },
+    { _id: 'SVC-13', code: 'XN002', name: 'Xét nghiệm đường huyết', technicalInfo: 'Định lượng glucose huyết tương', serviceTypeCode: 'DVK', modality: 'LAB', basePrice: 50000, points: 1 },
+    { _id: 'SVC-14', code: 'XN003', name: 'Xét nghiệm chức năng gan', technicalInfo: 'Xét nghiệm AST, ALT, GGT, Bilirubin', serviceTypeCode: 'DVK', modality: 'LAB', basePrice: 300000, points: 4 },
+    { _id: 'SVC-15', code: 'ECG01', name: 'Điện tâm đồ', technicalInfo: 'Đo điện tâm đồ 12 chuyển đạo', serviceTypeCode: 'TT', modality: 'OTHER', basePrice: 100000, points: 2 },
+    { _id: 'SVC-16', code: 'KH001', name: 'Khám tổng quát', technicalInfo: 'Khám lâm sàng tổng quát', serviceTypeCode: 'KB', modality: 'OTHER', basePrice: 200000, points: 3 },
   ]
   for (const svc of services) {
     await Service.findByIdAndUpdate(svc._id, {

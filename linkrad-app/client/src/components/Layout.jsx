@@ -35,15 +35,48 @@ const NAV = [
     ]
   },
   {
-    group: 'Danh mục',
+    group: 'DM Đối tác',
     items: [
-      { path: '/catalogs', label: 'Danh mục', icon: '📂', workflowOnly: true },
+      { path: '/catalogs/referral-doctors', label: 'Bác sĩ giới thiệu', icon: '👨‍⚕️', workflowOnly: true },
+      { path: '/catalogs/partner-facilities', label: 'CSYT đối tác', icon: '🏥', workflowOnly: true },
+      { path: '/catalogs/commission-groups', label: 'Nhóm hoa hồng', icon: '📋', workflowOnly: true },
+      { path: '/catalogs/commission-rules', label: 'Hoa hồng', icon: '💰', workflowOnly: true },
+    ]
+  },
+  {
+    group: 'DM Chung',
+    items: [
+      { path: '/catalogs/users', label: 'Nhân sự', icon: '👤', workflowOnly: true },
+      { path: '/catalogs/patients', label: 'Bệnh nhân', icon: '🧑', workflowOnly: true },
+      { path: '/catalogs/specialties', label: 'Chuyên khoa', icon: '🩺', workflowOnly: true },
+      { path: '/catalogs/services', label: 'Dịch vụ', icon: '📄', workflowOnly: true },
+      { path: '/catalogs/service-types', label: 'Loại dịch vụ', icon: '📂', workflowOnly: true },
+      { path: '/catalogs/medical-facilities', label: 'Cơ sở y tế', icon: '🏨', workflowOnly: true },
+      { path: '/catalogs/tax-groups', label: 'Nhóm thuế DV', icon: '📊', workflowOnly: true },
+      { path: '/catalogs/promotions', label: 'CT khuyến mãi', icon: '🎁', workflowOnly: true },
+      { path: '/catalogs/promo-codes', label: 'Mã khuyến mãi', icon: '🏷️', workflowOnly: true },
+      { path: '/catalogs/registration-reasons', label: 'Lý do ĐK', icon: '📝', workflowOnly: true },
+      { path: '/catalogs/billing-cancel-reasons', label: 'Lý do huỷ PT', icon: '❌', workflowOnly: true },
+      { path: '/catalogs/admin-units', label: 'Địa chỉ hành chính', icon: '📍', workflowOnly: true },
+    ]
+  },
+  {
+    group: 'Báo cáo',
+    items: [
+      { path: '/reports/revenue-detail', label: 'BC doanh thu chi tiết', icon: '📊', workflowOnly: true },
+      { path: '/reports/customer-detail', label: 'BC chi tiết khách hàng', icon: '👥', workflowOnly: true },
+      { path: '/reports/promotion-detail', label: 'BC chương trình KM', icon: '🎁', workflowOnly: true },
+      { path: '/reports/clinic-revenue', label: 'BC doanh thu phòng khám', icon: '🏥', workflowOnly: true },
+      { path: '/reports/refund-exchange', label: 'BC hoàn trả/đổi DV', icon: '🔄', workflowOnly: true },
+      { path: '/reports/e-invoice', label: 'BC hóa đơn điện tử', icon: '🧾', workflowOnly: true },
     ]
   },
   {
     group: 'Quản lý',
     items: [
-      { path: '/hr', label: 'Nhân sự & Phân quyền', icon: '👥', adminOnly: true },
+      { path: '/hr/employees', label: 'DS nhân viên', icon: '👤', adminOnly: true },
+      { path: '/hr/departments', label: 'Phòng ban / CN', icon: '🏢', adminOnly: true },
+      { path: '/hr/permissions', label: 'Ma trận quyền', icon: '🔐', adminOnly: true },
     ]
   },
   {

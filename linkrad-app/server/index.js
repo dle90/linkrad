@@ -27,6 +27,7 @@ const patientPortalRouter = require('./routes/patient-portal')
 const partnerPortalRouter = require('./routes/partner-portal')
 const partnerAdminRouter = require('./routes/partner-admin')
 const hrRouter = require('./routes/hr')
+const reportsRouter = require('./routes/reports')
 const { requireAdmin } = require('./middleware/auth')
 
 const app = express()
@@ -79,6 +80,8 @@ app.use('/api/partner-portal', partnerPortalRouter)
 app.use('/api/partner-admin', partnerAdminRouter)
 // HR: auth handled inside the router
 app.use('/api/hr', hrRouter)
+
+app.use('/api/reports', reportsRouter)
 
 // Serve React build in production
 const clientDist = path.join(__dirname, '../client/dist')

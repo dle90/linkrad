@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useParams } from 'react-router-dom'
 import api from '../api'
 
 // ── Sidebar menu ────────────────────────────────────────
@@ -427,34 +428,14 @@ function PermissionMatrix() {
 // MAIN PAGE
 // ═══════════════════════════════════════════════════════
 export default function HRManagement() {
-  const [section, setSection] = useState('employees')
+  const { hrKey } = useParams()
+  const section = hrKey || 'employees'
 
   return (
-    <div className="flex h-full">
-      {/* Sidebar */}
-      <div className="w-56 bg-white border-r border-gray-200 p-3 space-y-4 flex-shrink-0 overflow-y-auto">
-        {MENU.map(grp => (
-          <div key={grp.group}>
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1 px-2">{grp.group}</div>
-            {grp.items.map(item => (
-              <button
-                key={item.key}
-                onClick={() => setSection(item.key)}
-                className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${section === item.key ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 p-4 overflow-y-auto">
-        {section === 'employees' && <EmployeeSection />}
-        {section === 'departments' && <DepartmentSection />}
-        {section === 'permissions' && <PermissionMatrix />}
-      </div>
+    <div>
+      {section === 'employees' && <EmployeeSection />}
+      {section === 'departments' && <DepartmentSection />}
+      {section === 'permissions' && <PermissionMatrix />}
     </div>
   )
 }

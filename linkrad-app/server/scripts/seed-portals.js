@@ -26,15 +26,15 @@ async function seed() {
   // PATIENTS (ensure they exist for portal login)
   // ═══════════════════════════════════════════════════════
   const patients = [
-    { _id: 'PAT-001', patientId: 'BN001', name: 'Nguyễn Văn Nam', dob: '1975-04-12', gender: 'M', phone: '0901000001', idCard: '030175001234' },
-    { _id: 'PAT-002', patientId: 'BN002', name: 'Trần Thị Hoa', dob: '1988-09-23', gender: 'F', phone: '0901000002', idCard: '030188005678' },
-    { _id: 'PAT-003', patientId: 'BN003', name: 'Lê Văn Đức', dob: '1965-02-28', gender: 'M', phone: '0901000003', idCard: '030165009012' },
-    { _id: 'PAT-004', patientId: 'BN004', name: 'Phạm Thị Mai', dob: '1992-07-15', gender: 'F', phone: '0901000004', idCard: '030192003456' },
-    { _id: 'PAT-005', patientId: 'BN005', name: 'Hoàng Văn Minh', dob: '1958-11-03', gender: 'M', phone: '0901000005', idCard: '030158007890' },
+    { _id: 'PAT-001', patientId: 'BN001', name: 'Nguyễn Văn Nam', dob: '1975-04-12', gender: 'M', phone: '0901000001', email: 'nam.nv@gmail.com', idCard: '030175001234', insuranceNumber: 'HS4030175001234', province: 'Hải Dương', district: 'TP Hải Dương', ward: 'Phường Thanh Bình' },
+    { _id: 'PAT-002', patientId: 'BN002', name: 'Trần Thị Hoa', dob: '1988-09-23', gender: 'F', phone: '0901000002', email: 'hoa.tt@gmail.com', idCard: '030188005678', insuranceNumber: 'HS4030188005678', province: 'Hải Phòng', district: 'Quận Lê Chân', ward: 'Phường Trại Lẻ' },
+    { _id: 'PAT-003', patientId: 'BN003', name: 'Lê Văn Đức', dob: '1965-02-28', gender: 'M', phone: '0901000003', email: '', idCard: '030165009012', insuranceNumber: '', province: 'Hà Nội', district: 'Quận Đống Đa', ward: 'Phường Láng Hạ' },
+    { _id: 'PAT-004', patientId: 'BN004', name: 'Phạm Thị Mai', dob: '1992-07-15', gender: 'F', phone: '0901000004', email: 'mai.pt92@gmail.com', idCard: '030192003456', insuranceNumber: 'HS4030192003456', province: 'Hải Dương', district: 'TP Hải Dương', ward: 'Phường Ngọc Châu' },
+    { _id: 'PAT-005', patientId: 'BN005', name: 'Hoàng Văn Minh', dob: '1958-11-03', gender: 'M', phone: '0901000005', email: '', idCard: '030158007890', insuranceNumber: 'HS4030158007890', province: 'Hải Dương', district: 'Huyện Gia Lộc', ward: 'TT Gia Lộc' },
   ]
   for (const p of patients) {
     await Patient.findByIdAndUpdate(p._id, {
-      ...p, address: '', insuranceNumber: '', notes: '', registeredSite: 'Hải Dương',
+      ...p, address: '', notes: '', registeredSite: 'Hải Dương',
       createdAt: now(), updatedAt: now(),
     }, { upsert: true })
   }
