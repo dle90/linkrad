@@ -28,13 +28,18 @@ const partnerPortalRouter = require('./routes/partner-portal')
 const partnerAdminRouter = require('./routes/partner-admin')
 const hrRouter = require('./routes/hr')
 const reportsRouter = require('./routes/reports')
+const enhancementsRouter = require('./routes/enhancements')
 const { requireAdmin } = require('./middleware/auth')
+const { auditMiddleware } = require('./middleware/audit')
 
 const app = express()
 const PORT = process.env.PORT || 3001
 
 app.use(cors())
 app.use(express.json({ limit: '20mb' }))
+
+// Audit middleware: capture writes after body is parsed, before route handlers
+app.use('/api', auditMiddleware)
 
 // Auth routes (public — no token required)
 app.use('/api/auth', authRouter)
@@ -82,6 +87,9 @@ app.use('/api/partner-admin', partnerAdminRouter)
 app.use('/api/hr', hrRouter)
 
 app.use('/api/reports', reportsRouter)
+
+// Templates, audit log, notifications, today dashboard, search, MWL
+app.use('/api', enhancementsRouter)
 
 // Serve React build in production
 const clientDist = path.join(__dirname, '../client/dist')

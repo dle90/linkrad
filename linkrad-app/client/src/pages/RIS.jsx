@@ -1,6 +1,17 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api'
+import DeviceTreeSidebar from '../components/DeviceTreeSidebar'
+import CaseTabBar from '../components/CaseTabBar'
+import PatientDetailView from '../components/PatientDetailView'
+import MWL from './MWL'
+import CriticalFindings from './CriticalFindings'
+
+// System tab IDs (must not collide with study _ids)
+const SYS_WORKLIST = '__worklist__'
+const SYS_MWL      = '__mwl__'
+const SYS_CRITICAL = '__critical__'
 
 // ─── Error Boundary ────────────────────────────────────────────────────────────
 class ErrorBoundary extends React.Component {
@@ -96,7 +107,7 @@ function ImageStatusBadge({ imageStatus, imageCount, studyUID }) {
 // ─── ReportEditor Modal ────────────────────────────────────────────────────────
 
 function ReportEditor({ study, onClose, onSaved }) {
-  const [form, setForm] = useState({ technique: '', clinicalInfo: '', findings: '', impression: '', recommendation: '' })
+  const [form, setForm] = useState({ technique: '', clinicalInfo: '', findings: '', impression: '', recommendation: '', criticalFinding: false, criticalNote: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -108,6 +119,8 @@ function ReportEditor({ study, onClose, onSaved }) {
         findings: r.data.findings || '',
         impression: r.data.impression || '',
         recommendation: r.data.recommendation || '',
+        criticalFinding: !!r.data.criticalFinding,
+        criticalNote: r.data.criticalNote || '',
       }))
       .catch(() => setForm(f => ({ ...f, clinicalInfo: study.clinicalInfo || '' })))
       .finally(() => setLoading(false))
@@ -122,6 +135,28 @@ function ReportEditor({ study, onClose, onSaved }) {
     } finally {
       setSaving(false)
     }
+  }
+
+  // ── Template picker + critical finding ─────────────────────────────
+  const [templates, setTemplates] = useState([])
+  useEffect(() => {
+    api.get('/templates', { params: { modality: study.modality, bodyPart: study.bodyPart } })
+      .then(r => setTemplates(r.data || []))
+      .catch(() => {})
+  }, [study.modality, study.bodyPart])
+
+  const applyTemplate = async (t) => {
+    if (!t) return
+    if ((form.findings || form.impression) && !confirm('Áp dụng mẫu sẽ ghi đè nội dung đang có. Tiếp tục?')) return
+    setForm(f => ({
+      ...f,
+      technique: t.technique || f.technique,
+      clinicalInfo: t.clinicalInfo || f.clinicalInfo,
+      findings: t.findings || f.findings,
+      impression: t.impression || f.impression,
+      recommendation: t.recommendation || f.recommendation,
+    }))
+    try { await api.post(`/templates/${t._id}/use`) } catch {}
   }
 
   const TextField = ({ label, name, rows = 3 }) => (
@@ -148,11 +183,40 @@ function ReportEditor({ study, onClose, onSaved }) {
             <div className="text-center py-8 text-gray-400 text-sm">Đang tải...</div>
           ) : (
             <>
+              {/* Template picker */}
+              {templates.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+                  <span className="text-xs font-semibold text-blue-700">📋 Mẫu kết quả:</span>
+                  <select onChange={e => { applyTemplate(templates.find(t => t._id === e.target.value)); e.target.value = '' }}
+                    className="flex-1 border border-blue-300 rounded px-2 py-1 text-sm bg-white" defaultValue="">
+                    <option value="">Chọn mẫu để áp dụng nhanh ({templates.length} mẫu)</option>
+                    {templates.map(t => (
+                      <option key={t._id} value={t._id}>{t.name}{t.useCount ? ` · dùng ${t.useCount} lần` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <TextField label="Kỹ thuật chụp" name="technique" rows={2} />
               <TextField label="Thông tin lâm sàng" name="clinicalInfo" rows={2} />
               <TextField label="Mô tả hình ảnh (Findings)" name="findings" rows={5} />
               <TextField label="Kết luận (Impression)" name="impression" rows={3} />
               <TextField label="Đề nghị (Recommendation)" name="recommendation" rows={2} />
+
+              {/* Critical finding toggle */}
+              <div className={`rounded-lg p-3 border ${form.criticalFinding ? 'bg-red-50 border-red-300' : 'bg-gray-50 border-gray-200'}`}>
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer">
+                  <input type="checkbox" checked={!!form.criticalFinding}
+                    onChange={e => setForm(f => ({ ...f, criticalFinding: e.target.checked }))} />
+                  ⚠ Phát hiện nghiêm trọng — cần thông báo khẩn
+                </label>
+                {form.criticalFinding && (
+                  <textarea rows={2} value={form.criticalNote || ''}
+                    onChange={e => setForm(f => ({ ...f, criticalNote: e.target.value }))}
+                    placeholder="Mô tả ngắn gọn (sẽ gửi tới admin/giám đốc/trưởng phòng)"
+                    className="w-full mt-2 border border-red-200 rounded px-2 py-1 text-sm" />
+                )}
+              </div>
+
               <AnnotationPanel study={study} />
             </>
           )}
@@ -564,7 +628,7 @@ function AssignModal({ study, onClose, onAssigned }) {
 
 // ─── Worklist Table (shared across all roles) ─────────────────────────────────
 
-function WorklistView({ studies, updateStudy, onRefresh, auth }) {
+function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeFilter }) {
   const [activeTab, setActiveTab] = useState('waiting')
   const [dateFrom, setDateFrom] = useState(todayISO())
   const [dateTo, setDateTo] = useState(todayISO())
@@ -578,13 +642,17 @@ function WorklistView({ studies, updateStudy, onRefresh, auth }) {
 
   const tabConfig = STATUS_TABS.find(t => t.key === activeTab)
 
-  // Filter studies by tab status + date range
+  // Filter studies by tab status + date range + device-tree selection
   const filtered = studies.filter(s => {
     if (!tabConfig.statuses.includes(s.status)) return false
     const d = (s.appointmentTime || s.createdAt || '').slice(0, 10)
     if (dateFrom && d && d < dateFrom) return false
     if (dateTo && d && d > dateTo) return false
     if (serviceFilter && s.modality !== serviceFilter) return false
+    if (treeFilter) {
+      const [mod, site] = treeFilter.split('|')
+      if (s.modality !== mod || s.site !== site) return false
+    }
     return true
   })
 
@@ -730,14 +798,17 @@ function WorklistView({ studies, updateStudy, onRefresh, auth }) {
               {paged.length === 0 ? (
                 <tr><td colSpan={10} className="px-4 py-10 text-center text-gray-400 text-sm">Không có dữ liệu</td></tr>
               ) : paged.map((s, i) => (
-                <tr key={s._id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors`}>
+                <tr key={s._id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors cursor-pointer`}
+                    onDoubleClick={() => onOpenCase?.(s)} title="Double-click để mở ca">
                   <td className="px-4 py-3 text-gray-500 text-xs">{page * pageSize + i + 1}</td>
                   <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">{fmtDateTime(s.appointmentTime || s.createdAt)}</td>
                   <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{calcWaitTime(s.appointmentTime || s.createdAt)}</td>
                   <td className="px-4 py-3 font-mono text-xs text-gray-600">{s._id?.slice(-8)?.toUpperCase()}</td>
                   <td className="px-4 py-3 font-mono text-xs text-gray-400">{s.patientId || '—'}</td>
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-800">{s.patientName || '—'}</div>
+                    <div className="font-medium text-gray-800 hover:text-blue-600" onClick={(e) => { e.stopPropagation(); onOpenCase?.(s) }}>
+                      {s.patientName || '—'}
+                    </div>
                     {s.teleradRequested && (
                       <span className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-0.5 ${
                         s.teleradStatus === 'pending' ? 'bg-purple-100 text-purple-700' :
@@ -817,26 +888,68 @@ export default function RIS() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
 
+  // MINERVA-style multi-case workspace state
+  const [openCases, setOpenCases] = useState([])      // [{study}, ...]
+  const [activeCaseId, setActiveCaseId] = useState(SYS_WORKLIST)  // SYS_* or study._id
+  const [treeFilter, setTreeFilter] = useState(null)       // 'MRI|Cà Mau' format
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [criticalUnread, setCriticalUnread] = useState(0)
+
+  // Pick up ?view=mwl|critical from old route redirects
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const v = searchParams.get('view')
+    if (v === 'mwl')      setActiveCaseId(SYS_MWL)
+    else if (v === 'critical') setActiveCaseId(SYS_CRITICAL)
+    if (v) {
+      // Clear param so it doesn't override later tab clicks
+      setSearchParams({}, { replace: true })
+    }
+  }, [])
+
+  // Poll critical-finding count for tab badge
+  useEffect(() => {
+    const fetchCritical = () => {
+      api.get('/notifications', { params: { severity: 'critical', unreadOnly: 1 } })
+        .then(r => setCriticalUnread((r.data.items || []).filter(n => n.type === 'critical_finding' && !(n.ackedBy || []).length).length))
+        .catch(() => {})
+    }
+    fetchCritical()
+    const iv = setInterval(fetchCritical, 30_000)
+    return () => clearInterval(iv)
+  }, [])
+
   useEffect(() => { load() }, [])
 
   const load = async () => {
     try {
       const res = await api.get('/ris/studies')
       setStudies(res.data)
+      // Refresh any open-case data with latest study state
+      setOpenCases(prev => prev.map(c => {
+        const updated = res.data.find(s => s._id === c._id)
+        return updated || c
+      }))
     } catch (e) {
       console.error('RIS load error:', e)
-      if (e?.response?.status !== 401) {
-        setLoadError(String(e?.response?.data?.error || e?.message || e))
-      }
-    } finally {
-      setLoading(false)
-    }
+      if (e?.response?.status !== 401) setLoadError(String(e?.response?.data?.error || e?.message || e))
+    } finally { setLoading(false) }
   }
 
   const updateStudy = async (id, data) => {
     const res = await api.put(`/ris/studies/${id}`, data)
     setStudies(prev => prev.map(s => s._id === id ? res.data : s))
     load()
+  }
+
+  // Tab management
+  const openCase = (study) => {
+    setOpenCases(prev => prev.find(c => c._id === study._id) ? prev : [...prev, study])
+    setActiveCaseId(study._id)
+  }
+  const closeCase = (id) => {
+    setOpenCases(prev => prev.filter(c => c._id !== id))
+    if (activeCaseId === id) setActiveCaseId(SYS_WORKLIST)
   }
 
   if (loading) {
@@ -849,7 +962,6 @@ export default function RIS() {
       </div>
     )
   }
-
   if (auth.role === 'guest') {
     return (
       <div className="flex items-center justify-center h-64">
@@ -860,7 +972,6 @@ export default function RIS() {
       </div>
     )
   }
-
   if (loadError) {
     return (
       <div className="p-6 bg-red-50 border border-red-200 rounded-lg text-red-800">
@@ -870,30 +981,68 @@ export default function RIS() {
     )
   }
 
-  return (
-    <div className="space-y-4">
-      {/* Page title */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">Hệ thống RIS</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Radiology Information System</p>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
-          {auth.displayName || auth.username}
-          {auth.department && <span className="text-gray-400">— {auth.department}</span>}
-        </div>
-      </div>
+  const activeCase = openCases.find(c => c._id === activeCaseId)
+  const isSystemTab = activeCaseId === SYS_WORKLIST || activeCaseId === SYS_MWL || activeCaseId === SYS_CRITICAL
 
-      {/* Shared worklist view for all roles */}
-      <ErrorBoundary>
-        <WorklistView
+  const systemTabs = [
+    { id: SYS_WORKLIST, label: 'Danh sách ca',       icon: '📋' },
+    { id: SYS_MWL,      label: 'Modality Worklist',  icon: '📡' },
+    { id: SYS_CRITICAL, label: 'Phát hiện nghiêm trọng', icon: '⚠', badge: criticalUnread, badgeColor: 'bg-red-500 text-white' },
+  ]
+
+  return (
+    <div className="flex" style={{ height: 'calc(100vh - 6rem)' }}>
+      {/* Left: device tree (only relevant for the worklist view) */}
+      {activeCaseId === SYS_WORKLIST && (
+        <DeviceTreeSidebar
           studies={studies}
-          updateStudy={updateStudy}
-          onRefresh={load}
-          auth={auth}
+          selected={treeFilter}
+          onSelect={setTreeFilter}
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed(c => !c)}
         />
-      </ErrorBoundary>
+      )}
+
+      {/* Right: tabs + content */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+        <CaseTabBar
+          systemTabs={systemTabs}
+          openCases={openCases}
+          activeId={activeCaseId}
+          onSelect={setActiveCaseId}
+          onClose={closeCase}
+        />
+        <ErrorBoundary>
+          {activeCase ? (
+            <PatientDetailView study={activeCase} onRefresh={load} onOpenCase={openCase} />
+          ) : activeCaseId === SYS_MWL ? (
+            <div className="flex-1 overflow-y-auto p-4"><MWL /></div>
+          ) : activeCaseId === SYS_CRITICAL ? (
+            <div className="flex-1 overflow-y-auto p-4"><CriticalFindings /></div>
+          ) : (
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h1 className="text-lg font-bold text-gray-800">Hệ thống RIS</h1>
+                  <p className="text-xs text-gray-400">Double-click hàng để mở ca trong tab mới · ⌘K để tìm</p>
+                </div>
+                <div className="text-xs text-gray-500">
+                  {treeFilter && <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded">Lọc: {treeFilter}</span>}
+                  <span className="ml-3">{auth.displayName || auth.username}{auth.department ? ` — ${auth.department}` : ''}</span>
+                </div>
+              </div>
+              <WorklistView
+                studies={studies}
+                updateStudy={updateStudy}
+                onRefresh={load}
+                auth={auth}
+                onOpenCase={openCase}
+                treeFilter={treeFilter}
+              />
+            </div>
+          )}
+        </ErrorBoundary>
+      </div>
     </div>
   )
 }

@@ -7,6 +7,7 @@ const Patient = require('../models/Patient')
 const ReferralDoctor = require('../models/ReferralDoctor')
 const Service = require('../models/Service')
 const User = require('../models/User')
+const Study = require('../models/Study')
 
 const PAYMENT_LABELS = { cash: 'Tiền mặt', transfer: 'Chuyển khoản', card: 'Thẻ', mixed: 'Hỗn hợp' }
 
@@ -459,6 +460,299 @@ router.get('/e-invoice', requireAuth, async (req, res) => {
     })
 
     res.json({ rows, stats })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ═══════════════════════════════════════════════════════════════════
+//  OPERATIONAL RADIOLOGY REPORTS (RIS analytics)
+//  Computes from the Study collection — counts/breakdowns by
+//  machine, modality group, radiologist, time-of-day, etc.
+// ═══════════════════════════════════════════════════════════════════
+
+// Common: build a date filter on Study.studyDate (YYYY-MM-DD prefix string)
+function buildStudyDateFilter(dateFrom, dateTo) {
+  const filter = {}
+  if (dateFrom || dateTo) {
+    filter.studyDate = {}
+    if (dateFrom) filter.studyDate.$gte = dateFrom
+    if (dateTo) filter.studyDate.$lte = dateTo + '\uffff'
+  }
+  return filter
+}
+
+function applyExtraFilters(filter, q) {
+  if (q.modality) filter.modality = q.modality
+  if (q.site) filter.site = q.site
+  if (q.radiologist) filter.radiologist = q.radiologist
+  // Only count completed reads for productivity reports unless ?includeAll=1
+  if (!q.includeAll) {
+    filter.status = { $in: ['reported', 'verified'] }
+  }
+  return filter
+}
+
+// GET /reports/rad/cases-by-machine
+// Cases grouped by site (machine room) — one row per machine
+router.get('/rad/cases-by-machine', requireAuth, async (req, res) => {
+  try {
+    const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
+    const studies = await Study.find(filter).lean()
+
+    const map = {}
+    for (const s of studies) {
+      const key = s.site || '(không rõ)'
+      if (!map[key]) map[key] = { site: key, modalities: {}, count: 0 }
+      map[key].count++
+      const m = s.modality || '?'
+      map[key].modalities[m] = (map[key].modalities[m] || 0) + 1
+    }
+    const total = studies.length || 1
+    const rows = Object.values(map)
+      .sort((a, b) => b.count - a.count)
+      .map(r => ({
+        site: r.site,
+        count: r.count,
+        modalityBreakdown: Object.entries(r.modalities).map(([m, c]) => `${m}:${c}`).join(', '),
+        percent: ((r.count / total) * 100).toFixed(1),
+      }))
+    res.json({ rows, total: studies.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /reports/rad/cases-by-machine-group
+// Cases grouped by modality (CT/MRI/XR/US)
+router.get('/rad/cases-by-machine-group', requireAuth, async (req, res) => {
+  try {
+    const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
+    const studies = await Study.find(filter).lean()
+
+    const map = {}
+    for (const s of studies) {
+      const key = s.modality || '(không rõ)'
+      if (!map[key]) map[key] = { modality: key, sites: new Set(), radiologists: new Set(), count: 0 }
+      map[key].count++
+      if (s.site) map[key].sites.add(s.site)
+      if (s.radiologist) map[key].radiologists.add(s.radiologist)
+    }
+    const total = studies.length || 1
+    const rows = Object.values(map)
+      .sort((a, b) => b.count - a.count)
+      .map(r => ({
+        modality: r.modality,
+        count: r.count,
+        siteCount: r.sites.size,
+        radiologistCount: r.radiologists.size,
+        percent: ((r.count / total) * 100).toFixed(1),
+      }))
+    res.json({ rows, total: studies.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /reports/rad/cases-by-radiologist
+// Productivity: case count per reading doctor
+router.get('/rad/cases-by-radiologist', requireAuth, async (req, res) => {
+  try {
+    const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
+    const studies = await Study.find(filter).lean()
+
+    const map = {}
+    for (const s of studies) {
+      const key = s.radiologist || '(chưa giao)'
+      if (!map[key]) {
+        map[key] = {
+          radiologist: key,
+          radiologistName: s.radiologistName || '',
+          modalities: {},
+          count: 0,
+          turnaroundSum: 0,
+          turnaroundCount: 0,
+        }
+      }
+      map[key].count++
+      const m = s.modality || '?'
+      map[key].modalities[m] = (map[key].modalities[m] || 0) + 1
+      // Turnaround = reportedAt - studyDate (ms)
+      if (s.reportedAt && s.studyDate) {
+        const t = new Date(s.reportedAt).getTime() - new Date(s.studyDate).getTime()
+        if (t > 0 && t < 30 * 24 * 3600 * 1000) {
+          map[key].turnaroundSum += t
+          map[key].turnaroundCount++
+        }
+      }
+    }
+    const total = studies.length || 1
+    const rows = Object.values(map)
+      .sort((a, b) => b.count - a.count)
+      .map(r => ({
+        radiologist: r.radiologist,
+        radiologistName: r.radiologistName,
+        count: r.count,
+        modalityBreakdown: Object.entries(r.modalities).map(([m, c]) => `${m}:${c}`).join(', '),
+        avgTurnaroundHours: r.turnaroundCount
+          ? (r.turnaroundSum / r.turnaroundCount / 3600000).toFixed(1)
+          : '-',
+        percent: ((r.count / total) * 100).toFixed(1),
+      }))
+    res.json({ rows, total: studies.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /reports/rad/cases-by-radiologist-modality
+// Cross-tab: rows = radiologist, columns = modality
+router.get('/rad/cases-by-radiologist-modality', requireAuth, async (req, res) => {
+  try {
+    const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
+    const studies = await Study.find(filter).lean()
+
+    const modalitySet = new Set()
+    const map = {}
+    for (const s of studies) {
+      const key = s.radiologist || '(chưa giao)'
+      if (!map[key]) map[key] = { radiologist: key, radiologistName: s.radiologistName || '', counts: {}, total: 0 }
+      const m = s.modality || '?'
+      modalitySet.add(m)
+      map[key].counts[m] = (map[key].counts[m] || 0) + 1
+      map[key].total++
+    }
+    const modalities = [...modalitySet].sort()
+    const rows = Object.values(map)
+      .sort((a, b) => b.total - a.total)
+      .map(r => {
+        const row = { radiologist: r.radiologist, radiologistName: r.radiologistName, total: r.total }
+        modalities.forEach(m => { row['m_' + m] = r.counts[m] || 0 })
+        return row
+      })
+    res.json({ rows, modalities, total: studies.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /reports/rad/cases-by-time
+// Distribution by hour-of-day (uses reportedAt for completion, falls back to studyDate)
+router.get('/rad/cases-by-time', requireAuth, async (req, res) => {
+  try {
+    const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
+    const studies = await Study.find(filter).lean()
+
+    const granularity = req.query.granularity || 'hour' // 'hour' | 'day' | 'weekday'
+    const buckets = {}
+
+    for (const s of studies) {
+      const ts = s.reportedAt || s.studyDate
+      if (!ts) continue
+      const d = new Date(ts)
+      if (isNaN(d)) continue
+      let key
+      if (granularity === 'day') {
+        key = d.toISOString().slice(0, 10)
+      } else if (granularity === 'weekday') {
+        key = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.getDay()]
+      } else {
+        key = String(d.getHours()).padStart(2, '0') + ':00'
+      }
+      buckets[key] = (buckets[key] || 0) + 1
+    }
+    const rows = Object.entries(buckets)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([bucket, count]) => ({ bucket, count }))
+    res.json({ rows, total: studies.length, granularity })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /reports/rad/services-detail
+// One row per study with full clinical details — operational equivalent of revenue-detail
+router.get('/rad/services-detail', requireAuth, async (req, res) => {
+  try {
+    const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
+    const studies = await Study.find(filter).sort({ studyDate: -1 }).limit(1000).lean()
+
+    const rows = studies.map(s => ({
+      _id: s._id,
+      studyUID: s.studyUID,
+      patientId: s.patientId,
+      patientName: s.patientName,
+      gender: s.gender,
+      dob: s.dob,
+      modality: s.modality,
+      bodyPart: s.bodyPart,
+      site: s.site,
+      clinicalInfo: s.clinicalInfo,
+      priority: s.priority,
+      status: s.status,
+      scheduledDate: s.scheduledDate,
+      studyDate: s.studyDate,
+      reportedAt: s.reportedAt,
+      verifiedAt: s.verifiedAt,
+      technicianName: s.technicianName,
+      radiologistName: s.radiologistName,
+      imageCount: s.imageCount,
+    }))
+    res.json({ rows, total: rows.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /reports/rad/patient-list
+// Patients who had studies read in the date range (deduplicated by patientId)
+router.get('/rad/patient-list', requireAuth, async (req, res) => {
+  try {
+    // Force completed-only for "patients with read results"
+    const filter = buildStudyDateFilter(req.query.dateFrom, req.query.dateTo)
+    if (req.query.modality) filter.modality = req.query.modality
+    if (req.query.site) filter.site = req.query.site
+    filter.status = { $in: ['reported', 'verified'] }
+
+    const studies = await Study.find(filter).sort({ studyDate: -1 }).lean()
+    const map = {}
+    for (const s of studies) {
+      const key = s.patientId || s._id
+      if (!map[key]) {
+        map[key] = {
+          patientId: s.patientId,
+          patientName: s.patientName,
+          gender: s.gender,
+          dob: s.dob,
+          studies: [],
+          modalities: new Set(),
+          lastStudyDate: s.studyDate,
+        }
+      }
+      map[key].studies.push({
+        modality: s.modality,
+        bodyPart: s.bodyPart,
+        site: s.site,
+        studyDate: s.studyDate,
+        radiologistName: s.radiologistName,
+        status: s.status,
+      })
+      map[key].modalities.add(s.modality)
+      if (s.studyDate > map[key].lastStudyDate) map[key].lastStudyDate = s.studyDate
+    }
+    const rows = Object.values(map)
+      .sort((a, b) => (b.lastStudyDate || '').localeCompare(a.lastStudyDate || ''))
+      .map(p => ({
+        patientId: p.patientId,
+        patientName: p.patientName,
+        gender: p.gender,
+        dob: p.dob,
+        studyCount: p.studies.length,
+        modalities: [...p.modalities].join(', '),
+        lastStudyDate: p.lastStudyDate,
+        lastRadiologist: p.studies[0]?.radiologistName || '',
+      }))
+    res.json({ rows, total: rows.length })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

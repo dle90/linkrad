@@ -2,11 +2,14 @@ import React from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { logoutUser } from '../api'
+import GlobalSearch from './GlobalSearch'
+import NotificationBell from './NotificationBell'
 
 const NAV = [
   {
     group: 'Tổng quan',
     items: [
+      { path: '/today', label: 'Hôm nay (live)',  icon: '📡', workflowOnly: true },
       { path: '/',      label: 'Dashboard',      icon: '📊' },
       { path: '/sites', label: 'Danh sách Site', icon: '📍' },
     ]
@@ -14,69 +17,67 @@ const NAV = [
   {
     group: 'Hoạt động',
     items: [
-      { path: '/workflow', label: 'Công việc', icon: '✅', workflowOnly: true },
-      { path: '/registration', label: 'Đăng ký', icon: '🏥', workflowOnly: true },
-      { path: '/ris',      label: 'RIS',        icon: '🩻', workflowOnly: true },
-      { path: '/teleradiology', label: 'Đọc phim', icon: '🖥️', workflowOnly: true },
-      { path: '/telerad-admin', label: 'Quản lý đọc hộ', icon: '📋', adminOnly: true },
-      { path: '/telerad-reading', label: 'Đọc phim --', icon: '🔬', workflowOnly: true },
+      { path: '/workflow',     label: 'Công việc',  icon: '✅', workflowOnly: true },
+      { path: '/registration', label: 'Đăng ký',    icon: '🏥', workflowOnly: true },
+      { path: '/ris',          label: 'RIS',        icon: '🩻', workflowOnly: true },
+      { path: '/teleradiology',     label: 'Đọc hộ',           icon: '🖥️', workflowOnly: true },
+      { path: '/telerad-reading',   label: 'Đọc hộ — Của tôi', icon: '🔬', workflowOnly: true },
+      { path: '/telerad-admin',     label: 'Đọc hộ — Quản lý', icon: '📋', adminOnly: true },
+      { path: '/report-templates',  label: 'Mẫu kết quả',      icon: '📋', workflowOnly: true },
+      { path: '/billing',           label: 'Phiếu thu',        icon: '💳', workflowOnly: true },
+      { path: '/inventory',         label: 'Quản lý kho',      icon: '📦', workflowOnly: true },
     ]
   },
   {
-    group: 'Viện phí',
+    group: 'Danh mục',
     items: [
-      { path: '/billing', label: 'Phiếu thu', icon: '💳', workflowOnly: true },
-    ]
-  },
-  {
-    group: 'Kho',
-    items: [
-      { path: '/inventory', label: 'Quản lý kho', icon: '📦', workflowOnly: true },
-    ]
-  },
-  {
-    group: 'DM Đối tác',
-    items: [
-      { path: '/catalogs/referral-doctors', label: 'Bác sĩ giới thiệu', icon: '👨‍⚕️', workflowOnly: true },
-      { path: '/catalogs/partner-facilities', label: 'CSYT đối tác', icon: '🏥', workflowOnly: true },
-      { path: '/catalogs/commission-groups', label: 'Nhóm hoa hồng', icon: '📋', workflowOnly: true },
-      { path: '/catalogs/commission-rules', label: 'Hoa hồng', icon: '💰', workflowOnly: true },
-    ]
-  },
-  {
-    group: 'DM Chung',
-    items: [
-      { path: '/catalogs/users', label: 'Nhân sự', icon: '👤', workflowOnly: true },
-      { path: '/catalogs/patients', label: 'Bệnh nhân', icon: '🧑', workflowOnly: true },
-      { path: '/catalogs/specialties', label: 'Chuyên khoa', icon: '🩺', workflowOnly: true },
-      { path: '/catalogs/services', label: 'Dịch vụ', icon: '📄', workflowOnly: true },
-      { path: '/catalogs/service-types', label: 'Loại dịch vụ', icon: '📂', workflowOnly: true },
-      { path: '/catalogs/medical-facilities', label: 'Cơ sở y tế', icon: '🏨', workflowOnly: true },
-      { path: '/catalogs/tax-groups', label: 'Nhóm thuế DV', icon: '📊', workflowOnly: true },
-      { path: '/catalogs/promotions', label: 'CT khuyến mãi', icon: '🎁', workflowOnly: true },
-      { path: '/catalogs/promo-codes', label: 'Mã khuyến mãi', icon: '🏷️', workflowOnly: true },
-      { path: '/catalogs/registration-reasons', label: 'Lý do ĐK', icon: '📝', workflowOnly: true },
-      { path: '/catalogs/billing-cancel-reasons', label: 'Lý do huỷ PT', icon: '❌', workflowOnly: true },
-      { path: '/catalogs/admin-units', label: 'Địa chỉ hành chính', icon: '📍', workflowOnly: true },
+      // — Đối tác / referral —
+      { path: '/catalogs/referral-doctors',     label: 'Bác sĩ giới thiệu', icon: '👨‍⚕️', workflowOnly: true },
+      { path: '/catalogs/partner-facilities',   label: 'CSYT đối tác',      icon: '🏥', workflowOnly: true },
+      { path: '/catalogs/commission-groups',    label: 'Nhóm hoa hồng',     icon: '📋', workflowOnly: true },
+      { path: '/catalogs/commission-rules',     label: 'Hoa hồng',          icon: '💰', workflowOnly: true },
+      // — Chung —
+      { path: '/catalogs/users',                label: 'Nhân sự',           icon: '👤', workflowOnly: true },
+      { path: '/catalogs/patients',             label: 'Bệnh nhân',         icon: '🧑', workflowOnly: true },
+      { path: '/catalogs/specialties',          label: 'Chuyên khoa',       icon: '🩺', workflowOnly: true },
+      { path: '/catalogs/services',             label: 'Dịch vụ',           icon: '📄', workflowOnly: true },
+      { path: '/catalogs/service-types',        label: 'Loại dịch vụ',      icon: '📂', workflowOnly: true },
+      { path: '/catalogs/medical-facilities',   label: 'Cơ sở y tế',        icon: '🏨', workflowOnly: true },
+      { path: '/catalogs/tax-groups',           label: 'Nhóm thuế DV',      icon: '📊', workflowOnly: true },
+      { path: '/catalogs/promotions',           label: 'CT khuyến mãi',     icon: '🎁', workflowOnly: true },
+      { path: '/catalogs/promo-codes',          label: 'Mã khuyến mãi',     icon: '🏷️', workflowOnly: true },
+      { path: '/catalogs/registration-reasons', label: 'Lý do ĐK',          icon: '📝', workflowOnly: true },
+      { path: '/catalogs/billing-cancel-reasons', label: 'Lý do huỷ PT',    icon: '❌', workflowOnly: true },
+      { path: '/catalogs/admin-units',          label: 'Địa chỉ hành chính', icon: '📍', workflowOnly: true },
     ]
   },
   {
     group: 'Báo cáo',
     items: [
-      { path: '/reports/revenue-detail', label: 'BC doanh thu chi tiết', icon: '📊', workflowOnly: true },
-      { path: '/reports/customer-detail', label: 'BC chi tiết khách hàng', icon: '👥', workflowOnly: true },
-      { path: '/reports/promotion-detail', label: 'BC chương trình KM', icon: '🎁', workflowOnly: true },
-      { path: '/reports/clinic-revenue', label: 'BC doanh thu phòng khám', icon: '🏥', workflowOnly: true },
-      { path: '/reports/refund-exchange', label: 'BC hoàn trả/đổi DV', icon: '🔄', workflowOnly: true },
-      { path: '/reports/e-invoice', label: 'BC hóa đơn điện tử', icon: '🧾', workflowOnly: true },
+      // — Vận hành (RIS) —
+      { path: '/rad-reports/cases-by-machine',              label: 'BC số ca theo máy',              icon: '🖥️', workflowOnly: true },
+      { path: '/rad-reports/cases-by-machine-group',        label: 'BC số ca theo nhóm máy',         icon: '📦', workflowOnly: true },
+      { path: '/rad-reports/cases-by-radiologist',          label: 'BC số ca theo BS đọc',           icon: '👨‍⚕️', workflowOnly: true },
+      { path: '/rad-reports/cases-by-radiologist-modality', label: 'BC BS đọc × loại máy',           icon: '📋', workflowOnly: true },
+      { path: '/rad-reports/cases-by-time',                 label: 'BC theo thời gian',              icon: '🕒', workflowOnly: true },
+      { path: '/rad-reports/services-detail',               label: 'BC chi tiết DV ca theo máy',     icon: '📄', workflowOnly: true },
+      { path: '/rad-reports/patient-list',                  label: 'BC DS BN đã đọc KQ',             icon: '🧑', workflowOnly: true },
+      // — Tài chính —
+      { path: '/reports/revenue-detail',  label: 'BC doanh thu chi tiết',     icon: '📊', workflowOnly: true },
+      { path: '/reports/customer-detail', label: 'BC chi tiết khách hàng',    icon: '👥', workflowOnly: true },
+      { path: '/reports/promotion-detail', label: 'BC chương trình KM',       icon: '🎁', workflowOnly: true },
+      { path: '/reports/clinic-revenue',  label: 'BC doanh thu phòng khám',   icon: '🏥', workflowOnly: true },
+      { path: '/reports/refund-exchange', label: 'BC hoàn trả/đổi DV',        icon: '🔄', workflowOnly: true },
+      { path: '/reports/e-invoice',       label: 'BC hóa đơn điện tử',        icon: '🧾', workflowOnly: true },
     ]
   },
   {
     group: 'Quản lý',
     items: [
-      { path: '/hr/employees', label: 'DS nhân viên', icon: '👤', adminOnly: true },
-      { path: '/hr/departments', label: 'Phòng ban / CN', icon: '🏢', adminOnly: true },
-      { path: '/hr/permissions', label: 'Ma trận quyền', icon: '🔐', adminOnly: true },
+      { path: '/hr/employees',   label: 'DS nhân viên',     icon: '👤', adminOnly: true },
+      { path: '/hr/departments', label: 'Phòng ban / CN',   icon: '🏢', adminOnly: true },
+      { path: '/hr/permissions', label: 'Ma trận quyền',    icon: '🔐', adminOnly: true },
+      { path: '/audit-log',      label: 'Nhật ký hệ thống', icon: '📜', adminOnly: true },
     ]
   },
   {
@@ -207,6 +208,14 @@ export default function Layout({ children }) {
             <h1 className="text-lg font-semibold text-gray-800">LinkRad ERP</h1>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
+              className="text-xs flex items-center gap-2 px-2.5 py-1 rounded border border-gray-200 hover:border-gray-300 text-gray-500 hover:bg-gray-50"
+              title="Tìm kiếm (Ctrl+K)"
+            >
+              🔍 <span>Tìm kiếm</span> <kbd className="bg-gray-100 px-1 rounded text-[10px]">Ctrl+K</kbd>
+            </button>
+            <NotificationBell />
             {!isAdmin && (
               <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">Chế độ xem</span>
             )}
@@ -214,6 +223,9 @@ export default function Layout({ children }) {
             <div className="w-2 h-2 rounded-full bg-green-500" title="Server online"></div>
           </div>
         </header>
+
+        {/* Cmd+K palette (rendered globally; portals out via fixed positioning) */}
+        <GlobalSearch />
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto p-4">

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -29,6 +29,12 @@ import PartnerLogin from './pages/PartnerLogin'
 import PartnerPortal from './pages/PartnerPortal'
 import HRManagement from './pages/HRManagement'
 import Reports from './pages/Reports'
+import RadiologyReports from './pages/RadiologyReports'
+import TodayDashboard from './pages/TodayDashboard'
+import CriticalFindings from './pages/CriticalFindings'
+import AuditLog from './pages/AuditLog'
+import ReportTemplates from './pages/ReportTemplates'
+import MWL from './pages/MWL'
 
 function AuthenticatedRoutes() {
   const { auth } = useAuth()
@@ -62,6 +68,15 @@ function AuthenticatedRoutes() {
             {isWorkflowUser && <Route path="/catalogs/:catalogKey" element={<Catalogs />} />}
             {isWorkflowUser && <Route path="/reports" element={<Reports />} />}
             {isWorkflowUser && <Route path="/reports/:reportKey" element={<Reports />} />}
+            {isWorkflowUser && <Route path="/rad-reports" element={<RadiologyReports />} />}
+            {isWorkflowUser && <Route path="/rad-reports/:reportKey" element={<RadiologyReports />} />}
+            {isWorkflowUser && <Route path="/today" element={<TodayDashboard />} />}
+            {/* MWL + Critical findings now live as tabs inside /ris.
+                Old standalone routes redirect for backward compatibility (search/links). */}
+            {isWorkflowUser && <Route path="/critical-findings" element={<Navigate to="/ris?view=critical" replace />} />}
+            {isWorkflowUser && <Route path="/mwl" element={<Navigate to="/ris?view=mwl" replace />} />}
+            {(auth.role === 'admin' || auth.role === 'giamdoc') && <Route path="/audit-log" element={<AuditLog />} />}
+            {isRISUser && <Route path="/report-templates" element={<ReportTemplates />} />}
             {auth.role === 'admin' && <Route path="/hr" element={<HRManagement />} />}
             {auth.role === 'admin' && <Route path="/hr/:hrKey" element={<HRManagement />} />}
             <Route path="/pl" element={<PL />} />

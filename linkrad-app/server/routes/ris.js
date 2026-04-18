@@ -331,16 +331,20 @@ router.post('/reports', requireAuth, async (req, res) => {
     if (role !== 'bacsi' && role !== 'admin' && role !== 'truongphong') {
       return res.status(403).json({ error: 'Không có quyền viết kết quả' })
     }
-    const { studyId, studyUID, technique, clinicalInfo, findings, impression, recommendation, status } = req.body
+    const { studyId, studyUID, technique, clinicalInfo, findings, impression, recommendation, status, criticalFinding, criticalNote, templateUsedId } = req.body
     const now = new Date().toISOString()
 
     let report = await Report.findOne({ studyId })
+    const wasCritical = report && report.criticalFinding
     if (report) {
       report.technique = technique ?? report.technique
       report.clinicalInfo = clinicalInfo ?? report.clinicalInfo
       report.findings = findings ?? report.findings
       report.impression = impression ?? report.impression
       report.recommendation = recommendation ?? report.recommendation
+      if (criticalFinding !== undefined) report.criticalFinding = !!criticalFinding
+      if (criticalNote !== undefined) report.criticalNote = criticalNote
+      if (templateUsedId !== undefined) report.templateUsedId = templateUsedId
       report.updatedAt = now
       if (status) report.status = status
       if (status === 'final') report.finalizedAt = now
@@ -353,10 +357,34 @@ router.post('/reports', requireAuth, async (req, res) => {
         technique: technique || '', clinicalInfo: clinicalInfo || '',
         findings: findings || '', impression: impression || '',
         recommendation: recommendation || '',
+        criticalFinding: !!criticalFinding,
+        criticalNote: criticalNote || '',
+        templateUsedId: templateUsedId || '',
         status: status || 'draft',
         createdAt: now, updatedAt: now,
         finalizedAt: status === 'final' ? now : null,
       })
+    }
+
+    // Critical-finding notification: fire when newly flagged or first set on creation
+    if (report.criticalFinding && !wasCritical) {
+      try {
+        const Notification = require('../models/Notification')
+        const studyForNotif = await Study.findById(studyId).lean()
+        await Notification.create({
+          ts: now,
+          type: 'critical_finding',
+          severity: 'critical',
+          title: `⚠ Phát hiện nghiêm trọng — ${studyForNotif?.patientName || studyId}`,
+          message: criticalNote || `${studyForNotif?.modality || ''} ${studyForNotif?.bodyPart || ''} — BS: ${req.user.displayName || req.user.username}`,
+          toRoles: ['admin', 'giamdoc', 'truongphong'],
+          toSites: studyForNotif?.site ? [studyForNotif.site] : [],
+          resource: 'report',
+          resourceId: String(report._id),
+          createdBy: req.user.username,
+          createdAt: now,
+        })
+      } catch (e) { console.warn('[critical notify]', e.message) }
     }
 
     // Sync study status — if telerad case, update teleradStatus instead of status
