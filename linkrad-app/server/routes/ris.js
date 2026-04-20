@@ -439,19 +439,23 @@ router.get('/orthanc/studies', requireAuth, async (req, res) => {
 })
 
 // GET /orthanc/viewer-url/:studyUID — resolve StudyInstanceUID → OHIF viewer URL
+// Uses /tools/find because GET /studies?StudyInstanceUID= is ignored by Orthanc
+// and returns every study; the find API is the only reliable per-UID filter.
 router.get('/orthanc/viewer-url/:studyUID', requireAuth, async (req, res) => {
   try {
     const uid = req.params.studyUID
-    // Query Orthanc for the study with this UID
-    const response = await fetch(`${ORTHANC_BASE}/studies?StudyInstanceUID=${encodeURIComponent(uid)}`)
+    const response = await fetch(`${ORTHANC_BASE}/tools/find`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Level: 'Study', Query: { StudyInstanceUID: uid } }),
+    })
     if (!response.ok) return res.status(502).json({ error: 'Orthanc error' })
     const ids = await response.json()
-    if (!ids || ids.length === 0) {
+    if (!Array.isArray(ids) || ids.length === 0) {
       return res.json({ url: `${OHIF_PUBLIC}/`, found: false })
     }
-    const orthancId = ids[0]
     const viewerUrl = `${OHIF_PUBLIC}/viewer?StudyInstanceUIDs=${encodeURIComponent(uid)}`
-    res.json({ url: viewerUrl, orthancId, found: true })
+    res.json({ url: viewerUrl, orthancId: ids[0], found: true })
   } catch (err) {
     res.json({ url: `${OHIF_PUBLIC}/`, found: false, error: err.message })
   }
