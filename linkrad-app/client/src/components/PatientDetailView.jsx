@@ -419,9 +419,12 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase }) {
 
   const onReceive = async () => {
     try {
-      await api.put(`/ris/studies/${study._id}`, { status: 'reading' })
+      await api.post(`/ris/studies/${study._id}/pick`)
       onRefresh?.()
-    } catch (e) { alert('Lỗi: ' + e.message) }
+    } catch (e) {
+      alert(e.response?.data?.error || 'Không nhận được ca')
+      onRefresh?.()
+    }
   }
 
   const onViewImages = async (v1) => {

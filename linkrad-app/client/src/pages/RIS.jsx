@@ -559,73 +559,6 @@ function AnnotationPanel({ study }) {
   )
 }
 
-// ─── AssignModal ───────────────────────────────────────────────────────────────
-
-function AssignModal({ study, onClose, onAssigned }) {
-  const [radiologists, setRadiologists] = useState([])
-  const [selected, setSelected] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    api.get('/ris/radiologists').then(r => {
-      setRadiologists(r.data)
-      if (study.radiologist) setSelected(study.radiologist)
-    }).catch(() => {})
-  }, [])
-
-  const assign = async () => {
-    if (!selected) return
-    setSaving(true)
-    try {
-      const rad = radiologists.find(r => r.username === selected)
-      await api.post(`/ris/studies/${study._id}/assign`, {
-        radiologistId: selected,
-        radiologistName: rad?.displayName || selected,
-      })
-      onAssigned()
-      onClose()
-    } finally { setSaving(false) }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-base font-bold text-gray-800">Gửi đọc phim</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
-        </div>
-        <div className="px-6 py-4 space-y-4">
-          <div className="text-sm text-gray-600">
-            Ca chụp: <span className="font-medium">{study.patientName}</span> · {study.modality}
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Chọn bác sĩ đọc phim</label>
-            <select value={selected} onChange={e => setSelected(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50">
-              <option value="">— Chọn bác sĩ —</option>
-              {radiologists.map(r => (
-                <option key={r.username} value={r.username}>
-                  {r.displayName} {r.department ? `(${r.department})` : ''}
-                </option>
-              ))}
-            </select>
-            {radiologists.length === 0 && (
-              <p className="text-xs text-red-400 mt-1">Chưa có tài khoản bác sĩ nào.</p>
-            )}
-          </div>
-        </div>
-        <div className="px-6 py-4 border-t border-gray-200 flex gap-3">
-          <button onClick={assign} disabled={saving || !selected}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-colors">
-            {saving ? 'Đang lưu...' : 'Phân công'}
-          </button>
-          <button onClick={onClose} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm rounded-lg font-medium transition-colors">Hủy</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Worklist Table (shared across all roles) ─────────────────────────────────
 
 function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeFilter }) {
@@ -684,12 +617,15 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeF
     await updateStudy(study._id, { status: 'reported' })
   }
 
-  const handleRequestTelerad = async (study) => {
-    if (!confirm(`Gửi yêu cầu đọc phim cho ca của ${study.patientName}?`)) return
+  const handlePick = async (study) => {
+    if (!confirm(`Nhận ca của ${study.patientName}?`)) return
     try {
-      await api.post(`/ris/studies/${study._id}/request-telerad`)
+      await api.post(`/ris/studies/${study._id}/pick`)
       onRefresh()
-    } catch {}
+    } catch (e) {
+      alert(e.response?.data?.error || 'Không nhận được ca')
+      onRefresh()
+    }
   }
 
   const iconBtn = 'p-1.5 rounded hover:bg-gray-100 transition-colors text-base leading-none'
@@ -709,30 +645,41 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeF
             <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
           </div>
         )
-      case 'pending_read':
-        // Case đang trong luồng đọc phim → chỉ hiện Xem KQ
-        if (study.teleradStatus && study.teleradStatus !== 'none') {
+      case 'pending_read': {
+        const isBacsi = auth?.role === 'bacsi'
+        const isUnclaimed = !study.radiologist
+        const isMine = study.radiologist === auth?.username
+
+        // Bác sĩ: either pick (pool) or continue reading (own case)
+        if (isBacsi) {
           return (
             <div className="flex items-center gap-0.5">
-              <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-gray-500 hover:text-gray-700`} title="Xem kết quả">👁</button>
+              {isUnclaimed && (
+                <button onClick={() => handlePick(study)}
+                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs rounded-lg font-medium transition-colors"
+                  title="Nhận ca từ pool">
+                  Nhận ca
+                </button>
+              )}
+              {isMine && (
+                <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Nhập kết quả">✎</button>
+              )}
               <button onClick={() => setPriorStudy(study)} className={`${iconBtn} text-cyan-500 hover:text-cyan-700`} title="So sánh lần trước">⇔</button>
               <button onClick={() => setKeyImageStudy(study)} className={`${iconBtn} text-yellow-500 hover:text-yellow-700`} title="Key images">★</button>
             </div>
           )
         }
-        // Case chưa gửi đọc phim → đầy đủ actions
+
+        // Admin/giamdoc/truongphong/nhanvien: can view + cancel, no pick
         return (
           <div className="flex items-center gap-0.5">
-            <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Nhập kết quả">✎</button>
-            {!study.teleradRequested && (
-              <button onClick={() => handleRequestTelerad(study)} className={`${iconBtn} text-purple-500 hover:text-purple-700`} title="Gửi đọc phim">↗</button>
-            )}
+            <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-gray-500 hover:text-gray-700`} title="Xem kết quả">👁</button>
             <button onClick={() => setPriorStudy(study)} className={`${iconBtn} text-cyan-500 hover:text-cyan-700`} title="So sánh lần trước">⇔</button>
             <button onClick={() => setKeyImageStudy(study)} className={`${iconBtn} text-yellow-500 hover:text-yellow-700`} title="Key images">★</button>
-            <button onClick={() => handleComplete(study)} className={`${iconBtn} text-green-500 hover:text-green-700`} title="Chuyển hoàn thành">✓</button>
             <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
           </div>
         )
+      }
       case 'completed':
         return (
           <div className="flex items-center gap-0.5">
@@ -809,19 +756,16 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeF
                     <div className="font-medium text-gray-800 hover:text-blue-600" onClick={(e) => { e.stopPropagation(); onOpenCase?.(s) }}>
                       {s.patientName || '—'}
                     </div>
-                    {s.teleradRequested && (
-                      <span className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-0.5 ${
-                        s.teleradStatus === 'pending' ? 'bg-purple-100 text-purple-700' :
-                        s.teleradStatus === 'assigned' ? 'bg-blue-100 text-blue-700' :
-                        s.teleradStatus === 'reading' ? 'bg-orange-100 text-orange-700' :
-                        s.teleradStatus === 'reported' ? 'bg-green-100 text-green-700' :
-                        'bg-purple-100 text-purple-700'
-                      }`}>
-                        {s.teleradStatus === 'pending' ? 'Chờ đọc phim' :
-                         s.teleradStatus === 'assigned' ? 'Đã phân công BS' :
-                         s.teleradStatus === 'reading' ? 'Đang đọc phim' :
-                         s.teleradStatus === 'reported' ? 'Có KQ đọc phim' : 'Đọc phim'}
-                      </span>
+                    {(s.status === 'pending_read' || s.status === 'reading') && (
+                      s.radiologist ? (
+                        <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-0.5 bg-blue-100 text-blue-700">
+                          BS: {s.radiologistName || s.radiologist}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-0.5 bg-gray-100 text-gray-500">
+                          Chưa nhận
+                        </span>
+                      )
                     )}
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs">

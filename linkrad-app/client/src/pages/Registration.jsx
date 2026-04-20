@@ -234,6 +234,10 @@ function RegistrationForm({ patient, onSave, onClear }) {
     <div className="bg-white border-b">
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b">
+        <button onClick={handleClear}
+          className="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 font-medium transition-colors">
+          + Bệnh nhân mới
+        </button>
         <button onClick={handleSave} disabled={saving}
           className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium transition-colors">
           {saving ? 'Đang lưu...' : 'Lưu (F1)'}

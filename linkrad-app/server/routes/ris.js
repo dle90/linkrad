@@ -21,7 +21,13 @@ function genStudyUID() {
 // Helper: build a base Mongoose query filter based on user role
 function buildSiteFilter(user) {
   if (user.role === 'bacsi') {
-    return { radiologist: user.username }
+    // Pool (unclaimed pending_read) + own picked cases at any status
+    return {
+      $or: [
+        { status: 'pending_read', radiologist: { $in: [null, ''] } },
+        { radiologist: user.username },
+      ],
+    }
   }
   if (user.role === 'nhanvien' || user.role === 'truongphong') {
     return { site: user.department }
@@ -212,7 +218,7 @@ router.put('/studies/:id', requireAuth, async (req, res) => {
     } else if (role === 'admin' || role === 'giamdoc') {
       // Can set any field
       const allowedFields = [
-        'status', 'teleradStatus', 'verifiedAt', 'patientName', 'patientId', 'dob', 'gender',
+        'status', 'verifiedAt', 'patientName', 'patientId', 'dob', 'gender',
         'modality', 'bodyPart', 'clinicalInfo', 'site', 'scheduledDate', 'studyDate',
         'priority', 'technician', 'technicianName', 'radiologist', 'radiologistName',
         'reportText', 'reportedAt', 'imageStatus', 'imageCount', 'studyUID',
@@ -223,19 +229,11 @@ router.put('/studies/:id', requireAuth, async (req, res) => {
         }
       }
     } else if (role === 'bacsi') {
-      // Bacsi can only update studies assigned to them
+      // Bacsi can only update studies they've picked
       if (study.radiologist !== req.user.username) {
-        return res.status(403).json({ error: 'Ca chụp không được giao cho bạn' })
+        return res.status(403).json({ error: 'Ca chụp không phải của bạn' })
       }
-      if (body.teleradStatus !== undefined) {
-        if (!['reading', 'reported'].includes(body.teleradStatus)) {
-          return res.status(403).json({ error: 'Bác sĩ chỉ được cập nhật teleradStatus reading hoặc reported' })
-        }
-        updates.teleradStatus = body.teleradStatus
-        if (body.teleradStatus === 'reported') {
-          updates.status = 'reported'
-        }
-      } else if (body.status !== undefined) {
+      if (body.status !== undefined) {
         if (!['reading', 'reported'].includes(body.status)) {
           return res.status(403).json({ error: 'Bác sĩ chỉ được cập nhật trạng thái reading hoặc reported' })
         }
@@ -268,47 +266,70 @@ router.get('/radiologists', requireAuth, async (req, res) => {
   }
 })
 
-// POST /studies/:id/request-telerad — NV cơ sở gửi yêu cầu đọc phim
-router.post('/studies/:id/request-telerad', requireAuth, async (req, res) => {
+// POST /studies/:id/pick — bác sĩ tự nhận ca từ pool
+// Atomic claim: only succeeds if study is pending_read AND unclaimed.
+router.post('/studies/:id/pick', requireAuth, async (req, res) => {
   try {
+    if (req.user.role !== 'bacsi' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Chỉ bác sĩ mới được nhận ca' })
+    }
+    const now = new Date().toISOString()
+    const updated = await Study.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        status: 'pending_read',
+        radiologist: { $in: [null, ''] },
+      },
+      {
+        $set: {
+          radiologist: req.user.username,
+          radiologistName: req.user.displayName || req.user.username,
+          assignedAt: now,
+          status: 'reading',
+          updatedAt: now,
+        },
+      },
+      { new: true }
+    )
+    if (updated) return res.json(updated)
+    // Diagnose why the atomic claim failed
+    const study = await Study.findById(req.params.id).lean()
+    if (!study) return res.status(404).json({ error: 'Không tìm thấy ca chụp' })
+    if (study.status !== 'pending_read') {
+      return res.status(409).json({ error: 'Ca chụp không ở trạng thái chờ đọc', study })
+    }
+    return res.status(409).json({ error: 'Ca chụp đã được bác sĩ khác nhận', study })
+  } catch (err) {
+    console.error('POST /studies/:id/pick error:', err)
+    res.status(500).json({ error: 'Lỗi server' })
+  }
+})
+
+// POST /studies/:id/assign — admin override (reassign ca cho bác sĩ khác)
+router.post('/studies/:id/assign', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Chỉ admin mới được phân công lại' })
+    }
+    const { radiologistId, radiologistName } = req.body
+    if (!radiologistId) return res.status(400).json({ error: 'radiologistId required' })
     const now = new Date().toISOString()
     const updated = await Study.findByIdAndUpdate(
       req.params.id,
-      { $set: { teleradStatus: 'pending', teleradRequested: true, teleradRequestedAt: now, teleradRequestedBy: req.user.username, updatedAt: now } },
+      {
+        $set: {
+          radiologist: radiologistId,
+          radiologistName: radiologistName || radiologistId,
+          assignedAt: now,
+          updatedAt: now,
+        },
+      },
       { new: true }
     )
     if (!updated) return res.status(404).json({ error: 'Không tìm thấy ca chụp' })
     res.json(updated)
   } catch (err) {
-    res.status(500).json({ error: 'Lỗi server' })
-  }
-})
-
-// POST /studies/:id/assign — admin nền tảng phân công BS đọc phim
-router.post('/studies/:id/assign', requireAuth, async (req, res) => {
-  try {
-    const role = req.user.role
-    if (role !== 'admin' && role !== 'truongphong') {
-      return res.status(403).json({ error: 'Không có quyền phân công' })
-    }
-    const { radiologistId, radiologistName } = req.body
-    const now = new Date().toISOString()
-    const study = await Study.findById(req.params.id)
-    if (!study) return res.status(404).json({ error: 'Không tìm thấy ca chụp' })
-    // Determine next status based on current
-    const setFields = { radiologist: radiologistId, radiologistName, assignedAt: now, updatedAt: now }
-    if (study.teleradRequested) {
-      setFields.teleradStatus = 'assigned'
-    } else {
-      setFields.status = 'pending_read'
-    }
-    const updated = await Study.findByIdAndUpdate(
-      req.params.id,
-      { $set: setFields },
-      { new: true }
-    )
-    res.json(updated)
-  } catch (err) {
+    console.error('POST /studies/:id/assign error:', err)
     res.status(500).json({ error: 'Lỗi server' })
   }
 })
@@ -387,23 +408,16 @@ router.post('/reports', requireAuth, async (req, res) => {
       } catch (e) { console.warn('[critical notify]', e.message) }
     }
 
-    // Sync study status — if telerad case, update teleradStatus instead of status
-    const studyDoc = await Study.findById(studyId)
-    if (studyDoc && studyDoc.teleradRequested) {
-      const teleradSt = status === 'final' ? 'reported' : 'reading'
-      const setObj = { teleradStatus: teleradSt, reportId: String(report._id), updatedAt: now }
-      if (status === 'final') {
-        setObj.status = 'reported'
-        setObj.reportedAt = now
-      }
-      await Study.findByIdAndUpdate(studyId, { $set: setObj })
-    } else {
-      const studyStatus = status === 'final' ? 'reported' : 'reading'
-      await Study.findByIdAndUpdate(studyId, {
-        $set: { status: studyStatus, reportId: String(report._id), updatedAt: now,
-                ...(status === 'final' ? { reportedAt: now } : {}) }
-      })
-    }
+    // Sync study status with report status
+    const studyStatus = status === 'final' ? 'reported' : 'reading'
+    await Study.findByIdAndUpdate(studyId, {
+      $set: {
+        status: studyStatus,
+        reportId: String(report._id),
+        updatedAt: now,
+        ...(status === 'final' ? { reportedAt: now } : {}),
+      },
+    })
 
     res.json(report)
   } catch (err) {

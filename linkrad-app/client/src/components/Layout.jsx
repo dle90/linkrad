@@ -23,7 +23,7 @@ const NAV = [
     ]
   },
   {
-    group: 'Đọc phim',
+    group: 'Chẩn đoán hình ảnh',
     items: [
       { path: '/teleradiology',   label: 'Đọc phim',           icon: '🖥️', workflowOnly: true },
       { path: '/telerad-reading', label: 'Đọc phim — Của tôi', icon: '🔬', workflowOnly: true },

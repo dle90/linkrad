@@ -120,7 +120,7 @@ export default function TeleradReading() {
   const { auth } = useAuth()
   const [studies, setStudies] = useState([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('assigned')
+  const [tab, setTab] = useState('reading')
   const [activeStudy, setActiveStudy] = useState(null)
 
   useEffect(() => { load() }, [])
@@ -128,33 +128,21 @@ export default function TeleradReading() {
   const load = async () => {
     try {
       const res = await api.get('/ris/studies')
-      // BS chỉ thấy case telerad được assign cho mình
-      const myStudies = (res.data || []).filter(s =>
-        s.teleradRequested && s.radiologist === auth.username
-      )
+      // BS chỉ thấy case mình đã nhận (đã pick)
+      const myStudies = (res.data || []).filter(s => s.radiologist === auth.username)
       setStudies(myStudies)
     } catch {} finally { setLoading(false) }
   }
 
-  const assigned = studies.filter(s => s.teleradStatus === 'assigned')
-  const reading = studies.filter(s => s.teleradStatus === 'reading')
-  const done = studies.filter(s => s.teleradStatus === 'reported')
+  const reading = studies.filter(s => s.status === 'reading')
+  const done = studies.filter(s => s.status === 'reported' || s.status === 'verified')
 
   const TABS = [
-    { key: 'assigned', label: 'Chờ đọc', list: assigned },
     { key: 'reading', label: 'Đang đọc', list: reading },
     { key: 'done', label: 'Hoàn thành', list: done },
   ]
 
   const currentList = TABS.find(t => t.key === tab)?.list || []
-
-  const handleStartReading = async (study) => {
-    try {
-      await api.put(`/ris/studies/${study._id}`, { teleradStatus: 'reading' })
-      setActiveStudy(study)
-      load()
-    } catch {}
-  }
 
   if (loading) {
     return (
@@ -172,7 +160,7 @@ export default function TeleradReading() {
           <p className="text-xs text-gray-400 mt-0.5">BS. {auth.displayName || auth.username} {auth.department ? `— ${auth.department}` : ''}</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-medium">{assigned.length} chờ đọc</span>
+          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium">{reading.length} đang đọc</span>
           <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">{done.length} hoàn thành</span>
           <button onClick={load} className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition-colors">⟳</button>
         </div>
@@ -227,21 +215,15 @@ export default function TeleradReading() {
                     </td>
                     <td className="px-3 py-2.5 text-xs text-gray-500">{s.site || '—'}</td>
                     <td className="px-3 py-2.5 text-xs text-gray-600 max-w-[200px] truncate">{s.clinicalInfo || '—'}</td>
-                    <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{fmtDateTime(s.teleradRequestedAt || s.assignedAt)}</td>
+                    <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{fmtDateTime(s.assignedAt)}</td>
                     <td className="px-3 py-2.5">
                       {s.priority === 'urgent' && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-100 text-orange-700">Khẩn</span>}
                       {s.priority === 'stat' && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">Cấp cứu</span>}
                       {(!s.priority || s.priority === 'routine') && <span className="text-xs text-gray-400">Thường</span>}
                     </td>
                     <td className="px-3 py-2.5">
-                      {tab === 'assigned' && (
-                        <button onClick={() => handleStartReading(s)}
-                          className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 font-medium transition-colors">
-                          Nhận ca
-                        </button>
-                      )}
                       {tab === 'reading' && (
-                        <button onClick={() => window.open(`/teleradiology/study/${s._id}`, '_blank')}
+                        <button onClick={() => setActiveStudy(s)}
                           className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 font-medium transition-colors">
                           Đọc phim
                         </button>

@@ -18,14 +18,6 @@ const studySchema = new mongoose.Schema({
     enum: ['scheduled', 'in_progress', 'pending_read', 'reading', 'reported', 'verified', 'cancelled'],
     default: 'scheduled',
   },
-  teleradStatus: {
-    type: String,
-    enum: ['none', 'pending', 'assigned', 'reading', 'reported'],
-    default: 'none',
-  },
-  teleradRequested: { type: Boolean, default: false },
-  teleradRequestedAt: String,
-  teleradRequestedBy: String,
   priority: {
     type: String,
     enum: ['routine', 'urgent', 'stat'],
