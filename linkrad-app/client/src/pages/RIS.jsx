@@ -2,7 +2,6 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api'
-import DeviceTreeSidebar from '../components/DeviceTreeSidebar'
 import CaseTabBar from '../components/CaseTabBar'
 import PatientDetailView from '../components/PatientDetailView'
 import MWL from './MWL'
@@ -561,11 +560,12 @@ function AnnotationPanel({ study }) {
 
 // ─── Worklist Table (shared across all roles) ─────────────────────────────────
 
-function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeFilter }) {
+function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase }) {
   const [activeTab, setActiveTab] = useState('waiting')
   const [dateFrom, setDateFrom] = useState(todayISO())
   const [dateTo, setDateTo] = useState(todayISO())
-  const [serviceFilter, setServiceFilter] = useState('')
+  const [modalityFilter, setModalityFilter] = useState('')
+  const [siteFilter, setSiteFilter] = useState('')
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(10)
   const [reportStudy, setReportStudy] = useState(null)
@@ -575,17 +575,19 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeF
 
   const tabConfig = STATUS_TABS.find(t => t.key === activeTab)
 
-  // Filter studies by tab status + date range + device-tree selection
+  // Site options derived from real data so dropdown stays in sync
+  const siteOptions = useMemo(
+    () => Array.from(new Set(studies.map(s => s.site).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [studies]
+  )
+
   const filtered = studies.filter(s => {
     if (!tabConfig.statuses.includes(s.status)) return false
     const d = (s.appointmentTime || s.createdAt || '').slice(0, 10)
     if (dateFrom && d && d < dateFrom) return false
     if (dateTo && d && d > dateTo) return false
-    if (serviceFilter && s.modality !== serviceFilter) return false
-    if (treeFilter) {
-      const [mod, site] = treeFilter.split('|')
-      if (s.modality !== mod || s.site !== site) return false
-    }
+    if (modalityFilter && s.modality !== modalityFilter) return false
+    if (siteFilter && s.site !== siteFilter) return false
     return true
   })
 
@@ -594,9 +596,9 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeF
   const paged = filtered.slice(page * pageSize, (page + 1) * pageSize)
 
   // Reset page on tab/filter change
-  useEffect(() => { setPage(0) }, [activeTab, dateFrom, dateTo, serviceFilter])
+  useEffect(() => { setPage(0) }, [activeTab, dateFrom, dateTo, modalityFilter, siteFilter])
 
-  // Count per tab
+  // Count per tab — respects modality/site filters so tab badges reflect what user is viewing
   const tabCounts = STATUS_TABS.map(t => ({
     ...t,
     count: studies.filter(s => {
@@ -604,6 +606,8 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeF
       const d = (s.appointmentTime || s.createdAt || '').slice(0, 10)
       if (dateFrom && d && d < dateFrom) return false
       if (dateTo && d && d > dateTo) return false
+      if (modalityFilter && s.modality !== modalityFilter) return false
+      if (siteFilter && s.site !== siteFilter) return false
       return true
     }).length,
   }))
@@ -718,13 +722,18 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeF
         <span>-</span>
         <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
-        <select value={serviceFilter} onChange={e => setServiceFilter(e.target.value)}
+        <select value={modalityFilter} onChange={e => setModalityFilter(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400">
-          <option value="">Chọn nhóm dịch vụ</option>
+          <option value="">Loại máy: tất cả</option>
           <option value="CT">CT</option>
           <option value="MRI">MRI</option>
           <option value="XR">X-Ray</option>
           <option value="US">Siêu âm</option>
+        </select>
+        <select value={siteFilter} onChange={e => setSiteFilter(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400">
+          <option value="">Cơ sở: tất cả</option>
+          {siteOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <button onClick={onRefresh} className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors" title="Làm mới">⟳</button>
         <button onClick={() => setShowUpload(true)} className="px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium text-gray-600" title="Upload DICOM">&#128194; Upload DICOM</button>
@@ -835,8 +844,6 @@ export default function RIS() {
   // MINERVA-style multi-case workspace state
   const [openCases, setOpenCases] = useState([])      // [{study}, ...]
   const [activeCaseId, setActiveCaseId] = useState(SYS_WORKLIST)  // SYS_* or study._id
-  const [treeFilter, setTreeFilter] = useState(null)       // 'MRI|Cà Mau' format
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [criticalUnread, setCriticalUnread] = useState(0)
 
   // Pick up ?view=mwl|critical from old route redirects
@@ -936,18 +943,6 @@ export default function RIS() {
 
   return (
     <div className="flex" style={{ height: 'calc(100vh - 6rem)' }}>
-      {/* Left: device tree (only relevant for the worklist view) */}
-      {activeCaseId === SYS_WORKLIST && (
-        <DeviceTreeSidebar
-          studies={studies}
-          selected={treeFilter}
-          onSelect={setTreeFilter}
-          collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed(c => !c)}
-        />
-      )}
-
-      {/* Right: tabs + content */}
       <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
         <CaseTabBar
           systemTabs={systemTabs}
@@ -971,8 +966,7 @@ export default function RIS() {
                   <p className="text-xs text-gray-400">Double-click hàng để mở ca trong tab mới · ⌘K để tìm</p>
                 </div>
                 <div className="text-xs text-gray-500">
-                  {treeFilter && <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded">Lọc: {treeFilter}</span>}
-                  <span className="ml-3">{auth.displayName || auth.username}{auth.department ? ` — ${auth.department}` : ''}</span>
+                  {auth.displayName || auth.username}{auth.department ? ` — ${auth.department}` : ''}
                 </div>
               </div>
               <WorklistView
@@ -981,7 +975,6 @@ export default function RIS() {
                 onRefresh={load}
                 auth={auth}
                 onOpenCase={openCase}
-                treeFilter={treeFilter}
               />
             </div>
           )}
