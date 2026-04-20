@@ -10,7 +10,7 @@ const PERMISSIONS = {
   'registration.view': 'Xem đăng ký',
   'registration.manage': 'Quản lý đăng ký',
   'teleradiology.view': 'Xem đọc phim',
-  'teleradiology.manage': 'Quản lý đọc hộ',
+  'teleradiology.manage': 'Quản lý đọc phim',
   'tasks.view': 'Xem công việc',
   'tasks.manage': 'Quản lý công việc',
   // Billing

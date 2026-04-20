@@ -591,7 +591,7 @@ function AssignModal({ study, onClose, onAssigned }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-base font-bold text-gray-800">Gửi đọc hộ</h2>
+          <h2 className="text-base font-bold text-gray-800">Gửi đọc phim</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
         </div>
         <div className="px-6 py-4 space-y-4">
@@ -685,7 +685,7 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeF
   }
 
   const handleRequestTelerad = async (study) => {
-    if (!confirm(`Gửi yêu cầu đọc hộ cho ca của ${study.patientName}?`)) return
+    if (!confirm(`Gửi yêu cầu đọc phim cho ca của ${study.patientName}?`)) return
     try {
       await api.post(`/ris/studies/${study._id}/request-telerad`)
       onRefresh()
@@ -710,7 +710,7 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeF
           </div>
         )
       case 'pending_read':
-        // Case đang trong luồng đọc hộ → chỉ hiện Xem KQ
+        // Case đang trong luồng đọc phim → chỉ hiện Xem KQ
         if (study.teleradStatus && study.teleradStatus !== 'none') {
           return (
             <div className="flex items-center gap-0.5">
@@ -720,12 +720,12 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeF
             </div>
           )
         }
-        // Case chưa gửi đọc hộ → đầy đủ actions
+        // Case chưa gửi đọc phim → đầy đủ actions
         return (
           <div className="flex items-center gap-0.5">
             <button onClick={() => setReportStudy(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Nhập kết quả">✎</button>
             {!study.teleradRequested && (
-              <button onClick={() => handleRequestTelerad(study)} className={`${iconBtn} text-purple-500 hover:text-purple-700`} title="Gửi đọc hộ">↗</button>
+              <button onClick={() => handleRequestTelerad(study)} className={`${iconBtn} text-purple-500 hover:text-purple-700`} title="Gửi đọc phim">↗</button>
             )}
             <button onClick={() => setPriorStudy(study)} className={`${iconBtn} text-cyan-500 hover:text-cyan-700`} title="So sánh lần trước">⇔</button>
             <button onClick={() => setKeyImageStudy(study)} className={`${iconBtn} text-yellow-500 hover:text-yellow-700`} title="Key images">★</button>
@@ -817,10 +817,10 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, treeF
                         s.teleradStatus === 'reported' ? 'bg-green-100 text-green-700' :
                         'bg-purple-100 text-purple-700'
                       }`}>
-                        {s.teleradStatus === 'pending' ? 'Chờ đọc hộ' :
+                        {s.teleradStatus === 'pending' ? 'Chờ đọc phim' :
                          s.teleradStatus === 'assigned' ? 'Đã phân công BS' :
-                         s.teleradStatus === 'reading' ? 'Đang đọc hộ' :
-                         s.teleradStatus === 'reported' ? 'Có KQ đọc hộ' : 'Đọc hộ'}
+                         s.teleradStatus === 'reading' ? 'Đang đọc phim' :
+                         s.teleradStatus === 'reported' ? 'Có KQ đọc phim' : 'Đọc phim'}
                       </span>
                     )}
                   </td>

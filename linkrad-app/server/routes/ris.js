@@ -268,7 +268,7 @@ router.get('/radiologists', requireAuth, async (req, res) => {
   }
 })
 
-// POST /studies/:id/request-telerad — NV cơ sở gửi yêu cầu đọc hộ
+// POST /studies/:id/request-telerad — NV cơ sở gửi yêu cầu đọc phim
 router.post('/studies/:id/request-telerad', requireAuth, async (req, res) => {
   try {
     const now = new Date().toISOString()
@@ -284,7 +284,7 @@ router.post('/studies/:id/request-telerad', requireAuth, async (req, res) => {
   }
 })
 
-// POST /studies/:id/assign — admin nền tảng phân công BS đọc hộ
+// POST /studies/:id/assign — admin nền tảng phân công BS đọc phim
 router.post('/studies/:id/assign', requireAuth, async (req, res) => {
   try {
     const role = req.user.role

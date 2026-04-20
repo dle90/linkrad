@@ -7,68 +7,104 @@ import NotificationBell from './NotificationBell'
 
 const NAV = [
   {
-    group: 'Tổng quan',
+    group: 'Dashboard',
     items: [
-      { path: '/today', label: 'Hôm nay (live)',  icon: '📡', workflowOnly: true },
-      { path: '/',      label: 'Dashboard',      icon: '📊' },
-      { path: '/sites', label: 'Danh sách Site', icon: '📍' },
+      { path: '/dashboard/clinical', label: 'Lâm Sàng',  icon: '🩺', workflowOnly: true },
+      { path: '/dashboard/ops',      label: 'Vận Hành',  icon: '⚙️', workflowOnly: true },
+      { path: '/dashboard/finance',  label: 'Tài Chính', icon: '💼', financialsOnly: true },
     ]
   },
   {
-    group: 'Hoạt động',
+    group: 'Lâm sàng',
     items: [
-      { path: '/workflow',     label: 'Công việc',  icon: '✅', workflowOnly: true },
-      { path: '/registration', label: 'Đăng ký',    icon: '🏥', workflowOnly: true },
-      { path: '/ris',          label: 'RIS',        icon: '🩻', workflowOnly: true },
-      { path: '/teleradiology',     label: 'Đọc hộ',           icon: '🖥️', workflowOnly: true },
-      { path: '/telerad-reading',   label: 'Đọc hộ — Của tôi', icon: '🔬', workflowOnly: true },
-      { path: '/telerad-admin',     label: 'Đọc hộ — Quản lý', icon: '📋', adminOnly: true },
-      { path: '/report-templates',  label: 'Mẫu kết quả',      icon: '📋', workflowOnly: true },
-      { path: '/billing',           label: 'Phiếu thu',        icon: '💳', workflowOnly: true },
-      { path: '/inventory',         label: 'Quản lý kho',      icon: '📦', workflowOnly: true },
+      { path: '/registration',     label: 'Đăng ký',     icon: '🏥', workflowOnly: true },
+      { path: '/ris',              label: 'RIS',         icon: '🩻', workflowOnly: true },
+      { path: '/report-templates', label: 'Mẫu kết quả', icon: '📋', workflowOnly: true },
+    ]
+  },
+  {
+    group: 'Đọc phim',
+    items: [
+      { path: '/teleradiology',   label: 'Đọc phim',           icon: '🖥️', workflowOnly: true },
+      { path: '/telerad-reading', label: 'Đọc phim — Của tôi', icon: '🔬', workflowOnly: true },
+      { path: '/telerad-admin',   label: 'Đọc phim — Quản lý', icon: '📋', adminOnly: true },
+    ]
+  },
+  {
+    group: 'Vận hành',
+    items: [
+      { path: '/workflow',  label: 'Công việc',   icon: '✅', workflowOnly: true },
+      { path: '/billing',   label: 'Phiếu thu',   icon: '💳', workflowOnly: true },
+      { path: '/inventory', label: 'Quản lý kho', icon: '📦', workflowOnly: true },
     ]
   },
   {
     group: 'Danh mục',
-    items: [
-      // — Đối tác / referral —
-      { path: '/catalogs/referral-doctors',     label: 'Bác sĩ giới thiệu', icon: '👨‍⚕️', workflowOnly: true },
-      { path: '/catalogs/partner-facilities',   label: 'CSYT đối tác',      icon: '🏥', workflowOnly: true },
-      { path: '/catalogs/commission-groups',    label: 'Nhóm hoa hồng',     icon: '📋', workflowOnly: true },
-      { path: '/catalogs/commission-rules',     label: 'Hoa hồng',          icon: '💰', workflowOnly: true },
-      // — Chung —
-      { path: '/catalogs/users',                label: 'Nhân sự',           icon: '👤', workflowOnly: true },
-      { path: '/catalogs/patients',             label: 'Bệnh nhân',         icon: '🧑', workflowOnly: true },
-      { path: '/catalogs/specialties',          label: 'Chuyên khoa',       icon: '🩺', workflowOnly: true },
-      { path: '/catalogs/services',             label: 'Dịch vụ',           icon: '📄', workflowOnly: true },
-      { path: '/catalogs/service-types',        label: 'Loại dịch vụ',      icon: '📂', workflowOnly: true },
-      { path: '/catalogs/medical-facilities',   label: 'Cơ sở y tế',        icon: '🏨', workflowOnly: true },
-      { path: '/catalogs/tax-groups',           label: 'Nhóm thuế DV',      icon: '📊', workflowOnly: true },
-      { path: '/catalogs/promotions',           label: 'CT khuyến mãi',     icon: '🎁', workflowOnly: true },
-      { path: '/catalogs/promo-codes',          label: 'Mã khuyến mãi',     icon: '🏷️', workflowOnly: true },
-      { path: '/catalogs/registration-reasons', label: 'Lý do ĐK',          icon: '📝', workflowOnly: true },
-      { path: '/catalogs/billing-cancel-reasons', label: 'Lý do huỷ PT',    icon: '❌', workflowOnly: true },
-      { path: '/catalogs/admin-units',          label: 'Địa chỉ hành chính', icon: '📍', workflowOnly: true },
+    subgroups: [
+      {
+        title: 'Đối tác',
+        items: [
+          { path: '/catalogs/referral-doctors',   label: 'Bác sĩ giới thiệu', icon: '👨‍⚕️', workflowOnly: true },
+          { path: '/catalogs/partner-facilities', label: 'CSYT đối tác',      icon: '🏥', workflowOnly: true },
+          { path: '/catalogs/commission-groups',  label: 'Nhóm hoa hồng',     icon: '📋', workflowOnly: true },
+          { path: '/catalogs/commission-rules',   label: 'Hoa hồng',          icon: '💰', workflowOnly: true },
+        ]
+      },
+      {
+        title: 'Dịch vụ & Chuyên khoa',
+        items: [
+          { path: '/catalogs/specialties',        label: 'Chuyên khoa',   icon: '🩺', workflowOnly: true },
+          { path: '/catalogs/services',           label: 'Dịch vụ',       icon: '📄', workflowOnly: true },
+          { path: '/catalogs/service-types',      label: 'Loại dịch vụ',  icon: '📂', workflowOnly: true },
+          { path: '/catalogs/tax-groups',         label: 'Nhóm thuế DV',  icon: '📊', workflowOnly: true },
+          { path: '/catalogs/medical-facilities', label: 'Cơ sở y tế',    icon: '🏨', workflowOnly: true },
+        ]
+      },
+      {
+        title: 'Khuyến mãi',
+        items: [
+          { path: '/catalogs/promotions', label: 'CT khuyến mãi', icon: '🎁', workflowOnly: true },
+          { path: '/catalogs/promo-codes', label: 'Mã khuyến mãi', icon: '🏷️', workflowOnly: true },
+        ]
+      },
+      {
+        title: 'Hồ sơ & Tham chiếu',
+        items: [
+          { path: '/catalogs/users',                  label: 'Nhân sự',            icon: '👤', workflowOnly: true },
+          { path: '/catalogs/patients',               label: 'Bệnh nhân',          icon: '🧑', workflowOnly: true },
+          { path: '/catalogs/registration-reasons',   label: 'Lý do ĐK',           icon: '📝', workflowOnly: true },
+          { path: '/catalogs/billing-cancel-reasons', label: 'Lý do huỷ PT',       icon: '❌', workflowOnly: true },
+          { path: '/catalogs/admin-units',            label: 'Địa chỉ hành chính', icon: '📍', workflowOnly: true },
+        ]
+      }
     ]
   },
   {
     group: 'Báo cáo',
-    items: [
-      // — Vận hành (RIS) —
-      { path: '/rad-reports/cases-by-machine',              label: 'BC số ca theo máy',              icon: '🖥️', workflowOnly: true },
-      { path: '/rad-reports/cases-by-machine-group',        label: 'BC số ca theo nhóm máy',         icon: '📦', workflowOnly: true },
-      { path: '/rad-reports/cases-by-radiologist',          label: 'BC số ca theo BS đọc',           icon: '👨‍⚕️', workflowOnly: true },
-      { path: '/rad-reports/cases-by-radiologist-modality', label: 'BC BS đọc × loại máy',           icon: '📋', workflowOnly: true },
-      { path: '/rad-reports/cases-by-time',                 label: 'BC theo thời gian',              icon: '🕒', workflowOnly: true },
-      { path: '/rad-reports/services-detail',               label: 'BC chi tiết DV ca theo máy',     icon: '📄', workflowOnly: true },
-      { path: '/rad-reports/patient-list',                  label: 'BC DS BN đã đọc KQ',             icon: '🧑', workflowOnly: true },
-      // — Tài chính —
-      { path: '/reports/revenue-detail',  label: 'BC doanh thu chi tiết',     icon: '📊', workflowOnly: true },
-      { path: '/reports/customer-detail', label: 'BC chi tiết khách hàng',    icon: '👥', workflowOnly: true },
-      { path: '/reports/promotion-detail', label: 'BC chương trình KM',       icon: '🎁', workflowOnly: true },
-      { path: '/reports/clinic-revenue',  label: 'BC doanh thu phòng khám',   icon: '🏥', workflowOnly: true },
-      { path: '/reports/refund-exchange', label: 'BC hoàn trả/đổi DV',        icon: '🔄', workflowOnly: true },
-      { path: '/reports/e-invoice',       label: 'BC hóa đơn điện tử',        icon: '🧾', workflowOnly: true },
+    subgroups: [
+      {
+        title: 'Chẩn đoán hình ảnh',
+        items: [
+          { path: '/rad-reports/cases-by-machine',              label: 'BC số ca theo máy',          icon: '🖥️', workflowOnly: true },
+          { path: '/rad-reports/cases-by-machine-group',        label: 'BC số ca theo nhóm máy',     icon: '📦', workflowOnly: true },
+          { path: '/rad-reports/cases-by-radiologist',          label: 'BC số ca theo BS đọc',       icon: '👨‍⚕️', workflowOnly: true },
+          { path: '/rad-reports/cases-by-radiologist-modality', label: 'BC BS đọc × loại máy',       icon: '📋', workflowOnly: true },
+          { path: '/rad-reports/cases-by-time',                 label: 'BC theo thời gian',          icon: '🕒', workflowOnly: true },
+          { path: '/rad-reports/services-detail',               label: 'BC chi tiết DV ca theo máy', icon: '📄', workflowOnly: true },
+          { path: '/rad-reports/patient-list',                  label: 'BC DS BN đã đọc KQ',         icon: '🧑', workflowOnly: true },
+        ]
+      },
+      {
+        title: 'Kinh doanh',
+        items: [
+          { path: '/reports/revenue-detail',   label: 'BC doanh thu chi tiết',   icon: '📊', workflowOnly: true },
+          { path: '/reports/customer-detail',  label: 'BC chi tiết khách hàng',  icon: '👥', workflowOnly: true },
+          { path: '/reports/promotion-detail', label: 'BC chương trình KM',      icon: '🎁', workflowOnly: true },
+          { path: '/reports/clinic-revenue',   label: 'BC doanh thu phòng khám', icon: '🏥', workflowOnly: true },
+          { path: '/reports/refund-exchange',  label: 'BC hoàn trả/đổi DV',      icon: '🔄', workflowOnly: true },
+          { path: '/reports/e-invoice',        label: 'BC hóa đơn điện tử',      icon: '🧾', workflowOnly: true },
+        ]
+      }
     ]
   },
   {
@@ -99,6 +135,14 @@ const NAV = [
       { path: '/marketing',  label: 'Marketing',     icon: '📣' }
     ]
   },
+  {
+    group: 'Tổng Quan (Cũ)',
+    items: [
+      { path: '/today', label: 'Hôm nay (live)', icon: '📡', workflowOnly: true },
+      { path: '/',      label: 'Dashboard',      icon: '📊' },
+      { path: '/sites', label: 'Danh sách Site', icon: '📍' },
+    ]
+  },
 ]
 
 const ROLE_LABELS = {
@@ -116,6 +160,31 @@ export default function Layout({ children }) {
   const isFinancialsUser = auth?.role === 'admin' || auth?.role === 'giamdoc'
   const isWorkflowUser = auth?.role && auth.role !== 'guest'
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
+  const [collapsed, setCollapsed] = React.useState({})
+  const toggleSub = (key) => setCollapsed(c => ({ ...c, [key]: !c[key] }))
+  const filterItems = (items) => items.filter(item => {
+    if (item.adminOnly && !isAdmin) return false
+    if (item.financialsOnly && !isFinancialsUser) return false
+    if (item.workflowOnly && !isWorkflowUser) return false
+    return true
+  })
+  const renderLink = (item, nested = false) => (
+    <NavLink
+      key={item.path}
+      to={item.path}
+      end={item.path === '/'}
+      className={({ isActive }) =>
+        `flex items-center ${nested ? 'pl-9 pr-4' : 'px-4'} py-2 text-sm transition-colors duration-150 ${
+          isActive
+            ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300'
+            : 'text-blue-200 hover:bg-blue-800 hover:text-white'
+        }`
+      }
+    >
+      <span className="mr-2 text-xs">{item.icon}</span>
+      {item.label}
+    </NavLink>
+  )
 
   const handleLogout = async () => {
     try { await logoutUser() } catch {}
@@ -136,34 +205,46 @@ export default function Layout({ children }) {
         <nav className="flex-1 py-4">
           {NAV.map((section) => {
             if (section.financialsOnly && !isFinancialsUser) return null
-            const visibleItems = section.items.filter(item => {
-              if (item.adminOnly && !isAdmin) return false
-              if (item.workflowOnly && !isWorkflowUser) return false
-              return true
-            })
+
+            if (section.subgroups) {
+              const visibleSubs = section.subgroups
+                .map(sg => ({ ...sg, items: filterItems(sg.items) }))
+                .filter(sg => sg.items.length > 0)
+              if (visibleSubs.length === 0) return null
+              return (
+                <div key={section.group} className="mb-2">
+                  <div className="px-4 py-1 text-blue-400 text-xs font-semibold uppercase tracking-wider">
+                    {section.group}
+                  </div>
+                  {visibleSubs.map(sg => {
+                    const key = `${section.group}:${sg.title}`
+                    const isOpen = !collapsed[key]
+                    return (
+                      <div key={sg.title}>
+                        <button
+                          type="button"
+                          onClick={() => toggleSub(key)}
+                          className="w-full flex items-center px-4 py-1.5 text-xs text-blue-300 hover:text-white hover:bg-blue-800 transition-colors"
+                        >
+                          <span className="mr-1.5 text-[10px] w-3 inline-block">{isOpen ? '▾' : '▸'}</span>
+                          <span className="font-medium">{sg.title}</span>
+                        </button>
+                        {isOpen && sg.items.map(item => renderLink(item, true))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            }
+
+            const visibleItems = filterItems(section.items)
             if (visibleItems.length === 0) return null
             return (
               <div key={section.group} className="mb-2">
                 <div className="px-4 py-1 text-blue-400 text-xs font-semibold uppercase tracking-wider">
                   {section.group}
                 </div>
-                {visibleItems.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.path === '/'}
-                    className={({ isActive }) =>
-                      `flex items-center px-4 py-2 text-sm transition-colors duration-150 ${
-                        isActive
-                          ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300'
-                          : 'text-blue-200 hover:bg-blue-800 hover:text-white'
-                      }`
-                    }
-                  >
-                    <span className="mr-2 text-xs">{item.icon}</span>
-                    {item.label}
-                  </NavLink>
-                ))}
+                {visibleItems.map(item => renderLink(item))}
               </div>
             )
           })}

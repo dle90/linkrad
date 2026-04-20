@@ -276,6 +276,94 @@ router.get('/dashboard/today', requireAuth, async (req, res) => {
 })
 
 // ═══════════════════════════════════════════════════════════════════
+//  DASHBOARD EXTRAS — supplemental metrics for the new Dashboard pages
+//  (Lâm Sàng / Vận Hành / Tài Chính). Reuses /dashboard/today for the
+//  bulk of KPIs — this endpoint fills in the 7-day and finance gaps.
+// ═══════════════════════════════════════════════════════════════════
+router.get('/dashboard/extras', requireAuth, async (req, res) => {
+  try {
+    const now = new Date()
+    const iso = d => d.toISOString().slice(0, 10)
+    const todayStr = iso(now)
+    const startOfWeekAgo = (() => { const d = new Date(now); d.setDate(d.getDate() - 6); return iso(d) })()
+    const in30Days = (() => { const d = new Date(now); d.setDate(d.getDate() + 30); return iso(d) })()
+
+    const studyFilter = {}
+    if (req.user.role === 'nhanvien' || req.user.role === 'truongphong') studyFilter.site = req.user.department
+    if (req.user.role === 'bacsi') studyFilter.radiologist = req.user.username
+
+    const [weekStudies, todayStudies, criticalReports7d, unpaidInvoices, expiringLots] = await Promise.all([
+      Study.find({ ...studyFilter, studyDate: { $gte: startOfWeekAgo } }).lean(),
+      Study.find({ ...studyFilter, studyDate: { $gte: todayStr } }).lean(),
+      Report.find({ criticalFinding: true, finalizedAt: { $gte: startOfWeekAgo } }).sort({ finalizedAt: -1 }).limit(20).lean(),
+      Invoice.find({ status: { $in: ['issued', 'partially_paid'] } }).lean().catch(() => []),
+      (async () => {
+        try {
+          const InventoryLot = require('../models/InventoryLot')
+          return await InventoryLot.find({
+            status: 'available',
+            expiryDate: { $gte: todayStr, $lte: in30Days },
+          }).lean()
+        } catch (e) { return [] }
+      })(),
+    ])
+
+    // Cases per day — last 7 days (fills missing days with 0)
+    const dayBuckets = {}
+    for (let i = 6; i >= 0; i--) { const d = new Date(now); d.setDate(d.getDate() - i); dayBuckets[iso(d)] = 0 }
+    weekStudies.forEach(s => {
+      const k = (s.studyDate || '').slice(0, 10)
+      if (k in dayBuckets) dayBuckets[k]++
+    })
+    const casesLast7Days = Object.entries(dayBuckets).map(([date, count]) => ({ date, count }))
+
+    // Average TAT (studyDate → reportedAt) for cases reported today
+    const reportedToday = todayStudies.filter(s => s.reportedAt && s.studyDate)
+    let avgTATMinutes = 0
+    if (reportedToday.length > 0) {
+      const totalMin = reportedToday.reduce((sum, s) => {
+        const a = new Date(s.studyDate).getTime()
+        const b = new Date(s.reportedAt).getTime()
+        return sum + Math.max(0, (b - a) / 60000)
+      }, 0)
+      avgTATMinutes = Math.round(totalMin / reportedToday.length)
+    }
+
+    const unpaidAmount = unpaidInvoices.reduce((s, i) => s + Math.max(0, (i.grandTotal || 0) - (i.paidAmount || 0)), 0)
+
+    res.json({
+      ts: now.toISOString(),
+      casesLast7Days,
+      avgTATMinutes,
+      reportedTodayCount: reportedToday.length,
+      criticalFindings7d: criticalReports7d.map(r => ({
+        _id: r._id,
+        studyId: r.studyId,
+        criticalNote: r.criticalNote,
+        radiologistName: r.radiologistName,
+        finalizedAt: r.finalizedAt,
+        ackedBy: r.criticalAckedBy || null,
+      })),
+      unpaidInvoices: { count: unpaidInvoices.length, amount: unpaidAmount },
+      expiringLots: {
+        count: expiringLots.length,
+        days: 30,
+        items: expiringLots.slice(0, 10).map(l => ({
+          _id: l._id,
+          supplyId: l.supplyId,
+          currentQuantity: l.currentQuantity,
+          expiryDate: l.expiryDate,
+          site: l.site,
+        })),
+      },
+    })
+  } catch (err) {
+    console.error('[dashboard/extras]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ═══════════════════════════════════════════════════════════════════
 //  GLOBAL SEARCH — across patients, studies, services, employees
 // ═══════════════════════════════════════════════════════════════════
 router.get('/search', requireAuth, async (req, res) => {

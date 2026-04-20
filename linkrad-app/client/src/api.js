@@ -29,6 +29,9 @@ api.interceptors.response.use(
 export const loginUser  = (username, password) => api.post('/auth/login', { username, password }).then(r => r.data)
 export const logoutUser = () => api.post('/auth/logout').then(r => r.data)
 
+export const getDashboardToday  = () => api.get('/dashboard/today').then(r => r.data)
+export const getDashboardExtras = () => api.get('/dashboard/extras').then(r => r.data)
+
 export const getSites = () => api.get('/sites').then(r => r.data)
 export const updateSites = (data) => api.put('/sites', data).then(r => r.data)
 

@@ -118,7 +118,7 @@ export default function TeleradAdmin() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-800">Quản lý đọc hộ</h1>
+          <h1 className="text-xl font-bold text-gray-800">Quản lý đọc phim</h1>
           <p className="text-xs text-gray-400 mt-0.5">Admin nền tảng Teleradiology</p>
         </div>
         <button onClick={load} className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition-colors">⟳ Làm mới</button>

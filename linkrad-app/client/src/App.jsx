@@ -31,6 +31,9 @@ import HRManagement from './pages/HRManagement'
 import Reports from './pages/Reports'
 import RadiologyReports from './pages/RadiologyReports'
 import TodayDashboard from './pages/TodayDashboard'
+import DashboardClinical from './pages/DashboardClinical'
+import DashboardOps from './pages/DashboardOps'
+import DashboardFinance from './pages/DashboardFinance'
 import CriticalFindings from './pages/CriticalFindings'
 import AuditLog from './pages/AuditLog'
 import ReportTemplates from './pages/ReportTemplates'
@@ -70,6 +73,9 @@ function AuthenticatedRoutes() {
             {isWorkflowUser && <Route path="/reports/:reportKey" element={<Reports />} />}
             {isWorkflowUser && <Route path="/rad-reports" element={<RadiologyReports />} />}
             {isWorkflowUser && <Route path="/rad-reports/:reportKey" element={<RadiologyReports />} />}
+            {isWorkflowUser && <Route path="/dashboard/clinical" element={<DashboardClinical />} />}
+            {isWorkflowUser && <Route path="/dashboard/ops" element={<DashboardOps />} />}
+            {(auth.role === 'admin' || auth.role === 'giamdoc') && <Route path="/dashboard/finance" element={<DashboardFinance />} />}
             {isWorkflowUser && <Route path="/today" element={<TodayDashboard />} />}
             {/* MWL + Critical findings now live as tabs inside /ris.
                 Old standalone routes redirect for backward compatibility (search/links). */}
