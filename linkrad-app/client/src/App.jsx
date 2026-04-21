@@ -16,7 +16,7 @@ import Registration from './pages/Registration'
 import CRM from './pages/CRM'
 import KPISales from './pages/KPISales'
 import Marketing from './pages/Marketing'
-import Teleradiology, { StudyDetailPage } from './pages/Teleradiology'
+import Teleradiology from './pages/Teleradiology'
 import TeleradAdmin from './pages/TeleradAdmin'
 import TeleradReading from './pages/TeleradReading'
 import Billing from './pages/Billing'
@@ -48,10 +48,7 @@ function AuthenticatedRoutes() {
 
   return (
     <Routes>
-      {/* Full-screen study detail (opens in new tab) */}
-      {isWorkflowUser && <Route path="/teleradiology/study/:studyId" element={<StudyDetailPage />} />}
-
-      {/* All other routes wrapped in Layout */}
+      {/* All routes wrapped in Layout */}
       <Route path="*" element={
         <Layout>
           <Routes>
