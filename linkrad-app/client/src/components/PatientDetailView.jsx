@@ -357,6 +357,175 @@ function SignBlock({ title, signerName, signedAt, signatureUrl, onSign, busy, pi
 // ───────────────────────────────────────────────────────────
 // Main: Patient Detail View
 // ───────────────────────────────────────────────────────────
+function ConsumablesPanel({ study, onRefresh }) {
+  const { auth } = useAuth()
+  const role = auth?.role
+  const canEdit = !study.consumablesDeductedAt && (role === 'nhanvien' || role === 'admin')
+  const [rows, setRows] = useState(study.consumables || [])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [expanded, setExpanded] = useState(true)
+
+  useEffect(() => {
+    setRows(study.consumables || [])
+  }, [study._id, study.consumables])
+
+  const mergeStandard = async () => {
+    setLoading(true)
+    try {
+      const r = await api.get(`/ris/studies/${study._id}/consumables-standard`)
+      const standard = r.data || []
+      setRows(prev => {
+        const existing = new Map(prev.map(x => [x.supplyId, x]))
+        const out = []
+        for (const s of standard) {
+          const cur = existing.get(s.supplyId)
+          if (cur) {
+            out.push({ ...cur, standardQty: s.standardQty })
+          } else {
+            out.push({ ...s, actualQty: s.standardQty, notes: '' })
+          }
+        }
+        // Keep any previously-saved rows not in the latest standard
+        for (const [id, cur] of existing) {
+          if (!standard.find(s => s.supplyId === id)) out.push(cur)
+        }
+        return out
+      })
+    } catch (e) {
+      alert(e.response?.data?.error || 'Không tải được định mức')
+    } finally { setLoading(false) }
+  }
+
+  // Auto-prefill on first open if no consumables saved yet
+  useEffect(() => {
+    if (canEdit && (!study.consumables || study.consumables.length === 0)) {
+      mergeStandard()
+    }
+  }, [study._id])
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await api.put(`/ris/studies/${study._id}/consumables`, { consumables: rows })
+      onRefresh?.()
+    } catch (e) {
+      alert(e.response?.data?.error || 'Lỗi lưu vật tư')
+    } finally { setSaving(false) }
+  }
+
+  const updateRow = (idx, patch) => setRows(rs => rs.map((r, i) => i === idx ? { ...r, ...patch } : r))
+  const removeRow = (idx) => setRows(rs => rs.filter((_, i) => i !== idx))
+
+  const hasDiff = rows.some(r => Number(r.actualQty) !== Number(r.standardQty))
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={() => setExpanded(x => !x)}
+          className="flex items-center gap-2 text-sm font-semibold text-gray-800 hover:text-blue-600">
+          <span className="text-xs text-gray-400 w-3">{expanded ? '▾' : '▸'}</span>
+          Vật tư tiêu hao
+          {study.consumablesDeductedAt && (
+            <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-normal">
+              ✓ Đã xuất kho · {fmtDateTime(study.consumablesDeductedAt)}
+            </span>
+          )}
+          {!study.consumablesDeductedAt && rows.length > 0 && hasDiff && (
+            <span className="text-xs bg-orange-50 text-orange-700 border border-orange-200 px-2 py-0.5 rounded-full font-normal">
+              Có điều chỉnh
+            </span>
+          )}
+        </button>
+        {expanded && canEdit && (
+          <button onClick={mergeStandard} disabled={loading}
+            className="text-xs text-blue-600 hover:underline disabled:opacity-50">
+            {loading ? 'Đang tải…' : 'Lấy định mức'}
+          </button>
+        )}
+      </div>
+      {expanded && (
+        <>
+          {rows.length === 0 ? (
+            <div className="text-sm text-gray-400 py-3 text-center">
+              {canEdit ? 'Chưa có định mức cho ca này.' : 'Chưa ghi nhận vật tư.'}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left font-semibold">Mã</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">Tên vật tư</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">Đơn vị</th>
+                    <th className="px-2 py-1.5 text-right font-semibold">Định mức</th>
+                    <th className="px-2 py-1.5 text-right font-semibold">Thực tế</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">Ghi chú</th>
+                    {canEdit && <th className="px-2 py-1.5"></th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {rows.map((r, idx) => {
+                    const diff = Number(r.actualQty) !== Number(r.standardQty)
+                    return (
+                      <tr key={`${r.supplyId}-${idx}`}>
+                        <td className="px-2 py-1 font-mono text-gray-500">{r.supplyCode}</td>
+                        <td className="px-2 py-1">{r.supplyName}</td>
+                        <td className="px-2 py-1 text-gray-500">{r.unit}</td>
+                        <td className="px-2 py-1 text-right text-gray-500">{r.standardQty}</td>
+                        <td className="px-2 py-1 text-right">
+                          {canEdit ? (
+                            <input type="number" min="0" step="any" value={r.actualQty ?? 0}
+                              onChange={e => updateRow(idx, { actualQty: Number(e.target.value) || 0 })}
+                              className={`w-20 text-right border rounded px-1.5 py-0.5 outline-none focus:ring-2 focus:ring-blue-50 ${
+                                diff ? 'border-orange-300 bg-orange-50 focus:border-orange-400' : 'border-gray-200 focus:border-blue-400'
+                              }`} />
+                          ) : (
+                            <span className={diff ? 'text-orange-700 font-medium' : ''}>{r.actualQty}</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1">
+                          {canEdit ? (
+                            <input type="text" value={r.notes || ''}
+                              onChange={e => updateRow(idx, { notes: e.target.value })}
+                              className="w-full border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50" />
+                          ) : (
+                            <span className="text-gray-600">{r.notes}</span>
+                          )}
+                        </td>
+                        {canEdit && (
+                          <td className="px-2 py-1 text-right">
+                            <button onClick={() => removeRow(idx)}
+                              className="text-red-400 hover:text-red-600" title="Xoá dòng">✕</button>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {canEdit && rows.length > 0 && (
+            <div className="mt-3 flex items-center justify-between">
+              <p className="text-xs text-gray-400">
+                Tự động xuất kho khi chuyển trạng thái sang "Chờ kết quả".
+              </p>
+              <button onClick={save} disabled={saving}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs rounded-lg font-medium">
+                {saving ? 'Đang lưu…' : 'Lưu vật tư'}
+              </button>
+            </div>
+          )}
+          {!canEdit && !study.consumablesDeductedAt && rows.length === 0 && (
+            <p className="text-xs text-gray-400 mt-2">Chỉ KTV hoặc admin được chỉnh sửa.</p>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function PatientDetailView({ study, onRefresh, onOpenCase }) {
   const { auth } = useAuth()
   const [report, setReport] = useState(null)
@@ -499,6 +668,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase }) {
               </div>
             )}
           </div>
+          <ConsumablesPanel study={study} onRefresh={onRefresh} />
         </div>
       </div>
       <HistoryRail

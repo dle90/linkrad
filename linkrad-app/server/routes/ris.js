@@ -6,6 +6,12 @@ const Report = require('../models/Report')
 const User = require('../models/User')
 const StudyAnnotation = require('../models/StudyAnnotation')
 const KeyImage = require('../models/KeyImage')
+const Appointment = require('../models/Appointment')
+const Invoice = require('../models/Invoice')
+const Supply = require('../models/Supply')
+const SupplyServiceMapping = require('../models/SupplyServiceMapping')
+const InventoryLot = require('../models/InventoryLot')
+const InventoryTransaction = require('../models/InventoryTransaction')
 const { requireAuth } = require('../middleware/auth')
 
 const ORTHANC_BASE = process.env.ORTHANC_URL || 'http://localhost:8042'
@@ -16,6 +22,118 @@ const OHIF_PUBLIC = _rawOhif.startsWith('http') ? _rawOhif : `https://${_rawOhif
 // Helper: generate a fake DICOM-style Study UID
 function genStudyUID() {
   return `1.2.840.10008.5.1.4.1.1.2.${Date.now()}.${Math.floor(Math.random() * 100000)}`
+}
+
+// ─── Consumables helpers ──────────────────────────────────────────────────────
+
+// Derive the services ordered for a study via its appointment → invoice chain.
+async function getStudyServices(studyId) {
+  const appt = await Appointment.findOne({ studyId }).lean()
+  if (!appt) return []
+  const invoice = await Invoice.findOne({
+    appointmentId: appt._id,
+    status: { $nin: ['cancelled', 'refunded'] },
+  }).lean()
+  if (!invoice) return []
+  return (invoice.items || []).map(it => ({
+    code: it.serviceCode,
+    name: it.serviceName,
+    qty: Number(it.quantity) || 1,
+  })).filter(s => s.code)
+}
+
+// Aggregate consumables norm (định mức) for a study, scoped to its site.
+async function computeStandardConsumables(study) {
+  const services = await getStudyServices(study._id)
+  if (!services.length) return []
+  const codes = [...new Set(services.map(s => s.code))]
+  const mappings = await SupplyServiceMapping.find({ serviceCode: { $in: codes } }).lean()
+  if (!mappings.length) return []
+  const supplyIds = [...new Set(mappings.map(m => m.supplyId))]
+  const supplies = await Supply.find({ _id: { $in: supplyIds } }).lean()
+  // Keep supplies at the study's site (or with no site scoping)
+  const siteSupplies = new Set(
+    supplies
+      .filter(s => !study.site || !s.site || s.site === study.site)
+      .map(s => s._id)
+  )
+  const byId = {}
+  for (const svc of services) {
+    const rows = mappings.filter(m => m.serviceCode === svc.code && siteSupplies.has(m.supplyId))
+    for (const m of rows) {
+      const qty = (Number(m.quantity) || 0) * (svc.qty || 1)
+      if (!byId[m.supplyId]) {
+        byId[m.supplyId] = {
+          supplyId: m.supplyId,
+          supplyCode: m.supplyCode,
+          supplyName: m.supplyName,
+          unit: m.unit,
+          standardQty: 0,
+        }
+      }
+      byId[m.supplyId].standardQty += qty
+    }
+  }
+  return Object.values(byId)
+}
+
+// Create an auto_deduct InventoryTransaction + decrement stock (FIFO lots).
+// Returns the transaction _id, or null if nothing to deduct.
+async function autoDeductConsumables(study, user) {
+  if (study.consumablesDeductedAt) return null
+  const items = (study.consumables || []).filter(c => Number(c.actualQty) > 0)
+  if (!items.length) return null
+  const nowIso = new Date().toISOString()
+  const txId = `TX-${Date.now()}-${crypto.randomUUID().slice(0, 4)}`
+  const mapped = items.map(it => ({
+    supplyId: it.supplyId,
+    supplyCode: it.supplyCode,
+    supplyName: it.supplyName,
+    unit: it.unit,
+    quantity: Number(it.actualQty) || 0,
+    notes: it.notes || '',
+  }))
+  const tx = new InventoryTransaction({
+    _id: txId,
+    transactionNumber: `AD-${Date.now().toString().slice(-8)}`,
+    type: 'auto_deduct',
+    site: study.site || '',
+    warehouseId: '',
+    accountingPeriod: nowIso.slice(0, 7),
+    items: mapped,
+    reason: `Tự động trừ kho: ca chụp ${study._id}`,
+    relatedServiceOrderId: study._id,
+    status: 'confirmed',
+    confirmedBy: user.username,
+    confirmedAt: nowIso,
+    createdBy: user.username,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  })
+  await tx.save()
+  for (const item of mapped) {
+    const supply = await Supply.findById(item.supplyId)
+    if (!supply) continue
+    supply.currentStock = Math.max(0, (supply.currentStock || 0) - item.quantity)
+    let remaining = item.quantity
+    const lots = await InventoryLot.find({
+      supplyId: item.supplyId,
+      site: study.site || supply.site,
+      status: 'available',
+      currentQuantity: { $gt: 0 },
+    }).sort({ createdAt: 1 })
+    for (const lot of lots) {
+      if (remaining <= 0) break
+      const deduct = Math.min(lot.currentQuantity, remaining)
+      lot.currentQuantity -= deduct
+      if (lot.currentQuantity <= 0) lot.status = 'depleted'
+      await lot.save()
+      remaining -= deduct
+    }
+    supply.updatedAt = nowIso
+    await supply.save()
+  }
+  return txId
 }
 
 // Helper: build a base Mongoose query filter based on user role
@@ -249,9 +367,72 @@ router.put('/studies/:id', requireAuth, async (req, res) => {
       { new: true }
     )
 
+    // When the scan is marked pending_read, deduct consumables from stock (once).
+    // Failure to deduct must not block the status transition — log and continue.
+    if (updated.status === 'pending_read' && !updated.consumablesDeductedAt) {
+      try {
+        const txId = await autoDeductConsumables(updated, req.user)
+        if (txId) {
+          updated.consumablesDeductedAt = new Date().toISOString()
+          updated.consumablesTransactionId = txId
+          updated.updatedAt = updated.consumablesDeductedAt
+          await updated.save()
+        }
+      } catch (e) {
+        console.error('auto-deduct consumables failed:', e)
+      }
+    }
+
     res.json(updated)
   } catch (err) {
     console.error('PUT /studies/:id error:', err)
+    res.status(500).json({ error: 'Lỗi server' })
+  }
+})
+
+// GET /studies/:id/consumables-standard — return định mức aggregated from SupplyServiceMapping
+router.get('/studies/:id/consumables-standard', requireAuth, async (req, res) => {
+  try {
+    const study = await Study.findById(req.params.id).lean()
+    if (!study) return res.status(404).json({ error: 'Không tìm thấy ca chụp' })
+    const standard = await computeStandardConsumables(study)
+    res.json(standard)
+  } catch (err) {
+    console.error('GET /studies/:id/consumables-standard error:', err)
+    res.status(500).json({ error: 'Lỗi server' })
+  }
+})
+
+// PUT /studies/:id/consumables — KTV/admin save actual consumables (blocked after deduction)
+router.put('/studies/:id/consumables', requireAuth, async (req, res) => {
+  try {
+    const role = req.user.role
+    if (!['nhanvien', 'admin'].includes(role)) {
+      return res.status(403).json({ error: 'Chỉ KTV hoặc admin được cập nhật vật tư' })
+    }
+    const study = await Study.findById(req.params.id)
+    if (!study) return res.status(404).json({ error: 'Không tìm thấy ca chụp' })
+    if (study.consumablesDeductedAt) {
+      return res.status(400).json({ error: 'Đã xuất kho — không thể chỉnh sửa' })
+    }
+    const incoming = Array.isArray(req.body.consumables) ? req.body.consumables : []
+    const cleaned = incoming
+      .map(it => ({
+        supplyId: String(it.supplyId || ''),
+        supplyCode: String(it.supplyCode || ''),
+        supplyName: String(it.supplyName || ''),
+        unit: String(it.unit || ''),
+        standardQty: Number(it.standardQty) || 0,
+        actualQty: Number(it.actualQty) || 0,
+        notes: String(it.notes || ''),
+      }))
+      .filter(it => it.supplyId)
+    study.consumables = cleaned
+    study.updatedAt = new Date().toISOString()
+    await study.save()
+    res.json(study)
+  } catch (err) {
+    console.error('PUT /studies/:id/consumables error:', err)
     res.status(500).json({ error: 'Lỗi server' })
   }
 })

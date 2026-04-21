@@ -38,6 +38,20 @@ const studySchema = new mongoose.Schema({
     default: 'no_images',
   },
   imageCount: { type: Number, default: 0 },
+  consumables: {
+    type: [{
+      supplyId: String,
+      supplyCode: String,
+      supplyName: String,
+      unit: String,
+      standardQty: { type: Number, default: 0 },
+      actualQty: { type: Number, default: 0 },
+      notes: String,
+    }],
+    default: [],
+  },
+  consumablesDeductedAt: String,
+  consumablesTransactionId: String,
   createdAt: String,
   updatedAt: String,
 }, { _id: false })
