@@ -60,18 +60,18 @@ async function seed() {
   ], 'Loại dịch vụ')
 
   await upsert(Service, [
-    { _id: 'SVC-MOCK-001', code: 'SA020', name: 'Siêu âm ổ bụng tổng quát', serviceTypeCode: 'CDHA', modality: 'US',  bodyPart: 'Ổ bụng',     basePrice: 150000,  points: 1,   unit: 'lần', technicalInfo: 'Máy SA 2D' },
-    { _id: 'SVC-MOCK-002', code: 'SA026', name: 'Siêu âm tuyến giáp',       serviceTypeCode: 'CDHA', modality: 'US',  bodyPart: 'Tuyến giáp', basePrice: 150000,  points: 1,   unit: 'lần', technicalInfo: '' },
-    { _id: 'SVC-MOCK-003', code: 'SA028', name: 'Siêu âm vú hai bên',       serviceTypeCode: 'CDHA', modality: 'US',  bodyPart: 'Vú',         basePrice: 180000,  points: 1,   unit: 'lần', technicalInfo: '' },
-    { _id: 'SVC-MOCK-004', code: 'XQ001', name: 'X-Quang ngực thẳng',       serviceTypeCode: 'CDHA', modality: 'XR',  bodyPart: 'Ngực',       basePrice: 120000,  points: 1,   unit: 'lần', technicalInfo: '' },
-    { _id: 'SVC-MOCK-005', code: 'XQ002', name: 'X-Quang xương',            serviceTypeCode: 'CDHA', modality: 'XR',  bodyPart: 'Xương',      basePrice: 120000,  points: 1,   unit: 'lần', technicalInfo: '' },
-    { _id: 'SVC-MOCK-006', code: 'CT001', name: 'CT sọ não không tiêm',     serviceTypeCode: 'CDHA', modality: 'CT',  bodyPart: 'Sọ não',     basePrice: 800000,  points: 3,   unit: 'lần', technicalInfo: '' },
-    { _id: 'SVC-MOCK-007', code: 'CT002', name: 'CT sọ não có tiêm thuốc',  serviceTypeCode: 'CDHA', modality: 'CT',  bodyPart: 'Sọ não',     basePrice: 1200000, points: 4,   unit: 'lần', technicalInfo: '' },
-    { _id: 'SVC-MOCK-008', code: 'CT003', name: 'CT ngực',                  serviceTypeCode: 'CDHA', modality: 'CT',  bodyPart: 'Ngực',       basePrice: 900000,  points: 3,   unit: 'lần', technicalInfo: '' },
-    { _id: 'SVC-MOCK-009', code: 'CT004', name: 'CT bụng - tiểu khung',     serviceTypeCode: 'CDHA', modality: 'CT',  bodyPart: 'Bụng',       basePrice: 1000000, points: 3,   unit: 'lần', technicalInfo: '' },
-    { _id: 'SVC-MOCK-010', code: 'MR001', name: 'MRI sọ não',               serviceTypeCode: 'CDHA', modality: 'MRI', bodyPart: 'Sọ não',     basePrice: 2500000, points: 5,   unit: 'lần', technicalInfo: '' },
-    { _id: 'SVC-MOCK-011', code: 'MR002', name: 'MRI cột sống thắt lưng',   serviceTypeCode: 'CDHA', modality: 'MRI', bodyPart: 'Cột sống',   basePrice: 2800000, points: 5,   unit: 'lần', technicalInfo: '' },
-    { _id: 'SVC-MOCK-012', code: 'XN001', name: 'Công thức máu',            serviceTypeCode: 'XN',   modality: 'LAB', bodyPart: '',           basePrice: 80000,   points: 0.5, unit: 'lần', technicalInfo: '' },
+    { _id: 'SVC-MOCK-001', code: 'SA020', name: 'Siêu âm ổ bụng tổng quát', serviceTypeCode: 'CDHA', modality: 'US',  bodyPart: 'Ổ bụng',     basePrice: 150000,unit: 'lần', technicalInfo: 'Máy SA 2D' },
+    { _id: 'SVC-MOCK-002', code: 'SA026', name: 'Siêu âm tuyến giáp',       serviceTypeCode: 'CDHA', modality: 'US',  bodyPart: 'Tuyến giáp', basePrice: 150000,unit: 'lần', technicalInfo: '' },
+    { _id: 'SVC-MOCK-003', code: 'SA028', name: 'Siêu âm vú hai bên',       serviceTypeCode: 'CDHA', modality: 'US',  bodyPart: 'Vú',         basePrice: 180000,unit: 'lần', technicalInfo: '' },
+    { _id: 'SVC-MOCK-004', code: 'XQ001', name: 'X-Quang ngực thẳng',       serviceTypeCode: 'CDHA', modality: 'XR',  bodyPart: 'Ngực',       basePrice: 120000,unit: 'lần', technicalInfo: '' },
+    { _id: 'SVC-MOCK-005', code: 'XQ002', name: 'X-Quang xương',            serviceTypeCode: 'CDHA', modality: 'XR',  bodyPart: 'Xương',      basePrice: 120000,unit: 'lần', technicalInfo: '' },
+    { _id: 'SVC-MOCK-006', code: 'CT001', name: 'CT sọ não không tiêm',     serviceTypeCode: 'CDHA', modality: 'CT',  bodyPart: 'Sọ não',     basePrice: 800000,unit: 'lần', technicalInfo: '' },
+    { _id: 'SVC-MOCK-007', code: 'CT002', name: 'CT sọ não có tiêm thuốc',  serviceTypeCode: 'CDHA', modality: 'CT',  bodyPart: 'Sọ não',     basePrice: 1200000, unit: 'lần', technicalInfo: '' },
+    { _id: 'SVC-MOCK-008', code: 'CT003', name: 'CT ngực',                  serviceTypeCode: 'CDHA', modality: 'CT',  bodyPart: 'Ngực',       basePrice: 900000,unit: 'lần', technicalInfo: '' },
+    { _id: 'SVC-MOCK-009', code: 'CT004', name: 'CT bụng - tiểu khung',     serviceTypeCode: 'CDHA', modality: 'CT',  bodyPart: 'Bụng',       basePrice: 1000000, unit: 'lần', technicalInfo: '' },
+    { _id: 'SVC-MOCK-010', code: 'MR001', name: 'MRI sọ não',               serviceTypeCode: 'CDHA', modality: 'MRI', bodyPart: 'Sọ não',     basePrice: 2500000, unit: 'lần', technicalInfo: '' },
+    { _id: 'SVC-MOCK-011', code: 'MR002', name: 'MRI cột sống thắt lưng',   serviceTypeCode: 'CDHA', modality: 'MRI', bodyPart: 'Cột sống',   basePrice: 2800000, unit: 'lần', technicalInfo: '' },
+    { _id: 'SVC-MOCK-012', code: 'XN001', name: 'Công thức máu',            serviceTypeCode: 'XN',   modality: 'LAB', bodyPart: '',           basePrice: 80000,   unit: 'lần', technicalInfo: '' },
   ], 'Dịch vụ')
 
   await upsert(MedicalFacility, [

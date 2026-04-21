@@ -136,18 +136,18 @@ const CATALOG_FIELDS = {
     formatCell: { level: v => ({ trung_uong: 'Trung ương', tinh: 'Tỉnh', huyen: 'Huyện', xa: 'Xã', phong_kham: 'Phòng khám', other: 'Khác' }[v] || v || '') },
   },
   'services': {
-    columns: ['code', 'technicalInfo', 'name', 'serviceTypeCode', 'basePrice', 'points'],
-    columnLabels: { code: 'Mã', technicalInfo: 'Thông tin kỹ thuật', name: 'Tên', serviceTypeCode: 'Nhóm dịch vụ', basePrice: 'Đơn giá', points: 'Lý điểm' },
+    columns: ['code', 'technicalInfo', 'name', 'serviceTypeCode', 'basePrice'],
+    columnLabels: { code: 'Mã', technicalInfo: 'Thông tin kỹ thuật', name: 'Tên', serviceTypeCode: 'Nhóm dịch vụ', basePrice: 'Đơn giá' },
     editFields: [
       { key: 'code', label: 'Mã', required: true }, { key: 'name', label: 'Tên', required: true },
       { key: 'technicalInfo', label: 'Thông tin kỹ thuật', wide: true },
       { key: 'serviceTypeCode', label: 'Nhóm dịch vụ' },
       { key: 'modality', label: 'Modality', type: 'select', options: ['CT', 'MRI', 'XR', 'US', 'LAB', 'OTHER'].map(m => ({ value: m, label: m })) },
       { key: 'bodyPart', label: 'Bộ phận' }, { key: 'basePrice', label: 'Đơn giá', type: 'number' },
-      { key: 'points', label: 'Lý điểm', type: 'number' }, { key: 'unit', label: 'Đơn vị' },
+      { key: 'unit', label: 'Đơn vị' },
     ],
     formatCell: { basePrice: v => fmtMoney(v) },
-    rightAlign: ['basePrice', 'points'],
+    rightAlign: ['basePrice'],
   },
   'service-types': {
     columns: ['code', 'name', 'abbreviation', 'taxGroupName'],
@@ -283,6 +283,23 @@ function CatalogTable({ catalogKey, isAdmin }) {
     setEditing(null); load()
   }
 
+  const handleToggle = async (item) => {
+    const nextStatus = item.status === 'inactive' ? 'active' : 'inactive'
+    try {
+      await api.put(`/catalogs/${catalogKey}/${item._id}`, { ...item, status: nextStatus })
+      load()
+    } catch (err) { alert(err.response?.data?.error || 'Lỗi cập nhật trạng thái') }
+  }
+
+  const handleDelete = async (item) => {
+    const label = item.name || item.code || item._id
+    if (!confirm(`Xóa "${label}"? Hành động này không thể hoàn tác.`)) return
+    try {
+      await api.delete(`/catalogs/${catalogKey}/${item._id}`)
+      load()
+    } catch (err) { alert(err.response?.data?.error || 'Lỗi xóa') }
+  }
+
   return (
     <>
       {config.note && <div className="mb-3 px-3 py-2 bg-orange-50 border border-orange-200 rounded text-sm text-orange-700">⚠ {config.note}</div>}
@@ -298,7 +315,7 @@ function CatalogTable({ catalogKey, isAdmin }) {
             {config.columns.map(col => (
               <th key={col} className={`px-4 py-3 ${config.rightAlign?.includes(col) ? 'text-right' : ''}`}>{config.columnLabels[col] || col}</th>
             ))}
-            {isAdmin && config.editFields && <th className="px-4 py-3 w-16"></th>}
+            {isAdmin && config.editFields && <th className="px-4 py-3 w-36 text-center">Thao tác</th>}
           </tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={config.columns.length + 1} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
@@ -316,7 +333,18 @@ function CatalogTable({ catalogKey, isAdmin }) {
                   return <td key={col} className={`px-4 py-2.5 text-gray-600 ${config.rightAlign?.includes(col) ? 'text-right font-medium' : ''}`}>{val ?? '-'}</td>
                 })}
                 {isAdmin && config.editFields && (
-                  <td className="px-4 py-2.5"><button onClick={() => setEditing(item)} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button></td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center justify-center gap-2 text-xs">
+                      <button onClick={() => setEditing(item)} className="text-blue-600 hover:text-blue-800">Sửa</button>
+                      <span className="text-gray-300">|</span>
+                      <button onClick={() => handleToggle(item)}
+                        className={item.status === 'inactive' ? 'text-emerald-600 hover:text-emerald-800' : 'text-orange-600 hover:text-orange-800'}>
+                        {item.status === 'inactive' ? 'Mở' : 'Khóa'}
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button onClick={() => handleDelete(item)} className="text-red-600 hover:text-red-800">Xóa</button>
+                    </div>
+                  </td>
                 )}
               </tr>
             ))}

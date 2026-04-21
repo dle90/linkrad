@@ -10,7 +10,6 @@ const serviceSchema = new mongoose.Schema({
   modality: { type: String, enum: ['CT', 'MRI', 'XR', 'US', 'LAB', 'OTHER', null], default: null },
   bodyPart: String,
   basePrice: { type: Number, default: 0 },
-  points: { type: Number, default: 0 }, // Lý điểm
   unit: { type: String, default: 'lần' },
   status: { type: String, enum: ['active', 'inactive'], default: 'active' },
   createdAt: String,
