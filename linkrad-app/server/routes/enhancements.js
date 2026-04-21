@@ -7,7 +7,7 @@
 //   - DICOM Modality Worklist (MWL) preview/sync
 const express = require('express')
 const router = express.Router()
-const { requireAuth } = require('../middleware/auth')
+const { requireAuth, requirePermission } = require('../middleware/auth')
 
 const Study = require('../models/Study')
 const Report = require('../models/Report')
@@ -96,11 +96,8 @@ router.post('/templates/:id/use', requireAuth, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 //  AUDIT LOG VIEWER
 // ═══════════════════════════════════════════════════════════════════
-router.get('/audit-log', requireAuth, async (req, res) => {
+router.get('/audit-log', requireAuth, requirePermission('audit.view'), async (req, res) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'giamdoc') {
-      return res.status(403).json({ error: 'Chỉ admin/giám đốc xem được nhật ký' })
-    }
     const filter = {}
     if (req.query.username) filter.username = req.query.username
     if (req.query.resource) filter.resource = req.query.resource

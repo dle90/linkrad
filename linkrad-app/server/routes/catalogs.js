@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const { requireAuth, requireAdmin } = require('../middleware/auth')
+const { requireAuth, requireAdmin, requirePermission } = require('../middleware/auth')
 
 // All catalog models
 const ServiceType = require('../models/ServiceType')
@@ -22,7 +22,11 @@ const CustomerSource = require('../models/CustomerSource')
 const now = () => new Date().toISOString()
 
 // ── Generic CRUD factory ─────────────────────────────────
-function catalogCRUD(Model, prefix, nameField = 'name') {
+// writePerm: optional permission key. When set, POST/PUT/DELETE use requirePermission(writePerm)
+// instead of requireAdmin, so non-admin roles (e.g. kinhdoanh for partners.manage) can edit.
+function catalogCRUD(Model, prefix, nameField = 'name', writePerm = null) {
+  const writeGuard = writePerm ? requirePermission(writePerm) : requireAdmin
+
   // GET list
   router.get(`/${prefix}`, requireAuth, async (req, res) => {
     try {
@@ -43,7 +47,7 @@ function catalogCRUD(Model, prefix, nameField = 'name') {
   })
 
   // POST create
-  router.post(`/${prefix}`, requireAdmin, async (req, res) => {
+  router.post(`/${prefix}`, writeGuard, async (req, res) => {
     try {
       const data = { ...req.body, _id: `${prefix.toUpperCase()}-${Date.now()}`, createdAt: now(), updatedAt: now() }
       if (!data.status) data.status = 'active'
@@ -54,7 +58,7 @@ function catalogCRUD(Model, prefix, nameField = 'name') {
   })
 
   // PUT update
-  router.put(`/${prefix}/:id`, requireAdmin, async (req, res) => {
+  router.put(`/${prefix}/:id`, writeGuard, async (req, res) => {
     try {
       const update = { ...req.body, updatedAt: now() }
       delete update._id
@@ -65,7 +69,7 @@ function catalogCRUD(Model, prefix, nameField = 'name') {
   })
 
   // DELETE
-  router.delete(`/${prefix}/:id`, requireAdmin, async (req, res) => {
+  router.delete(`/${prefix}/:id`, writeGuard, async (req, res) => {
     try {
       await Model.findByIdAndDelete(req.params.id)
       res.json({ ok: true })
@@ -77,10 +81,10 @@ function catalogCRUD(Model, prefix, nameField = 'name') {
 catalogCRUD(ServiceType, 'service-types')
 catalogCRUD(Service, 'services')
 catalogCRUD(Specialty, 'specialties')
-catalogCRUD(ReferralDoctor, 'referral-doctors')
-catalogCRUD(PartnerFacility, 'partner-facilities')
-catalogCRUD(CommissionGroup, 'commission-groups')
-catalogCRUD(CommissionRule, 'commission-rules')
+catalogCRUD(ReferralDoctor, 'referral-doctors', 'name', 'partners.manage')
+catalogCRUD(PartnerFacility, 'partner-facilities', 'name', 'partners.manage')
+catalogCRUD(CommissionGroup, 'commission-groups', 'name', 'partners.manage')
+catalogCRUD(CommissionRule, 'commission-rules', 'name', 'partners.manage')
 catalogCRUD(RegistrationReason, 'registration-reasons')
 catalogCRUD(BillingCancelReason, 'billing-cancel-reasons')
 catalogCRUD(MedicalFacility, 'medical-facilities')

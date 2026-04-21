@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const { requireAuth } = require('../middleware/auth')
+const { requireAuth, requirePermission } = require('../middleware/auth')
 
 const Invoice = require('../models/Invoice')
 const Patient = require('../models/Patient')
@@ -12,7 +12,7 @@ const Study = require('../models/Study')
 const PAYMENT_LABELS = { cash: 'Tiền mặt', transfer: 'Chuyển khoản', card: 'Thẻ', mixed: 'Hỗn hợp' }
 
 // GET /reports/revenue-detail
-router.get('/revenue-detail', requireAuth, async (req, res) => {
+router.get('/revenue-detail', requireAuth, requirePermission('reports.view'), async (req, res) => {
   try {
     const { dateFrom, dateTo, branch } = req.query
     const filter = {}
@@ -119,7 +119,7 @@ router.get('/revenue-detail', requireAuth, async (req, res) => {
 })
 
 // GET /reports/customer-detail
-router.get('/customer-detail', requireAuth, async (req, res) => {
+router.get('/customer-detail', requireAuth, requirePermission('reports.view'), async (req, res) => {
   try {
     const { dateFrom, dateTo } = req.query
     const filter = {}
@@ -166,7 +166,7 @@ router.get('/customer-detail', requireAuth, async (req, res) => {
 })
 
 // GET /reports/promotion-detail
-router.get('/promotion-detail', requireAuth, async (req, res) => {
+router.get('/promotion-detail', requireAuth, requirePermission('reports.view'), async (req, res) => {
   try {
     const { dateFrom, dateTo } = req.query
     const filter = {}
@@ -231,7 +231,7 @@ router.get('/promotion-detail', requireAuth, async (req, res) => {
 })
 
 // GET /reports/clinic-revenue
-router.get('/clinic-revenue', requireAuth, async (req, res) => {
+router.get('/clinic-revenue', requireAuth, requirePermission('reports.view'), async (req, res) => {
   try {
     const { dateFrom, dateTo, tab } = req.query
     const filter = {}
@@ -318,7 +318,7 @@ router.get('/clinic-revenue', requireAuth, async (req, res) => {
 })
 
 // GET /reports/refund-exchange
-router.get('/refund-exchange', requireAuth, async (req, res) => {
+router.get('/refund-exchange', requireAuth, requirePermission('reports.view'), async (req, res) => {
   try {
     const { dateFrom, dateTo, tab } = req.query
     const filter = {}
@@ -409,7 +409,7 @@ router.get('/refund-exchange', requireAuth, async (req, res) => {
 })
 
 // GET /reports/e-invoice
-router.get('/e-invoice', requireAuth, async (req, res) => {
+router.get('/e-invoice', requireAuth, requirePermission('reports.view'), async (req, res) => {
   try {
     const { dateFrom, dateTo, tab } = req.query
     const filter = {}
@@ -495,7 +495,7 @@ function applyExtraFilters(filter, q) {
 
 // GET /reports/rad/cases-by-machine
 // Cases grouped by site (machine room) — one row per machine
-router.get('/rad/cases-by-machine', requireAuth, async (req, res) => {
+router.get('/rad/cases-by-machine', requireAuth, requirePermission('rad-reports.view'), async (req, res) => {
   try {
     const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
     const studies = await Study.find(filter).lean()
@@ -525,7 +525,7 @@ router.get('/rad/cases-by-machine', requireAuth, async (req, res) => {
 
 // GET /reports/rad/cases-by-machine-group
 // Cases grouped by modality (CT/MRI/XR/US)
-router.get('/rad/cases-by-machine-group', requireAuth, async (req, res) => {
+router.get('/rad/cases-by-machine-group', requireAuth, requirePermission('rad-reports.view'), async (req, res) => {
   try {
     const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
     const studies = await Study.find(filter).lean()
@@ -556,7 +556,7 @@ router.get('/rad/cases-by-machine-group', requireAuth, async (req, res) => {
 
 // GET /reports/rad/cases-by-radiologist
 // Productivity: case count per reading doctor
-router.get('/rad/cases-by-radiologist', requireAuth, async (req, res) => {
+router.get('/rad/cases-by-radiologist', requireAuth, requirePermission('rad-reports.view'), async (req, res) => {
   try {
     const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
     const studies = await Study.find(filter).lean()
@@ -607,7 +607,7 @@ router.get('/rad/cases-by-radiologist', requireAuth, async (req, res) => {
 
 // GET /reports/rad/cases-by-radiologist-modality
 // Cross-tab: rows = radiologist, columns = modality
-router.get('/rad/cases-by-radiologist-modality', requireAuth, async (req, res) => {
+router.get('/rad/cases-by-radiologist-modality', requireAuth, requirePermission('rad-reports.view'), async (req, res) => {
   try {
     const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
     const studies = await Study.find(filter).lean()
@@ -638,7 +638,7 @@ router.get('/rad/cases-by-radiologist-modality', requireAuth, async (req, res) =
 
 // GET /reports/rad/cases-by-time
 // Distribution by hour-of-day (uses reportedAt for completion, falls back to studyDate)
-router.get('/rad/cases-by-time', requireAuth, async (req, res) => {
+router.get('/rad/cases-by-time', requireAuth, requirePermission('rad-reports.view'), async (req, res) => {
   try {
     const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
     const studies = await Study.find(filter).lean()
@@ -672,7 +672,7 @@ router.get('/rad/cases-by-time', requireAuth, async (req, res) => {
 
 // GET /reports/rad/services-detail
 // One row per study with full clinical details — operational equivalent of revenue-detail
-router.get('/rad/services-detail', requireAuth, async (req, res) => {
+router.get('/rad/services-detail', requireAuth, requirePermission('rad-reports.view'), async (req, res) => {
   try {
     const filter = applyExtraFilters(buildStudyDateFilter(req.query.dateFrom, req.query.dateTo), req.query)
     const studies = await Study.find(filter).sort({ studyDate: -1 }).limit(1000).lean()
@@ -706,7 +706,7 @@ router.get('/rad/services-detail', requireAuth, async (req, res) => {
 
 // GET /reports/rad/patient-list
 // Patients who had studies read in the date range (deduplicated by patientId)
-router.get('/rad/patient-list', requireAuth, async (req, res) => {
+router.get('/rad/patient-list', requireAuth, requirePermission('rad-reports.view'), async (req, res) => {
   try {
     // Force completed-only for "patients with read results"
     const filter = buildStudyDateFilter(req.query.dateFrom, req.query.dateTo)
@@ -761,7 +761,7 @@ router.get('/rad/patient-list', requireAuth, async (req, res) => {
 // ─── Referral revenue report ───────────────────────────────────────────────
 // Aggregates invoices by (referralType, referralId). Walk-in/direct-source rows
 // come back under synthetic ids so they're visible too.
-router.get('/referral-revenue', requireAuth, async (req, res) => {
+router.get('/referral-revenue', requireAuth, requirePermission('referral.view'), async (req, res) => {
   try {
     const { dateFrom, dateTo, branch, referralType } = req.query
     const filter = {}
@@ -819,7 +819,7 @@ router.get('/referral-revenue', requireAuth, async (req, res) => {
 
 // ─── Salesperson (NVKD) KPI report ─────────────────────────────────────────
 // Each NVKD's attributed revenue, split by attribution path: direct / via bác sĩ / via cơ sở.
-router.get('/salesperson-kpi', requireAuth, async (req, res) => {
+router.get('/salesperson-kpi', requireAuth, requirePermission('kpi-sales.view'), async (req, res) => {
   try {
     const { dateFrom, dateTo, branch } = req.query
     const filter = {}

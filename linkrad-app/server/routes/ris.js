@@ -12,7 +12,7 @@ const Supply = require('../models/Supply')
 const SupplyServiceMapping = require('../models/SupplyServiceMapping')
 const InventoryLot = require('../models/InventoryLot')
 const InventoryTransaction = require('../models/InventoryTransaction')
-const { requireAuth } = require('../middleware/auth')
+const { requireAuth, requirePermission } = require('../middleware/auth')
 
 const ORTHANC_BASE = process.env.ORTHANC_URL || 'http://localhost:8042'
 // Public URL the browser uses to open the OHIF viewer
@@ -404,7 +404,7 @@ router.get('/studies/:id/consumables-standard', requireAuth, async (req, res) =>
 })
 
 // PUT /studies/:id/consumables — KTV/admin save actual consumables (blocked after deduction)
-router.put('/studies/:id/consumables', requireAuth, async (req, res) => {
+router.put('/studies/:id/consumables', requireAuth, requirePermission('consumables.record'), async (req, res) => {
   try {
     const role = req.user.role
     if (!['nhanvien', 'admin'].includes(role)) {

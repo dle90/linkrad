@@ -83,26 +83,26 @@ const NAV = [
       {
         title: 'Chẩn đoán hình ảnh',
         items: [
-          { path: '/rad-reports/cases-by-machine',              label: 'BC số ca theo máy',          icon: '🖥️', workflowOnly: true },
-          { path: '/rad-reports/cases-by-machine-group',        label: 'BC số ca theo nhóm máy',     icon: '📦', workflowOnly: true },
-          { path: '/rad-reports/cases-by-radiologist',          label: 'BC số ca theo BS đọc',       icon: '👨‍⚕️', workflowOnly: true },
-          { path: '/rad-reports/cases-by-radiologist-modality', label: 'BC BS đọc × loại máy',       icon: '📋', workflowOnly: true },
-          { path: '/rad-reports/cases-by-time',                 label: 'BC theo thời gian',          icon: '🕒', workflowOnly: true },
-          { path: '/rad-reports/services-detail',               label: 'BC chi tiết DV ca theo máy', icon: '📄', workflowOnly: true },
-          { path: '/rad-reports/patient-list',                  label: 'BC DS BN đã đọc KQ',         icon: '🧑', workflowOnly: true },
+          { path: '/rad-reports/cases-by-machine',              label: 'BC số ca theo máy',          icon: '🖥️', perm: 'rad-reports.view' },
+          { path: '/rad-reports/cases-by-machine-group',        label: 'BC số ca theo nhóm máy',     icon: '📦', perm: 'rad-reports.view' },
+          { path: '/rad-reports/cases-by-radiologist',          label: 'BC số ca theo BS đọc',       icon: '👨‍⚕️', perm: 'rad-reports.view' },
+          { path: '/rad-reports/cases-by-radiologist-modality', label: 'BC BS đọc × loại máy',       icon: '📋', perm: 'rad-reports.view' },
+          { path: '/rad-reports/cases-by-time',                 label: 'BC theo thời gian',          icon: '🕒', perm: 'rad-reports.view' },
+          { path: '/rad-reports/services-detail',               label: 'BC chi tiết DV ca theo máy', icon: '📄', perm: 'rad-reports.view' },
+          { path: '/rad-reports/patient-list',                  label: 'BC DS BN đã đọc KQ',         icon: '🧑', perm: 'rad-reports.view' },
         ]
       },
       {
         title: 'Kinh doanh',
         items: [
-          { path: '/reports/revenue-detail',    label: 'BC doanh thu chi tiết',   icon: '📊', workflowOnly: true },
-          { path: '/reports/customer-detail',   label: 'BC chi tiết khách hàng',  icon: '👥', workflowOnly: true },
-          { path: '/reports/promotion-detail',  label: 'BC chương trình KM',      icon: '🎁', workflowOnly: true },
-          { path: '/reports/clinic-revenue',    label: 'BC doanh thu phòng khám', icon: '🏥', workflowOnly: true },
-          { path: '/reports/refund-exchange',   label: 'BC hoàn trả/đổi DV',      icon: '🔄', workflowOnly: true },
-          { path: '/reports/e-invoice',         label: 'BC hóa đơn điện tử',      icon: '🧾', workflowOnly: true },
-          { path: '/reports/referral-revenue',  label: 'BC doanh thu đối tác GT', icon: '🤝', workflowOnly: true },
-          { path: '/reports/salesperson-kpi',   label: 'BC KPI NVKD',             icon: '🎯', workflowOnly: true },
+          { path: '/reports/revenue-detail',    label: 'BC doanh thu chi tiết',   icon: '📊', perm: 'reports.view' },
+          { path: '/reports/customer-detail',   label: 'BC chi tiết khách hàng',  icon: '👥', perm: 'reports.view' },
+          { path: '/reports/promotion-detail',  label: 'BC chương trình KM',      icon: '🎁', perm: 'reports.view' },
+          { path: '/reports/clinic-revenue',    label: 'BC doanh thu phòng khám', icon: '🏥', perm: 'reports.view' },
+          { path: '/reports/refund-exchange',   label: 'BC hoàn trả/đổi DV',      icon: '🔄', perm: 'reports.view' },
+          { path: '/reports/e-invoice',         label: 'BC hóa đơn điện tử',      icon: '🧾', perm: 'reports.view' },
+          { path: '/reports/referral-revenue',  label: 'BC doanh thu đối tác GT', icon: '🤝', perm: 'referral.view' },
+          { path: '/reports/salesperson-kpi',   label: 'BC KPI NVKD',             icon: '🎯', perm: 'kpi-sales.view' },
         ]
       }
     ]
@@ -113,7 +113,7 @@ const NAV = [
       { path: '/hr/employees',   label: 'DS nhân viên',     icon: '👤', perm: 'hr.view' },
       { path: '/hr/departments', label: 'Phòng ban / CN',   icon: '🏢', perm: 'hr.manage' },
       { path: '/hr/permissions', label: 'Ma trận quyền',    icon: '🔐', perm: 'system.admin' },
-      { path: '/audit-log',      label: 'Nhật ký hệ thống', icon: '📜', perm: 'system.admin' },
+      { path: '/audit-log',      label: 'Nhật ký hệ thống', icon: '📜', perm: 'audit.view' },
     ]
   },
   {
