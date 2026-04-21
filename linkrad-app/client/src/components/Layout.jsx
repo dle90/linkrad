@@ -97,12 +97,14 @@ const NAV = [
       {
         title: 'Kinh doanh',
         items: [
-          { path: '/reports/revenue-detail',   label: 'BC doanh thu chi tiết',   icon: '📊', workflowOnly: true },
-          { path: '/reports/customer-detail',  label: 'BC chi tiết khách hàng',  icon: '👥', workflowOnly: true },
-          { path: '/reports/promotion-detail', label: 'BC chương trình KM',      icon: '🎁', workflowOnly: true },
-          { path: '/reports/clinic-revenue',   label: 'BC doanh thu phòng khám', icon: '🏥', workflowOnly: true },
-          { path: '/reports/refund-exchange',  label: 'BC hoàn trả/đổi DV',      icon: '🔄', workflowOnly: true },
-          { path: '/reports/e-invoice',        label: 'BC hóa đơn điện tử',      icon: '🧾', workflowOnly: true },
+          { path: '/reports/revenue-detail',    label: 'BC doanh thu chi tiết',   icon: '📊', workflowOnly: true },
+          { path: '/reports/customer-detail',   label: 'BC chi tiết khách hàng',  icon: '👥', workflowOnly: true },
+          { path: '/reports/promotion-detail',  label: 'BC chương trình KM',      icon: '🎁', workflowOnly: true },
+          { path: '/reports/clinic-revenue',    label: 'BC doanh thu phòng khám', icon: '🏥', workflowOnly: true },
+          { path: '/reports/refund-exchange',   label: 'BC hoàn trả/đổi DV',      icon: '🔄', workflowOnly: true },
+          { path: '/reports/e-invoice',         label: 'BC hóa đơn điện tử',      icon: '🧾', workflowOnly: true },
+          { path: '/reports/referral-revenue',  label: 'BC doanh thu đối tác GT', icon: '🤝', workflowOnly: true },
+          { path: '/reports/salesperson-kpi',   label: 'BC KPI NVKD',             icon: '🎯', workflowOnly: true },
         ]
       }
     ]

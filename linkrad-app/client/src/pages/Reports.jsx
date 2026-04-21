@@ -25,6 +25,8 @@ const REPORT_MENU = [
   { key: 'clinic-revenue', label: 'Báo cáo doanh thu phòng khám', icon: '🏥' },
   { key: 'refund-exchange', label: 'Báo cáo hoàn trả/đổi dịch vụ', icon: '🔄' },
   { key: 'e-invoice', label: 'Báo cáo hóa đơn điện tử', icon: '🧾' },
+  { key: 'referral-revenue', label: 'BC doanh thu theo đối tác giới thiệu', icon: '🤝' },
+  { key: 'salesperson-kpi', label: 'BC KPI nhân viên kinh doanh', icon: '🎯' },
 ]
 
 // ── Column groups (collapsible) ─────────────────────────
@@ -869,6 +871,195 @@ function EInvoiceReport() {
   )
 }
 
+// ── Referral Revenue Report ─────────────────────────────
+function ReferralRevenueReport() {
+  const [dateFrom, setDateFrom] = useState(today())
+  const [dateTo, setDateTo] = useState(today())
+  const [branch, setBranch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
+  const [branches, setBranches] = useState([])
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => { api.get('/catalogs/medical-facilities').then(r => setBranches(r.data)).catch(() => {}) }, [])
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = { dateFrom, dateTo }
+      if (branch) params.branch = branch
+      if (typeFilter) params.referralType = typeFilter
+      const r = await api.get('/reports/referral-revenue', { params })
+      setRows(r.data.rows || [])
+    } catch { setRows([]) }
+    setLoading(false)
+  }, [dateFrom, dateTo, branch, typeFilter])
+  useEffect(() => { load() }, [load])
+
+  const total = rows.reduce((s, r) => ({
+    invoiceCount: s.invoiceCount + r.invoiceCount,
+    grandTotal: s.grandTotal + r.grandTotal,
+    paidAmount: s.paidAmount + r.paidAmount,
+    outstanding: s.outstanding + r.outstanding,
+  }), { invoiceCount: 0, grandTotal: 0, paidAmount: 0, outstanding: 0 })
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
+        <input type="date" className="border rounded px-2 py-1 text-sm" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+        <span className="text-gray-400">→</span>
+        <input type="date" className="border rounded px-2 py-1 text-sm" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+        <select className="border rounded px-2 py-1 text-sm" value={branch} onChange={e => setBranch(e.target.value)}>
+          <option value="">Tất cả cơ sở</option>
+          {branches.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
+        </select>
+        <select className="border rounded px-2 py-1 text-sm" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+          <option value="">Tất cả loại</option>
+          <option value="doctor">Bác sĩ giới thiệu</option>
+          <option value="facility">Cơ sở giới thiệu</option>
+          <option value="salesperson">Nhân viên kinh doanh</option>
+        </select>
+      </div>
+      <div className="bg-white rounded-lg border overflow-auto">
+        <table className="w-full text-sm whitespace-nowrap">
+          <thead><tr className="bg-[#1e3a5f] text-white text-left text-xs">
+            <th className="px-3 py-2.5 w-8">STT</th>
+            <th className="px-3 py-2.5">Loại</th>
+            <th className="px-3 py-2.5">Đối tác / Nguồn</th>
+            <th className="px-3 py-2.5">NVKD theo dõi</th>
+            <th className="px-3 py-2.5 text-right">Số HĐ</th>
+            <th className="px-3 py-2.5 text-right">Số DV</th>
+            <th className="px-3 py-2.5 text-right">Doanh thu</th>
+            <th className="px-3 py-2.5 text-right">Đã thu</th>
+            <th className="px-3 py-2.5 text-right">Còn phải thu</th>
+          </tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
+            : rows.length === 0 ? <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Không có dữ liệu</td></tr>
+            : rows.map((r, i) => (
+              <tr key={`${r.referralType}-${r.referralId || r.sourceCode || i}`} className="border-t hover:bg-blue-50/50">
+                <td className="px-3 py-2 text-gray-400">{i + 1}</td>
+                <td className="px-3 py-2">{r.referralTypeLabel}</td>
+                <td className="px-3 py-2 font-medium">{r.referralName || '-'}</td>
+                <td className="px-3 py-2 text-gray-600">{r.effectiveSalespersonName || '-'}</td>
+                <td className="px-3 py-2 text-right">{r.invoiceCount}</td>
+                <td className="px-3 py-2 text-right">{r.serviceCount}</td>
+                <td className="px-3 py-2 text-right font-medium">{fmtMoney(r.grandTotal)} đ</td>
+                <td className="px-3 py-2 text-right text-green-700">{fmtMoney(r.paidAmount)} đ</td>
+                <td className="px-3 py-2 text-right text-red-600">{fmtMoney(r.outstanding)} đ</td>
+              </tr>
+            ))}
+          </tbody>
+          {rows.length > 0 && (
+            <tfoot><tr className="bg-gray-50 border-t font-semibold text-sm">
+              <td className="px-3 py-2" colSpan={4}>Tổng</td>
+              <td className="px-3 py-2 text-right">{total.invoiceCount}</td>
+              <td className="px-3 py-2"></td>
+              <td className="px-3 py-2 text-right">{fmtMoney(total.grandTotal)} đ</td>
+              <td className="px-3 py-2 text-right text-green-700">{fmtMoney(total.paidAmount)} đ</td>
+              <td className="px-3 py-2 text-right text-red-600">{fmtMoney(total.outstanding)} đ</td>
+            </tr></tfoot>
+          )}
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Salesperson (NVKD) KPI Report ───────────────────────
+function SalespersonKpiReport() {
+  const [dateFrom, setDateFrom] = useState(today())
+  const [dateTo, setDateTo] = useState(today())
+  const [branch, setBranch] = useState('')
+  const [branches, setBranches] = useState([])
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => { api.get('/catalogs/medical-facilities').then(r => setBranches(r.data)).catch(() => {}) }, [])
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = { dateFrom, dateTo }
+      if (branch) params.branch = branch
+      const r = await api.get('/reports/salesperson-kpi', { params })
+      setRows(r.data.rows || [])
+    } catch { setRows([]) }
+    setLoading(false)
+  }, [dateFrom, dateTo, branch])
+  useEffect(() => { load() }, [load])
+
+  const total = rows.reduce((s, r) => ({
+    invoiceCount: s.invoiceCount + r.invoiceCount,
+    directCount: s.directCount + r.directCount,
+    viaDoctorCount: s.viaDoctorCount + r.viaDoctorCount,
+    viaFacilityCount: s.viaFacilityCount + r.viaFacilityCount,
+    grandTotal: s.grandTotal + r.grandTotal,
+    paidAmount: s.paidAmount + r.paidAmount,
+    outstanding: s.outstanding + r.outstanding,
+  }), { invoiceCount: 0, directCount: 0, viaDoctorCount: 0, viaFacilityCount: 0, grandTotal: 0, paidAmount: 0, outstanding: 0 })
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-3">
+        <input type="date" className="border rounded px-2 py-1 text-sm" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+        <span className="text-gray-400">→</span>
+        <input type="date" className="border rounded px-2 py-1 text-sm" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+        <select className="border rounded px-2 py-1 text-sm" value={branch} onChange={e => setBranch(e.target.value)}>
+          <option value="">Tất cả cơ sở</option>
+          {branches.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
+        </select>
+      </div>
+      <div className="bg-white rounded-lg border overflow-auto">
+        <table className="w-full text-sm whitespace-nowrap">
+          <thead><tr className="bg-[#1e3a5f] text-white text-left text-xs">
+            <th className="px-3 py-2.5 w-8">STT</th>
+            <th className="px-3 py-2.5">Mã NVKD</th>
+            <th className="px-3 py-2.5">Tên NVKD</th>
+            <th className="px-3 py-2.5">Cơ sở</th>
+            <th className="px-3 py-2.5 text-right">Trực tiếp</th>
+            <th className="px-3 py-2.5 text-right">Qua BS</th>
+            <th className="px-3 py-2.5 text-right">Qua cơ sở</th>
+            <th className="px-3 py-2.5 text-right">Tổng HĐ</th>
+            <th className="px-3 py-2.5 text-right">Doanh thu</th>
+            <th className="px-3 py-2.5 text-right">Đã thu</th>
+            <th className="px-3 py-2.5 text-right">Còn phải thu</th>
+          </tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
+            : rows.length === 0 ? <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">Không có dữ liệu</td></tr>
+            : rows.map((r, i) => (
+              <tr key={r.salespersonId} className="border-t hover:bg-blue-50/50">
+                <td className="px-3 py-2 text-gray-400">{i + 1}</td>
+                <td className="px-3 py-2 font-mono text-xs">{r.salespersonId}</td>
+                <td className="px-3 py-2 font-medium">{r.salespersonName}</td>
+                <td className="px-3 py-2 text-gray-600">{r.department || '-'}</td>
+                <td className="px-3 py-2 text-right">{r.directCount}</td>
+                <td className="px-3 py-2 text-right">{r.viaDoctorCount}</td>
+                <td className="px-3 py-2 text-right">{r.viaFacilityCount}</td>
+                <td className="px-3 py-2 text-right font-medium">{r.invoiceCount}</td>
+                <td className="px-3 py-2 text-right font-medium">{fmtMoney(r.grandTotal)} đ</td>
+                <td className="px-3 py-2 text-right text-green-700">{fmtMoney(r.paidAmount)} đ</td>
+                <td className="px-3 py-2 text-right text-red-600">{fmtMoney(r.outstanding)} đ</td>
+              </tr>
+            ))}
+          </tbody>
+          {rows.length > 0 && (
+            <tfoot><tr className="bg-gray-50 border-t font-semibold text-sm">
+              <td className="px-3 py-2" colSpan={4}>Tổng</td>
+              <td className="px-3 py-2 text-right">{total.directCount}</td>
+              <td className="px-3 py-2 text-right">{total.viaDoctorCount}</td>
+              <td className="px-3 py-2 text-right">{total.viaFacilityCount}</td>
+              <td className="px-3 py-2 text-right">{total.invoiceCount}</td>
+              <td className="px-3 py-2 text-right">{fmtMoney(total.grandTotal)} đ</td>
+              <td className="px-3 py-2 text-right text-green-700">{fmtMoney(total.paidAmount)} đ</td>
+              <td className="px-3 py-2 text-right text-red-600">{fmtMoney(total.outstanding)} đ</td>
+            </tr></tfoot>
+          )}
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ══════════════════════════════════════════════════════════
 //  MAIN REPORTS PAGE
 // ══════════════════════════════════════════════════════════
@@ -884,6 +1075,8 @@ export default function Reports() {
     if (activeKey === 'clinic-revenue') return <ClinicRevenueReport />
     if (activeKey === 'refund-exchange') return <RefundExchangeReport />
     if (activeKey === 'e-invoice') return <EInvoiceReport />
+    if (activeKey === 'referral-revenue') return <ReferralRevenueReport />
+    if (activeKey === 'salesperson-kpi') return <SalespersonKpiReport />
     return <div className="text-gray-400 text-sm p-4">Chọn báo cáo từ menu bên trái</div>
   }
 

@@ -19,6 +19,15 @@ const invoiceSchema = new mongoose.Schema({
   phone: String,
   appointmentId: String,
   site: String,
+  // Referral source snapshot (copied from Appointment at invoice creation, immutable afterwards)
+  sourceCode: String,
+  sourceName: String,
+  referralType: { type: String, enum: ['doctor', 'facility', 'salesperson', ''], default: '' },
+  referralId: String,
+  referralName: String,
+  // Effective salesperson = direct NVKD if referralType='salesperson', else assignedStaff of the partner
+  effectiveSalespersonId: String,
+  effectiveSalespersonName: String,
   items: [invoiceItemSchema],
   subtotal: { type: Number, default: 0 },
   totalDiscount: { type: Number, default: 0 },

@@ -758,4 +758,115 @@ router.get('/rad/patient-list', requireAuth, async (req, res) => {
   }
 })
 
+// ─── Referral revenue report ───────────────────────────────────────────────
+// Aggregates invoices by (referralType, referralId). Walk-in/direct-source rows
+// come back under synthetic ids so they're visible too.
+router.get('/referral-revenue', requireAuth, async (req, res) => {
+  try {
+    const { dateFrom, dateTo, branch, referralType } = req.query
+    const filter = {}
+    if (dateFrom || dateTo) {
+      filter.createdAt = {}
+      if (dateFrom) filter.createdAt.$gte = new Date(dateFrom).toISOString()
+      if (dateTo) {
+        const end = new Date(dateTo); end.setDate(end.getDate() + 1)
+        filter.createdAt.$lt = end.toISOString()
+      }
+    }
+    if (branch) filter.site = { $regex: branch, $options: 'i' }
+    if (referralType) filter.referralType = referralType
+
+    const invoices = await Invoice.find(filter).lean()
+
+    const TYPE_LABELS = { doctor: 'Bác sĩ giới thiệu', facility: 'Cơ sở giới thiệu', salesperson: 'Nhân viên kinh doanh', '': 'Trực tiếp' }
+    const buckets = new Map()
+    for (const inv of invoices) {
+      const type = inv.referralType || ''
+      // Group walk-ins by sourceName so "Tự đến" / "Online Marketing" each get a row.
+      // Partner referrals group by referralId.
+      const key = type ? `${type}::${inv.referralId || ''}` : `direct::${inv.sourceCode || 'UNKNOWN'}`
+      if (!buckets.has(key)) {
+        buckets.set(key, {
+          referralType: type,
+          referralTypeLabel: TYPE_LABELS[type] || type,
+          referralId: inv.referralId || '',
+          referralName: inv.referralName || inv.sourceName || 'Không xác định',
+          sourceCode: inv.sourceCode || '',
+          sourceName: inv.sourceName || '',
+          effectiveSalespersonId: inv.effectiveSalespersonId || '',
+          effectiveSalespersonName: inv.effectiveSalespersonName || '',
+          invoiceCount: 0,
+          serviceCount: 0,
+          grandTotal: 0,
+          paidAmount: 0,
+          outstanding: 0,
+        })
+      }
+      const row = buckets.get(key)
+      row.invoiceCount += 1
+      row.serviceCount += (inv.items || []).reduce((s, it) => s + (it.quantity || 1), 0)
+      row.grandTotal += inv.grandTotal || 0
+      row.paidAmount += inv.paidAmount || 0
+      row.outstanding += Math.max(0, (inv.grandTotal || 0) - (inv.paidAmount || 0))
+    }
+
+    const rows = Array.from(buckets.values()).sort((a, b) => b.grandTotal - a.grandTotal)
+    res.json({ rows, total: rows.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Salesperson (NVKD) KPI report ─────────────────────────────────────────
+// Each NVKD's attributed revenue, split by attribution path: direct / via bác sĩ / via cơ sở.
+router.get('/salesperson-kpi', requireAuth, async (req, res) => {
+  try {
+    const { dateFrom, dateTo, branch } = req.query
+    const filter = {}
+    if (dateFrom || dateTo) {
+      filter.createdAt = {}
+      if (dateFrom) filter.createdAt.$gte = new Date(dateFrom).toISOString()
+      if (dateTo) {
+        const end = new Date(dateTo); end.setDate(end.getDate() + 1)
+        filter.createdAt.$lt = end.toISOString()
+      }
+    }
+    if (branch) filter.site = { $regex: branch, $options: 'i' }
+    filter.effectiveSalespersonId = { $exists: true, $ne: '' }
+
+    const invoices = await Invoice.find(filter).lean()
+    const salesIds = [...new Set(invoices.map(i => i.effectiveSalespersonId).filter(Boolean))]
+    const users = await User.find({ _id: { $in: salesIds } }).select('_id displayName department').lean()
+    const userMap = Object.fromEntries(users.map(u => [u._id, u]))
+
+    const buckets = new Map()
+    for (const inv of invoices) {
+      const sid = inv.effectiveSalespersonId
+      if (!buckets.has(sid)) {
+        const u = userMap[sid] || {}
+        buckets.set(sid, {
+          salespersonId: sid,
+          salespersonName: u.displayName || inv.effectiveSalespersonName || sid,
+          department: u.department || '',
+          directCount: 0, viaDoctorCount: 0, viaFacilityCount: 0,
+          invoiceCount: 0, grandTotal: 0, paidAmount: 0, outstanding: 0,
+        })
+      }
+      const row = buckets.get(sid)
+      if (inv.referralType === 'salesperson') row.directCount += 1
+      else if (inv.referralType === 'doctor')  row.viaDoctorCount += 1
+      else if (inv.referralType === 'facility') row.viaFacilityCount += 1
+      row.invoiceCount += 1
+      row.grandTotal += inv.grandTotal || 0
+      row.paidAmount += inv.paidAmount || 0
+      row.outstanding += Math.max(0, (inv.grandTotal || 0) - (inv.paidAmount || 0))
+    }
+
+    const rows = Array.from(buckets.values()).sort((a, b) => b.grandTotal - a.grandTotal)
+    res.json({ rows, total: rows.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 module.exports = router

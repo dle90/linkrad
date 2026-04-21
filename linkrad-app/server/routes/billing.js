@@ -3,10 +3,37 @@ const crypto = require('crypto')
 const router = express.Router()
 const Invoice = require('../models/Invoice')
 const Payment = require('../models/Payment')
+const Appointment = require('../models/Appointment')
+const ReferralDoctor = require('../models/ReferralDoctor')
+const PartnerFacility = require('../models/PartnerFacility')
+const User = require('../models/User')
 const { requireAuth, requireAdmin } = require('../middleware/auth')
 
 const now = () => new Date().toISOString()
 const today = () => now().slice(0, 10)
+
+// Resolve the NVKD who should be credited for a given referral.
+// - salesperson referral → the NVKD directly
+// - doctor/facility referral → the assignedStaff on that partner record
+// Returns { id, name } or nulls.
+async function resolveEffectiveSalesperson(referralType, referralId) {
+  if (!referralType || !referralId) return { id: '', name: '' }
+  try {
+    if (referralType === 'salesperson') {
+      const u = await User.findById(referralId).select('_id displayName').lean()
+      return { id: referralId, name: u?.displayName || referralId }
+    }
+    const partner = referralType === 'doctor'
+      ? await ReferralDoctor.findById(referralId).select('assignedStaff').lean()
+      : referralType === 'facility'
+        ? await PartnerFacility.findById(referralId).select('assignedStaff').lean()
+        : null
+    const staffId = partner?.assignedStaff
+    if (!staffId) return { id: '', name: '' }
+    const u = await User.findById(staffId).select('_id displayName').lean()
+    return { id: staffId, name: u?.displayName || staffId }
+  } catch { return { id: '', name: '' } }
+}
 
 // Generate sequential invoice number for the day
 async function nextInvoiceNumber() {
@@ -77,6 +104,28 @@ router.post('/invoices', requireAuth, async (req, res) => {
     const totalTax = items.reduce((s, it) => s + (it.taxAmount || 0), 0)
     const grandTotal = subtotal - totalDiscount + totalTax
 
+    // Snapshot referral attribution from the linked appointment (immutable after creation)
+    let referral = {
+      sourceCode: '', sourceName: '',
+      referralType: '', referralId: '', referralName: '',
+      effectiveSalespersonId: '', effectiveSalespersonName: '',
+    }
+    if (appointmentId) {
+      const appt = await Appointment.findById(appointmentId).lean()
+      if (appt) {
+        const eff = await resolveEffectiveSalesperson(appt.referralType, appt.referralId)
+        referral = {
+          sourceCode: appt.sourceCode || '',
+          sourceName: appt.sourceName || '',
+          referralType: appt.referralType || '',
+          referralId: appt.referralId || '',
+          referralName: appt.referralName || '',
+          effectiveSalespersonId: eff.id,
+          effectiveSalespersonName: eff.name,
+        }
+      }
+    }
+
     const invoice = new Invoice({
       _id: `INV-${Date.now()}-${crypto.randomUUID().slice(0, 4)}`,
       invoiceNumber: await nextInvoiceNumber(),
@@ -85,6 +134,7 @@ router.post('/invoices', requireAuth, async (req, res) => {
       phone,
       appointmentId,
       site: site || req.user.department,
+      ...referral,
       items: items.map(it => ({
         serviceCode: it.serviceCode || '',
         serviceName: it.serviceName,
