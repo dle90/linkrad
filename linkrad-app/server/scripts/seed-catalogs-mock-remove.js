@@ -21,6 +21,7 @@ const ReferralDoctor = require('../models/ReferralDoctor')
 const PartnerFacility = require('../models/PartnerFacility')
 const CommissionGroup = require('../models/CommissionGroup')
 const CommissionRule = require('../models/CommissionRule')
+const Study = require('../models/Study')
 
 const TARGETS = [
   [Specialty,            'Chuyên khoa'],
@@ -34,6 +35,7 @@ const TARGETS = [
   [PartnerFacility,      'Cơ sở y tế đối tác'],
   [CommissionGroup,      'Nhóm hoa hồng'],
   [CommissionRule,       'Hoa hồng'],
+  [Study,                'Studies (Ca chụp / Ca đọc)'],
 ]
 
 async function run() {
