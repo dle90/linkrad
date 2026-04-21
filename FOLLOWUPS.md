@@ -4,7 +4,7 @@ Known limits and deferred work. Organise by area.
 
 ## Mock catalog data — cleanup before real-data import
 
-Seed script `linkrad-app/server/scripts/seed-catalogs-mock.js` was run against prod Atlas to populate the Danh mục pages for demo purposes. Every inserted doc has an `_id` containing `MOCK-`. Collections affected:
+Seed script `linkrad-app/server/scripts/seed-catalogs-mock.js` populates the Danh mục pages for demo. Every inserted doc has an `_id` containing `MOCK-`. Collections affected:
 
 - Specialty, TaxGroup, ServiceType, Service (12 mock services)
 - MedicalFacility, RegistrationReason, BillingCancelReason
@@ -17,6 +17,10 @@ node linkrad-app/server/scripts/seed-catalogs-mock-remove.js
 ```
 
 It does `deleteMany({ _id: /MOCK-/ })` on each affected collection. Real data (without `MOCK-` in its `_id`) is untouched.
+
+### Studies seeding split (2026-04-21)
+
+Fake studies (STD-MOCK-*) were dropped because their fabricated `studyUID`s meant "Xem ảnh" landed on an empty OHIF homepage. **For Ca đọc demo**, run `linkrad-app/server/test-flow1/wire-dicom-studies.js` — it wires 3 real DICOM studies already in Orthanc (1 CT chest 651 instances, 2 MRI brain — Hà Nội + Thanh Hóa sites, all status `pending_read`). That script is idempotent (upserts by studyUID). The `Study` entry stays in the mock-remove TARGETS as a defensive cleanup for any leftover `MOCK-` study docs.
 
 
 ## Vật tư tiêu hao / Auto-deduct (commit a08b021)

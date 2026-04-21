@@ -23,12 +23,8 @@ const ReferralDoctor = require('../models/ReferralDoctor')
 const PartnerFacility = require('../models/PartnerFacility')
 const CommissionGroup = require('../models/CommissionGroup')
 const CommissionRule = require('../models/CommissionRule')
-const Study = require('../models/Study')
 
 const now = () => new Date().toISOString()
-const today = () => now().slice(0, 10)
-const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10) }
-const hoursAgo = (n) => { const d = new Date(); d.setHours(d.getHours() - n); return d.toISOString() }
 const ts = { createdAt: now(), updatedAt: now(), status: 'active' }
 
 async function upsert(Model, docs, label) {
@@ -122,43 +118,9 @@ async function seed() {
     { _id: 'CR-MOCK-04', commissionGroupId: 'CG-MOCK-02', commissionGroupName: 'Nhóm VIP',        serviceId: 'SVC-MOCK-010', serviceName: 'MRI sọ não',          serviceTypeCode: 'CDHA', type: 'percentage', value: 15 },
   ], 'Hoa hồng')
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // STUDIES — populate Ca chụp / Ca đọc with a spread of statuses
-  // ═══════════════════════════════════════════════════════════════════════
-  const SITE_A = 'LinkRad Hai Phong'
-  const SITE_B = 'LinkRad Ha Noi'
-  const uid = (n) => `1.2.840.10008.5.1.4.1.1.2.MOCK.${Date.now()}.${n}`
-  const studyTs = { createdAt: now(), updatedAt: now() }
-  const studies = [
-    // scheduled — Ca chụp "CHỜ THỰC HIỆN"
-    { _id: 'STD-MOCK-001', studyUID: uid(1),  patientName: 'Nguyễn Thị Hoa',    patientId: 'BN-MOCK-001', dob: '1978-05-12', gender: 'F', modality: 'US',  bodyPart: 'Ổ bụng',     clinicalInfo: 'Đau thượng vị 3 ngày',          site: SITE_A, scheduledDate: today(), status: 'scheduled',  priority: 'routine', imageStatus: 'no_images' },
-    { _id: 'STD-MOCK-002', studyUID: uid(2),  patientName: 'Trần Văn Minh',     patientId: 'BN-MOCK-002', dob: '1965-11-03', gender: 'M', modality: 'XR',  bodyPart: 'Ngực',       clinicalInfo: 'Ho kéo dài',                    site: SITE_A, scheduledDate: today(), status: 'scheduled',  priority: 'routine', imageStatus: 'no_images' },
-    { _id: 'STD-MOCK-003', studyUID: uid(3),  patientName: 'Lê Thị Bích',       patientId: 'BN-MOCK-003', dob: '1982-07-20', gender: 'F', modality: 'CT',  bodyPart: 'Sọ não',     clinicalInfo: 'Đau đầu dữ dội, chóng mặt',     site: SITE_B, scheduledDate: today(), status: 'scheduled',  priority: 'urgent',  imageStatus: 'no_images' },
-    { _id: 'STD-MOCK-004', studyUID: uid(4),  patientName: 'Phạm Đức Tuấn',     patientId: 'BN-MOCK-004', dob: '1990-02-15', gender: 'M', modality: 'US',  bodyPart: 'Tuyến giáp', clinicalInfo: 'Kiểm tra tuyến giáp',           site: SITE_A, scheduledDate: today(), status: 'scheduled',  priority: 'routine', imageStatus: 'no_images' },
-
-    // in_progress — Ca chụp "ĐANG THỰC HIỆN"
-    { _id: 'STD-MOCK-005', studyUID: uid(5),  patientName: 'Hoàng Văn Nam',     patientId: 'BN-MOCK-005', dob: '1955-09-28', gender: 'M', modality: 'CT',  bodyPart: 'Ngực',       clinicalInfo: 'Theo dõi u phổi',               site: SITE_A, scheduledDate: today(),       studyDate: today(), status: 'in_progress', priority: 'routine', imageStatus: 'receiving', technicianName: 'KTV Vũ Minh Đức' },
-    { _id: 'STD-MOCK-006', studyUID: uid(6),  patientName: 'Đỗ Thị Lan',        patientId: 'BN-MOCK-006', dob: '1972-12-01', gender: 'F', modality: 'MRI', bodyPart: 'Cột sống',   clinicalInfo: 'Thoát vị đĩa đệm L4-L5',        site: SITE_B, scheduledDate: today(),       studyDate: today(), status: 'in_progress', priority: 'routine', imageStatus: 'receiving', technicianName: 'KTV Ngô Thu Hà' },
-    { _id: 'STD-MOCK-007', studyUID: uid(7),  patientName: 'Bùi Thanh Sơn',     patientId: 'BN-MOCK-007', dob: '1988-04-18', gender: 'M', modality: 'XR',  bodyPart: 'Xương',      clinicalInfo: 'Nghi gãy cổ tay sau té ngã',    site: SITE_A, scheduledDate: today(),       studyDate: today(), status: 'in_progress', priority: 'stat',    imageStatus: 'receiving', technicianName: 'KTV Vũ Minh Đức' },
-
-    // pending_read unclaimed — Ca đọc pool (bác sĩ picks up)
-    { _id: 'STD-MOCK-008', studyUID: uid(8),  patientName: 'Vũ Kim Anh',        patientId: 'BN-MOCK-008', dob: '1960-03-25', gender: 'F', modality: 'CT',  bodyPart: 'Bụng',       clinicalInfo: 'Đau bụng âm ỉ, sụt cân',        site: SITE_A, scheduledDate: daysAgo(1),    studyDate: daysAgo(1), status: 'pending_read', priority: 'urgent',  imageStatus: 'available', imageCount: 128, technicianName: 'KTV Vũ Minh Đức', radiologist: '' },
-    { _id: 'STD-MOCK-009', studyUID: uid(9),  patientName: 'Đinh Thị Mai',      patientId: 'BN-MOCK-009', dob: '1975-08-09', gender: 'F', modality: 'US',  bodyPart: 'Ổ bụng',     clinicalInfo: 'Khám sức khỏe định kỳ',         site: SITE_A, scheduledDate: today(),       studyDate: today(),    status: 'pending_read', priority: 'routine', imageStatus: 'available', imageCount: 24,  technicianName: 'KTV Vũ Minh Đức', radiologist: '' },
-    { _id: 'STD-MOCK-010', studyUID: uid(10), patientName: 'Phan Tuấn Kiệt',    patientId: 'BN-MOCK-010', dob: '1998-06-14', gender: 'M', modality: 'MRI', bodyPart: 'Sọ não',     clinicalInfo: 'Đau đầu migraine',              site: SITE_B, scheduledDate: today(),       studyDate: today(),    status: 'pending_read', priority: 'routine', imageStatus: 'available', imageCount: 180, technicianName: 'KTV Ngô Thu Hà', radiologist: '' },
-    { _id: 'STD-MOCK-011', studyUID: uid(11), patientName: 'Trương Văn Hiếu',   patientId: 'BN-MOCK-011', dob: '1962-01-30', gender: 'M', modality: 'CT',  bodyPart: 'Sọ não',     clinicalInfo: 'Ngã đập đầu, mất ý thức thoáng', site: SITE_A, scheduledDate: today(),       studyDate: today(),    status: 'pending_read', priority: 'stat',    imageStatus: 'available', imageCount: 96,  technicianName: 'KTV Vũ Minh Đức', radiologist: '' },
-    { _id: 'STD-MOCK-012', studyUID: uid(12), patientName: 'Ngô Thị Phương',    patientId: 'BN-MOCK-012', dob: '1984-10-22', gender: 'F', modality: 'XR',  bodyPart: 'Ngực',       clinicalInfo: 'Khám tiền phẫu',                site: SITE_B, scheduledDate: daysAgo(1),    studyDate: daysAgo(1), status: 'pending_read', priority: 'routine', imageStatus: 'available', imageCount: 2,   technicianName: 'KTV Ngô Thu Hà', radiologist: '' },
-
-    // reading — claimed by a radiologist (uses displayName placeholder)
-    { _id: 'STD-MOCK-013', studyUID: uid(13), patientName: 'Lý Bá Thành',       patientId: 'BN-MOCK-013', dob: '1970-07-07', gender: 'M', modality: 'MRI', bodyPart: 'Cột sống',   clinicalInfo: 'Đau lưng mạn tính',             site: SITE_A, scheduledDate: today(),       studyDate: today(),    status: 'reading',      priority: 'routine', imageStatus: 'available', imageCount: 210, technicianName: 'KTV Vũ Minh Đức', radiologistName: 'BS. Hoàng Văn Thịnh', assignedAt: hoursAgo(1) },
-
-    // reported/verified — historical
-    { _id: 'STD-MOCK-014', studyUID: uid(14), patientName: 'Dương Thu Thảo',    patientId: 'BN-MOCK-014', dob: '1993-04-11', gender: 'F', modality: 'US',  bodyPart: 'Tuyến giáp', clinicalInfo: 'Nhân tuyến giáp theo dõi',      site: SITE_A, scheduledDate: daysAgo(2),    studyDate: daysAgo(2), status: 'reported',     priority: 'routine', imageStatus: 'available', imageCount: 18,  technicianName: 'KTV Vũ Minh Đức', radiologistName: 'BS. Hoàng Văn Thịnh', reportedAt: daysAgo(2) + 'T14:20:00.000Z' },
-    { _id: 'STD-MOCK-015', studyUID: uid(15), patientName: 'Mai Xuân Hoàng',    patientId: 'BN-MOCK-015', dob: '1958-11-19', gender: 'M', modality: 'CT',  bodyPart: 'Ngực',       clinicalInfo: 'Theo dõi sau điều trị lao',     site: SITE_B, scheduledDate: daysAgo(3),    studyDate: daysAgo(3), status: 'verified',     priority: 'routine', imageStatus: 'available', imageCount: 140, technicianName: 'KTV Ngô Thu Hà', radiologistName: 'BS. Lê Thị Phương', reportedAt: daysAgo(3) + 'T10:05:00.000Z', verifiedAt: daysAgo(3) + 'T15:30:00.000Z' },
-  ]
-  for (const s of studies) {
-    await Study.findByIdAndUpdate(s._id, { ...studyTs, ...s }, { upsert: true, new: true, setDefaultsOnInsert: true })
-  }
-  console.log(`✓ ${String(studies.length).padStart(3)} Studies (Ca chụp / Ca đọc)`)
+  // Studies are seeded separately via test-flow1/wire-dicom-studies.js, which wires
+  // Ca đọc to real DICOM studies in Orthanc (so "Xem ảnh" actually opens OHIF). Mock
+  // studies with fabricated studyUIDs produced an empty-OHIF UX, so they were dropped.
 
   console.log('\nDone. All mock docs tagged with _id containing "MOCK-".')
   console.log('Cleanup script: node scripts/seed-catalogs-mock-remove.js')
