@@ -2,6 +2,23 @@
 
 Known limits and deferred work. Organise by area.
 
+## Mock catalog data — cleanup before real-data import
+
+Seed script `linkrad-app/server/scripts/seed-catalogs-mock.js` was run against prod Atlas to populate the Danh mục pages for demo purposes. Every inserted doc has an `_id` containing `MOCK-`. Collections affected:
+
+- Specialty, TaxGroup, ServiceType, Service (12 mock services)
+- MedicalFacility, RegistrationReason, BillingCancelReason
+- ReferralDoctor, PartnerFacility, CommissionGroup, CommissionRule
+
+**Before importing real data**, run the paired cleanup script to wipe all mock rows:
+
+```bash
+node linkrad-app/server/scripts/seed-catalogs-mock-remove.js
+```
+
+It does `deleteMany({ _id: /MOCK-/ })` on each affected collection. Real data (without `MOCK-` in its `_id`) is untouched.
+
+
 ## Vật tư tiêu hao / Auto-deduct (commit a08b021)
 
 - **No "add extra supply" row in ConsumablesPanel.** KTV can only edit quantity/notes on supplies that are in `SupplyServiceMapping`. If a scan actually uses a supply not in định mức, KTV has no way to record it — admin must create a manual export transaction in the Inventory page.
