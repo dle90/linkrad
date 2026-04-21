@@ -25,6 +25,10 @@ function ViewImagesButton({ studyUID, imageStatus, imageCount }) {
     setOpening(true)
     try {
       const res = await api.get(`/ris/orthanc/viewer-url/${encodeURIComponent(studyUID)}`)
+      if (res.data?.found === false) {
+        alert('Ca này chưa có ảnh DICOM trong PACS.\n(StudyInstanceUID không khớp với dữ liệu trong Orthanc.)')
+        return
+      }
       window.open(res.data.url, '_blank', 'noopener,noreferrer')
     } catch {
       alert('Không mở được trình xem ảnh')
@@ -60,6 +64,10 @@ function StudyDetail({ study, onBack, onRefresh }) {
     if (!study.studyUID) return
     try {
       const res = await api.get(`/ris/orthanc/viewer-url/${encodeURIComponent(study.studyUID)}`)
+      if (res.data?.found === false) {
+        alert('Ca này chưa có ảnh DICOM trong PACS.')
+        return
+      }
       window.open(res.data.url, '_blank', 'noopener,noreferrer')
     } catch {}
   }
@@ -238,6 +246,7 @@ function StudyList({ studies, onRefresh }) {
   const [dateTo, setDateTo] = useState(todayISO())
   const [modalityFilter, setModalityFilter] = useState('')
   const [siteFilter, setSiteFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(10)
 
@@ -250,17 +259,18 @@ function StudyList({ studies, onRefresh }) {
     return studies.filter(s => {
       if (modalityFilter && s.modality !== modalityFilter) return false
       if (siteFilter && s.site !== siteFilter) return false
+      if (statusFilter && s.status !== statusFilter) return false
       const d = (s.appointmentTime || s.createdAt || '').slice(0, 10)
       if (dateFrom && d && d < dateFrom) return false
       if (dateTo && d && d > dateTo) return false
       return true
     })
-  }, [studies, modalityFilter, siteFilter, dateFrom, dateTo])
+  }, [studies, modalityFilter, siteFilter, statusFilter, dateFrom, dateTo])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const paged = filtered.slice(page * pageSize, (page + 1) * pageSize)
 
-  useEffect(() => { setPage(0) }, [modalityFilter, siteFilter, dateFrom, dateTo])
+  useEffect(() => { setPage(0) }, [modalityFilter, siteFilter, statusFilter, dateFrom, dateTo])
 
   return (
     <div className="flex flex-col h-full">
@@ -268,6 +278,17 @@ function StudyList({ studies, onRefresh }) {
       <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center gap-3 flex-shrink-0 flex-wrap">
         <span className="text-sm text-gray-600">Hiển thị {filtered.length} / {studies.length} ca</span>
         <div className="ml-auto flex items-center gap-2 text-sm text-gray-600 flex-wrap">
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-blue-400">
+            <option value="">Trạng thái: tất cả</option>
+            <option value="pending_read">Chờ đọc</option>
+            <option value="reading">Đang đọc</option>
+            <option value="reported">Hoàn thành</option>
+            <option value="verified">Đã xác nhận</option>
+            <option value="scheduled">Chờ thực hiện</option>
+            <option value="in_progress">Đang thực hiện</option>
+            <option value="cancelled">Đã hủy</option>
+          </select>
           <select value={modalityFilter} onChange={e => setModalityFilter(e.target.value)}
             className="border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-blue-400">
             <option value="">Loại máy: tất cả</option>
