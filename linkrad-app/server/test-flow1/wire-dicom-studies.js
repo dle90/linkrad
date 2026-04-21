@@ -13,6 +13,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
 const mongoose = require('mongoose')
 
 const now = new Date().toISOString()
+const today = now.slice(0, 10)
 
 const STUDIES = [
   {
@@ -24,10 +25,10 @@ const STUDIES = [
     gender: 'F',
     modality: 'MRI',
     bodyPart: 'Sọ não',
-    clinicalInfo: 'Sample DICOM — MR Ax T2 FLAIR FS (28 instances). Wired from Orthanc 2026-04-20.',
+    clinicalInfo: 'Sample DICOM — MR Ax T2 FLAIR FS (28 instances).',
     site: 'Hà Nội',                // LINKRAD YET KIEU — Yết Kiêu street, Hà Nội
-    scheduledDate: '2026-03-13',
-    studyDate: '2026-03-13T14:38:33',
+    scheduledDate: today,
+    studyDate: now,
     status: 'pending_read',
     priority: 'routine',
     imageStatus: 'available',
@@ -42,10 +43,10 @@ const STUDIES = [
     gender: 'F',
     modality: 'CT',
     bodyPart: 'Lồng ngực',
-    clinicalInfo: 'Sample DICOM — CT lồng ngực 32 dãy, không cản quang (651 instances, 2 series: nhu mô phổi + trung thất). Wired from Orthanc 2026-04-20.',
+    clinicalInfo: 'Sample DICOM — CT lồng ngực 32 dãy, không cản quang (651 instances, 2 series).',
     site: 'Thanh Hóa',
-    scheduledDate: '2026-03-20',
-    studyDate: '2026-03-20T08:13:34',
+    scheduledDate: today,
+    studyDate: now,
     status: 'pending_read',
     priority: 'routine',
     imageStatus: 'available',
@@ -60,10 +61,10 @@ const STUDIES = [
     gender: 'F',
     modality: 'MRI',
     bodyPart: 'Sọ não',
-    clinicalInfo: 'Sample DICOM — MRI sọ não 1.5T (342 instances, 7 series: DWI, ADC, T1 FLAIR, T2* GRE, TOF, T2 FLAIR, COR T2). Wired from Orthanc 2026-04-20.',
+    clinicalInfo: 'Sample DICOM — MRI sọ não 1.5T (342 instances, 7 series).',
     site: 'Hà Nội',                // TT CHAN DOAN Y KHOA LINKRAD — pick Hà Nội as sensible default
-    scheduledDate: '2026-03-20',
-    studyDate: '2026-03-20T08:12:09',
+    scheduledDate: today,
+    studyDate: now,
     status: 'pending_read',
     priority: 'routine',
     imageStatus: 'available',
