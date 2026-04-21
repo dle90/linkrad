@@ -261,8 +261,8 @@ function StockCardModal({ supply, onClose }) {
 //  MAIN INVENTORY PAGE
 // ══════════════════════════════════════════════════════════
 export default function Inventory() {
-  const { auth } = useAuth()
-  const isAdmin = auth?.role === 'admin'
+  const { auth, hasPerm } = useAuth()
+  const canEdit = hasPerm('inventory.manage')
   const [tab, setTab] = useState('import')
   const [loading, setLoading] = useState(false)
 
@@ -474,9 +474,9 @@ export default function Inventory() {
               ))}
             </div>
             <div className="flex gap-2">
-              {hangHoaSub === 'supplies' && isAdmin && <button onClick={() => setEditModal({ type: 'supply', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm hàng hóa</button>}
-              {hangHoaSub === 'categories' && isAdmin && <button onClick={() => setEditModal({ type: 'category', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm nhóm</button>}
-              {hangHoaSub === 'his' && isAdmin && <button onClick={() => setShowHisModal(true)} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm định mức</button>}
+              {hangHoaSub === 'supplies' && canEdit && <button onClick={() => setEditModal({ type: 'supply', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm hàng hóa</button>}
+              {hangHoaSub === 'categories' && canEdit && <button onClick={() => setEditModal({ type: 'category', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm nhóm</button>}
+              {hangHoaSub === 'his' && canEdit && <button onClick={() => setShowHisModal(true)} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm định mức</button>}
             </div>
           </div>
 
@@ -509,7 +509,7 @@ export default function Inventory() {
                       <td className="px-4 py-2.5 text-gray-500">{s.site || '-'}</td>
                       <td className="px-4 py-2.5 flex gap-2">
                         <button onClick={() => setShowStockCard(s)} className="text-blue-500 hover:text-blue-700 text-xs">Thẻ kho</button>
-                        {isAdmin && <button onClick={() => setEditModal({ type: 'supply', record: s })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}
+                        {canEdit && <button onClick={() => setEditModal({ type: 'supply', record: s })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}
                       </td>
                     </tr>
                   ))}
@@ -530,7 +530,7 @@ export default function Inventory() {
                     <td className="px-4 py-2.5 font-mono text-xs">{c.code}</td>
                     <td className="px-4 py-2.5 font-medium">{c.name}</td>
                     <td className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${c.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{c.status === 'active' ? 'Hoạt động' : 'Ngưng'}</span></td>
-                    <td className="px-4 py-2.5">{isAdmin && <button onClick={() => setEditModal({ type: 'category', record: c })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td>
+                    <td className="px-4 py-2.5">{canEdit && <button onClick={() => setEditModal({ type: 'category', record: c })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td>
                   </tr>
                 ))}
               </tbody></table>
@@ -553,7 +553,7 @@ export default function Inventory() {
                     <td className="px-4 py-2.5">{m.supplyName}</td>
                     <td className="px-4 py-2.5 text-right font-medium">{m.quantity}</td>
                     <td className="px-4 py-2.5 text-gray-500">{m.unit}</td>
-                    <td className="px-4 py-2.5">{isAdmin && <button onClick={() => handleDeleteMapping(m._id)} className="text-red-500 hover:text-red-700 text-xs">Xóa</button>}</td>
+                    <td className="px-4 py-2.5">{canEdit && <button onClick={() => handleDeleteMapping(m._id)} className="text-red-500 hover:text-red-700 text-xs">Xóa</button>}</td>
                   </tr>
                 ))}
               </tbody></table>
@@ -565,7 +565,7 @@ export default function Inventory() {
       {/* ════════════ NHA CUNG CAP ════════════ */}
       {tab === 'suppliers' && (
         <>
-          {isAdmin && <div className="flex justify-end"><button onClick={() => setEditModal({ type: 'supplier', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm NCC</button></div>}
+          {canEdit && <div className="flex justify-end"><button onClick={() => setEditModal({ type: 'supplier', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm NCC</button></div>}
           <div className="bg-white rounded-lg border overflow-hidden">
             <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
               <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Tên NCC</th><th className="px-4 py-3">Liên hệ</th><th className="px-4 py-3">SĐT</th>
@@ -581,7 +581,7 @@ export default function Inventory() {
                   <td className="px-4 py-2.5 text-gray-500">{s.email || '-'}</td>
                   <td className="px-4 py-2.5 text-gray-500">{s.taxCode || '-'}</td>
                   <td className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${s.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{s.status === 'active' ? 'Hoạt động' : 'Ngưng'}</span></td>
-                  <td className="px-4 py-2.5">{isAdmin && <button onClick={() => setEditModal({ type: 'supplier', record: s })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td>
+                  <td className="px-4 py-2.5">{canEdit && <button onClick={() => setEditModal({ type: 'supplier', record: s })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td>
                 </tr>
               ))}
             </tbody></table>
@@ -601,8 +601,8 @@ export default function Inventory() {
                 </button>
               ))}
             </div>
-            {khoSub === 'warehouses' && isAdmin && <button onClick={() => setEditModal({ type: 'warehouse', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm kho</button>}
-            {khoSub === 'cancelReasons' && isAdmin && <button onClick={() => setEditModal({ type: 'cancelReason', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm lý do</button>}
+            {khoSub === 'warehouses' && canEdit && <button onClick={() => setEditModal({ type: 'warehouse', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm kho</button>}
+            {khoSub === 'cancelReasons' && canEdit && <button onClick={() => setEditModal({ type: 'cancelReason', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm lý do</button>}
           </div>
 
           {/* Warehouses */}
@@ -620,7 +620,7 @@ export default function Inventory() {
                     <td className="px-4 py-2.5">{w.manager || '-'}</td>
                     <td className="px-4 py-2.5">{w.phone || '-'}</td>
                     <td className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${w.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{w.status === 'active' ? 'Hoạt động' : 'Ngưng'}</span></td>
-                    <td className="px-4 py-2.5">{isAdmin && <button onClick={() => setEditModal({ type: 'warehouse', record: w })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td>
+                    <td className="px-4 py-2.5">{canEdit && <button onClick={() => setEditModal({ type: 'warehouse', record: w })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td>
                   </tr>
                 ))}
               </tbody></table>
@@ -692,7 +692,7 @@ export default function Inventory() {
                     <tbody>{cancelReasons.filter(r => r.type === t).length === 0 ? <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-400 text-xs">Chưa có</td></tr>
                     : cancelReasons.filter(r => r.type === t).map(r => (
                       <tr key={r._id} className="border-t"><td className="px-4 py-1.5 font-mono text-xs">{r.code}</td><td className="px-4 py-1.5">{r.name}</td>
-                      <td className="px-4 py-1.5">{isAdmin && <button onClick={() => setEditModal({ type: 'cancelReason', record: r })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td></tr>
+                      <td className="px-4 py-1.5">{canEdit && <button onClick={() => setEditModal({ type: 'cancelReason', record: r })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td></tr>
                     ))}</tbody></table>
                   </div>
                 ))}

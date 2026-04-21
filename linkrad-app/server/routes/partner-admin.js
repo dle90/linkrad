@@ -1,7 +1,8 @@
 const express = require('express')
 const router = express.Router()
 const crypto = require('crypto')
-const { requireAdmin, requireAuth } = require('../middleware/auth')
+const { requireAuth, requirePermission } = require('../middleware/auth')
+const managePartners = requirePermission('partners.manage')
 const PartnerAccount = require('../models/PartnerAccount')
 const PartnerReferral = require('../models/PartnerReferral')
 const Patient = require('../models/Patient')
@@ -11,7 +12,7 @@ const Study = require('../models/Study')
 const now = () => new Date().toISOString()
 
 // ── Admin: list partner accounts ────────────────────────
-router.get('/accounts', requireAdmin, async (req, res) => {
+router.get('/accounts', managePartners, async (req, res) => {
   try {
     const accounts = await PartnerAccount.find({}).select('-password').sort({ createdAt: -1 }).lean()
     res.json(accounts)
@@ -19,7 +20,7 @@ router.get('/accounts', requireAdmin, async (req, res) => {
 })
 
 // ── Admin: create partner account ───────────────────────
-router.post('/accounts', requireAdmin, async (req, res) => {
+router.post('/accounts', managePartners, async (req, res) => {
   try {
     const { username, password, facilityId, displayName, email, phone, commissionGroupId } = req.body
     if (!username || !password || !facilityId) {
@@ -39,7 +40,7 @@ router.post('/accounts', requireAdmin, async (req, res) => {
 })
 
 // ── Admin: update partner account ───────────────────────
-router.put('/accounts/:id', requireAdmin, async (req, res) => {
+router.put('/accounts/:id', managePartners, async (req, res) => {
   try {
     const { displayName, email, phone, commissionGroupId, status, password } = req.body
     const update = { updatedAt: now() }

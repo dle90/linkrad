@@ -7,7 +7,7 @@ const Appointment = require('../models/Appointment')
 const ReferralDoctor = require('../models/ReferralDoctor')
 const PartnerFacility = require('../models/PartnerFacility')
 const User = require('../models/User')
-const { requireAuth, requireAdmin } = require('../middleware/auth')
+const { requireAuth, requirePermission } = require('../middleware/auth')
 
 const now = () => new Date().toISOString()
 const today = () => now().slice(0, 10)
@@ -268,11 +268,8 @@ router.post('/invoices/:id/cancel', requireAuth, async (req, res) => {
 })
 
 // ── Refund invoice ───────────────────────────────────────
-router.post('/invoices/:id/refund', requireAuth, async (req, res) => {
+router.post('/invoices/:id/refund', requireAuth, requirePermission('billing.refund'), async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Chỉ admin mới có quyền hoàn tiền' })
-    }
     const invoice = await Invoice.findById(req.params.id)
     if (!invoice) return res.status(404).json({ error: 'Không tìm thấy hóa đơn' })
     if (invoice.status !== 'paid' && invoice.status !== 'partially_paid') {

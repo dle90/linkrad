@@ -255,7 +255,7 @@ function EditModal({ title, fields, record, onClose, onSave }) {
 }
 
 // ── Generic Catalog Table ────────────────────────────────
-function CatalogTable({ catalogKey, isAdmin }) {
+function CatalogTable({ catalogKey, canEdit }) {
   const config = CATALOG_FIELDS[catalogKey]
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -305,7 +305,7 @@ function CatalogTable({ catalogKey, isAdmin }) {
       {config.note && <div className="mb-3 px-3 py-2 bg-orange-50 border border-orange-200 rounded text-sm text-orange-700">⚠ {config.note}</div>}
       <div className="flex items-center justify-between mb-3">
         <input className="border rounded px-3 py-1.5 text-sm w-64" placeholder="Tìm kiếm..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-        {isAdmin && config.editFields && (
+        {canEdit && config.editFields && (
           <button onClick={() => setEditing({})} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm mới</button>
         )}
       </div>
@@ -315,7 +315,7 @@ function CatalogTable({ catalogKey, isAdmin }) {
             {config.columns.map(col => (
               <th key={col} className={`px-4 py-3 ${config.rightAlign?.includes(col) ? 'text-right' : ''}`}>{config.columnLabels[col] || col}</th>
             ))}
-            {isAdmin && config.editFields && <th className="px-4 py-3 w-36 text-center">Thao tác</th>}
+            {canEdit && config.editFields && <th className="px-4 py-3 w-36 text-center">Thao tác</th>}
           </tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={config.columns.length + 1} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
@@ -332,7 +332,7 @@ function CatalogTable({ catalogKey, isAdmin }) {
                   if (col === 'name' || col === 'serviceName' || col === 'commissionGroupName') return <td key={col} className="px-4 py-2.5 font-medium">{val || '-'}</td>
                   return <td key={col} className={`px-4 py-2.5 text-gray-600 ${config.rightAlign?.includes(col) ? 'text-right font-medium' : ''}`}>{val ?? '-'}</td>
                 })}
-                {isAdmin && config.editFields && (
+                {canEdit && config.editFields && (
                   <td className="px-4 py-2.5">
                     <div className="flex items-center justify-center gap-2 text-xs">
                       <button onClick={() => setEditing(item)} className="text-blue-600 hover:text-blue-800">Sửa</button>
@@ -369,7 +369,7 @@ const EMP_TYPE_OPTIONS = [
 ]
 const GENDER_OPTIONS = [{ value: 'M', label: 'Nam' }, { value: 'F', label: 'Nữ' }]
 
-function UsersTable({ isAdmin }) {
+function UsersTable({ canEdit }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQ, setSearchQ] = useState('')
@@ -413,13 +413,13 @@ function UsersTable({ isAdmin }) {
     <div className={wide ? 'col-span-2 sm:col-span-1' : ''}>
       <label className="block text-xs font-medium text-gray-500 mb-1">{label}{required ? ' *' : ''}</label>
       {type === 'select' ? (
-        <select className="w-full border rounded px-2 py-1.5 text-sm" value={form[k] || ''} onChange={e => setF(k, e.target.value)} disabled={!isAdmin}>
+        <select className="w-full border rounded px-2 py-1.5 text-sm" value={form[k] || ''} onChange={e => setF(k, e.target.value)} disabled={!canEdit}>
           <option value="">-- Chọn --</option>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       ) : type === 'date' ? (
-        <input type="date" className="w-full border rounded px-2 py-1.5 text-sm" value={form[k] || ''} onChange={e => setF(k, e.target.value)} disabled={!isAdmin} />
+        <input type="date" className="w-full border rounded px-2 py-1.5 text-sm" value={form[k] || ''} onChange={e => setF(k, e.target.value)} disabled={!canEdit} />
       ) : (
-        <input className="w-full border rounded px-2 py-1.5 text-sm" value={form[k] || ''} onChange={e => setF(k, e.target.value)} disabled={!isAdmin || (k === '_id' && selected !== '__new__')} />
+        <input className="w-full border rounded px-2 py-1.5 text-sm" value={form[k] || ''} onChange={e => setF(k, e.target.value)} disabled={!canEdit || (k === '_id' && selected !== '__new__')} />
       )}
     </div>
   )
@@ -436,7 +436,7 @@ function UsersTable({ isAdmin }) {
       {/* Left: list */}
       <div className="w-[420px] flex-shrink-0 flex flex-col border rounded-lg bg-white overflow-hidden">
         <div className="p-2 border-b flex items-center gap-2">
-          {isAdmin && <button onClick={startNew} className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 flex-shrink-0">+ Thêm</button>}
+          {canEdit && <button onClick={startNew} className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 flex-shrink-0">+ Thêm</button>}
           <select className="border rounded px-2 py-1 text-xs" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
             <option value="">Tất cả chức vụ</option>{ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
@@ -468,7 +468,7 @@ function UsersTable({ isAdmin }) {
           <div className="flex items-center justify-center h-full text-gray-400 text-sm">Chọn nhân viên từ danh sách bên trái</div>
         ) : (
           <div className="p-4">
-            {isAdmin && (
+            {canEdit && (
               <div className="flex items-center gap-2 mb-4">
                 <button onClick={handleSave} disabled={saving} className="px-4 py-1.5 text-sm bg-[#1e3a5f] text-white rounded hover:bg-[#2a4f7a] disabled:opacity-50 flex items-center gap-1">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
@@ -567,7 +567,7 @@ function PatientsTable() {
 }
 
 // ── Promotions & Promo Codes (inline) ────────────────────
-function PromotionsTable({ isAdmin }) {
+function PromotionsTable({ canEdit }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const load = useCallback(async () => { setLoading(true); try { const r = await api.get('/promotions'); setItems(r.data) } catch {}; setLoading(false) }, [])
@@ -631,19 +631,21 @@ function PromoCodesTable() {
 //  MAIN CATALOGS PAGE
 // ══════════════════════════════════════════════════════════
 export default function Catalogs() {
-  const { auth } = useAuth()
+  const { hasPerm } = useAuth()
   const { catalogKey } = useParams()
-  const isAdmin = auth?.role === 'admin'
   const activeKey = catalogKey || 'referral-doctors'
 
   const activeLabel = MENU.flatMap(g => g.items).find(i => i.key === activeKey)?.label || ''
 
+  const PARTNER_KEYS = new Set(['referral-doctors', 'partner-facilities', 'commission-groups', 'commission-rules', 'customer-sources'])
+  const catalogEditPerm = PARTNER_KEYS.has(activeKey) ? 'partners.manage' : 'catalogs.manage'
+
   const renderContent = () => {
-    if (activeKey === 'users') return <UsersTable isAdmin={isAdmin} />
+    if (activeKey === 'users') return <UsersTable canEdit={hasPerm('hr.manage')} />
     if (activeKey === 'patients') return <PatientsTable />
-    if (activeKey === 'promotions') return <PromotionsTable isAdmin={isAdmin} />
+    if (activeKey === 'promotions') return <PromotionsTable canEdit={hasPerm('catalogs.manage')} />
     if (activeKey === 'promo-codes') return <PromoCodesTable />
-    if (CATALOG_FIELDS[activeKey]) return <CatalogTable catalogKey={activeKey} isAdmin={isAdmin} />
+    if (CATALOG_FIELDS[activeKey]) return <CatalogTable catalogKey={activeKey} canEdit={hasPerm(catalogEditPerm)} />
     return <div className="text-gray-400 text-sm p-4">Chọn danh mục từ menu bên trái</div>
   }
 

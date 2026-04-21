@@ -51,8 +51,8 @@ function EditableNumberCell({ value, onChange, highlight, readOnly = false }) {
 }
 
 export default function Breakeven() {
-  const { auth } = useAuth()
-  const isAdmin = auth?.role === 'admin'
+  const { hasPerm } = useAuth()
+  const canEdit = hasPerm('financials.manage')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -164,7 +164,7 @@ export default function Breakeven() {
                     key={site}
                     value={row.values?.[site] ?? 0}
                     onChange={(v) => onCellChange(i, site, v)}
-                    readOnly={!isAdmin}
+                    readOnly={!canEdit}
                   />
                 ))}
               </tr>
@@ -227,7 +227,7 @@ export default function Breakeven() {
                     key={site}
                     value={data.breakevenRevenue?.values?.[site] ?? 0}
                     onChange={(v) => updateBERevenue(site, v)}
-                    readOnly={!isAdmin}
+                    readOnly={!canEdit}
                   />
                 ))}
               </tr>
@@ -262,7 +262,7 @@ export default function Breakeven() {
                       key={site}
                       value={row.values?.[site] ?? 0}
                       onChange={(v) => updateFixedCost(i, site, v)}
-                      readOnly={!isAdmin}
+                      readOnly={!canEdit}
                     />
                   ))}
                 </tr>

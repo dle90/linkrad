@@ -279,8 +279,8 @@ const MiniCard = ({ label, value, icon, color, sub }) => (
 
 // ═════════════════════════════════════════════════════════════════════
 export default function CRM() {
-  const { auth }  = useAuth()
-  const isAdmin   = auth?.role === 'admin'
+  const { hasPerm } = useAuth()
+  const canEdit = hasPerm('system.admin')
   const fileRef   = useRef(null)
 
   const [data,      setData]      = useState(null)
@@ -378,7 +378,7 @@ export default function CRM() {
         setOpenH({}); setSelMo(null)
         setMsg(`✓ ${fmtNum(all.length)} dòng • ${Object.keys(built.sites).length} chi nhánh • ${built.months.length} tháng`)
         setUploading(false)
-        if (isAdmin) { setSaving(true); saveCRM(built).finally(() => setSaving(false)) }
+        if (canEdit) { setSaving(true); saveCRM(built).finally(() => setSaving(false)) }
       } catch (err) { setMsg(`Lỗi: ${err.message}`); setUploading(false) }
     }
     reader.readAsArrayBuffer(file); e.target.value = ''

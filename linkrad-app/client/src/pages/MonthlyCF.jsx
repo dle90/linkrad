@@ -17,8 +17,8 @@ const fmt = (v) => {
 const MONTH_LABELS = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12']
 
 export default function MonthlyCF() {
-  const { auth } = useAuth()
-  const isAdmin = auth?.role === 'admin'
+  const { hasPerm } = useAuth()
+  const canEdit = hasPerm('financials.manage')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -140,7 +140,7 @@ export default function MonthlyCF() {
                           <EditableCell
                             key={i}
                             value={val}
-                            readOnly={!isAdmin}
+                            readOnly={!canEdit}
                             onChange={(v) => handleCellChange(row.id, i, v)}
                           />
                         )

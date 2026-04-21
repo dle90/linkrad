@@ -3,7 +3,8 @@ const crypto = require('crypto')
 const router = express.Router()
 const Promotion = require('../models/Promotion')
 const PromoCode = require('../models/PromoCode')
-const { requireAuth, requireAdmin } = require('../middleware/auth')
+const { requireAuth, requirePermission } = require('../middleware/auth')
+const manageCatalogs = requirePermission('catalogs.manage')
 
 const now = () => new Date().toISOString()
 const today = () => now().slice(0, 10)
@@ -40,7 +41,7 @@ router.get('/active', requireAuth, async (req, res) => {
 })
 
 // ── Create promotion ─────────────────────────────────────
-router.post('/', requireAdmin, async (req, res) => {
+router.post('/', manageCatalogs, async (req, res) => {
   try {
     const { code, name, description, type, discountValue, maxDiscountAmount,
       applicableServiceTypes, applicableServiceIds, applicableSites,
@@ -73,7 +74,7 @@ router.post('/', requireAdmin, async (req, res) => {
 })
 
 // ── Update promotion ─────────────────────────────────────
-router.put('/:id', requireAdmin, async (req, res) => {
+router.put('/:id', manageCatalogs, async (req, res) => {
   try {
     const update = { ...req.body, updatedAt: now() }
     delete update._id
@@ -85,7 +86,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
 })
 
 // ── Generate promo codes ─────────────────────────────────
-router.post('/:id/codes/generate', requireAdmin, async (req, res) => {
+router.post('/:id/codes/generate', manageCatalogs, async (req, res) => {
   try {
     const promo = await Promotion.findById(req.params.id).lean()
     if (!promo) return res.status(404).json({ error: 'Không tìm thấy chương trình' })

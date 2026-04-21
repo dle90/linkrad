@@ -9,7 +9,8 @@ const InventoryLot = require('../models/InventoryLot')
 const Warehouse = require('../models/Warehouse')
 const CancelReason = require('../models/CancelReason')
 const SupplyServiceMapping = require('../models/SupplyServiceMapping')
-const { requireAuth, requireAdmin } = require('../middleware/auth')
+const { requireAuth, requirePermission } = require('../middleware/auth')
+const manageInventory = requirePermission('inventory.manage')
 
 const now = () => new Date().toISOString()
 const today = () => now().slice(0, 10)
@@ -27,7 +28,7 @@ router.get('/suppliers', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.post('/suppliers', requireAdmin, async (req, res) => {
+router.post('/suppliers', manageInventory, async (req, res) => {
   try {
     const { code, name, contactPerson, phone, email, address, taxCode } = req.body
     if (!name) return res.status(400).json({ error: 'Tên nhà cung cấp là bắt buộc' })
@@ -43,7 +44,7 @@ router.post('/suppliers', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.put('/suppliers/:id', requireAdmin, async (req, res) => {
+router.put('/suppliers/:id', manageInventory, async (req, res) => {
   try {
     const update = { ...req.body, updatedAt: now() }
     delete update._id
@@ -65,7 +66,7 @@ router.get('/categories', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.post('/categories', requireAdmin, async (req, res) => {
+router.post('/categories', manageInventory, async (req, res) => {
   try {
     const { code, name, parentId } = req.body
     if (!name) return res.status(400).json({ error: 'Tên nhóm vật tư là bắt buộc' })
@@ -81,7 +82,7 @@ router.post('/categories', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.put('/categories/:id', requireAdmin, async (req, res) => {
+router.put('/categories/:id', manageInventory, async (req, res) => {
   try {
     const update = { ...req.body, updatedAt: now() }
     delete update._id
@@ -109,7 +110,7 @@ router.get('/supplies', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.post('/supplies', requireAdmin, async (req, res) => {
+router.post('/supplies', manageInventory, async (req, res) => {
   try {
     const { code, name, categoryId, unit, packagingSpec, conversionRate, minimumStock, site, supplierId } = req.body
     if (!name) return res.status(400).json({ error: 'Tên vật tư là bắt buộc' })
@@ -128,7 +129,7 @@ router.post('/supplies', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.put('/supplies/:id', requireAdmin, async (req, res) => {
+router.put('/supplies/:id', manageInventory, async (req, res) => {
   try {
     const update = { ...req.body, updatedAt: now() }
     delete update._id
@@ -422,7 +423,7 @@ router.get('/warehouses', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.post('/warehouses', requireAdmin, async (req, res) => {
+router.post('/warehouses', manageInventory, async (req, res) => {
   try {
     const { code, name, site, address, manager, phone, description } = req.body
     if (!name) return res.status(400).json({ error: 'Tên kho là bắt buộc' })
@@ -437,7 +438,7 @@ router.post('/warehouses', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.put('/warehouses/:id', requireAdmin, async (req, res) => {
+router.put('/warehouses/:id', manageInventory, async (req, res) => {
   try {
     const update = { ...req.body, updatedAt: now() }
     delete update._id
@@ -460,7 +461,7 @@ router.get('/cancel-reasons', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.post('/cancel-reasons', requireAdmin, async (req, res) => {
+router.post('/cancel-reasons', manageInventory, async (req, res) => {
   try {
     const { code, name, type } = req.body
     if (!name) return res.status(400).json({ error: 'Tên lý do là bắt buộc' })
@@ -475,7 +476,7 @@ router.post('/cancel-reasons', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.put('/cancel-reasons/:id', requireAdmin, async (req, res) => {
+router.put('/cancel-reasons/:id', manageInventory, async (req, res) => {
   try {
     const update = { ...req.body, updatedAt: now() }
     delete update._id
@@ -498,7 +499,7 @@ router.get('/his-mapping', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.post('/his-mapping', requireAdmin, async (req, res) => {
+router.post('/his-mapping', manageInventory, async (req, res) => {
   try {
     const { serviceId, serviceCode, serviceName, supplyId, supplyCode, supplyName, quantity, unit } = req.body
     if (!serviceId || !supplyId) return res.status(400).json({ error: 'Thiếu dịch vụ hoặc vật tư' })
@@ -515,7 +516,7 @@ router.post('/his-mapping', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.put('/his-mapping/:id', requireAdmin, async (req, res) => {
+router.put('/his-mapping/:id', manageInventory, async (req, res) => {
   try {
     const update = { ...req.body, updatedAt: now() }
     delete update._id
@@ -525,7 +526,7 @@ router.put('/his-mapping/:id', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-router.delete('/his-mapping/:id', requireAdmin, async (req, res) => {
+router.delete('/his-mapping/:id', manageInventory, async (req, res) => {
   try {
     await SupplyServiceMapping.findByIdAndDelete(req.params.id)
     res.json({ ok: true })

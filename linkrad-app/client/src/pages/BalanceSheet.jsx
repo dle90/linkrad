@@ -24,8 +24,8 @@ const COMPUTED_IDS = {
 }
 
 export default function BalanceSheet() {
-  const { auth } = useAuth()
-  const isAdmin = auth?.role === 'admin'
+  const { hasPerm } = useAuth()
+  const canEdit = hasPerm('financials.manage')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -173,7 +173,7 @@ export default function BalanceSheet() {
                           <EditableCell
                             key={i}
                             value={val}
-                            readOnly={!isAdmin}
+                            readOnly={!canEdit}
                             onChange={(v) => handleCellChange(row.id, i, v)}
                           />
                         )

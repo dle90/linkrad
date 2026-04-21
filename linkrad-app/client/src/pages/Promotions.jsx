@@ -226,8 +226,8 @@ function CodesListModal({ promo, onClose }) {
 }
 
 export default function Promotions() {
-  const { auth } = useAuth()
-  const isAdmin = auth?.role === 'admin'
+  const { hasPerm } = useAuth()
+  const canEdit = hasPerm('catalogs.manage')
   const [promos, setPromos] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
@@ -246,7 +246,7 @@ export default function Promotions() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-gray-800">Chương trình giảm giá</h2>
-        {isAdmin && (
+        {canEdit && (
           <button onClick={() => setEditing({})} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
             + Thêm chương trình
           </button>
@@ -294,8 +294,8 @@ export default function Promotions() {
                   </td>
                   <td className="px-4 py-2.5 flex gap-2">
                     <button onClick={() => setViewingCodes(p)} className="text-blue-500 hover:text-blue-700 text-xs">Mã</button>
-                    {isAdmin && <button onClick={() => setGenerating(p)} className="text-green-500 hover:text-green-700 text-xs">Tạo mã</button>}
-                    {isAdmin && <button onClick={() => setEditing(p)} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}
+                    {canEdit && <button onClick={() => setGenerating(p)} className="text-green-500 hover:text-green-700 text-xs">Tạo mã</button>}
+                    {canEdit && <button onClick={() => setEditing(p)} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}
                   </td>
                 </tr>
               ))}
