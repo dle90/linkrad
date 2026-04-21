@@ -32,6 +32,9 @@ const userSchema = new mongoose.Schema({
   avatarUrl: String,          // hình ảnh đại diện
   signatureUrl: String,       // ảnh chữ ký
   fingerprintUrl: String,     // vân tay
+  position: String,                                                             // chức danh (HR)
+  employmentStatus: { type: String, enum: ['active', 'inactive', 'resigned'], default: 'active' },
+  notes: String,                                                                // ghi chú HR
 }, { _id: false })
 
 // Use _id as the primary key (username)

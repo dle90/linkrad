@@ -93,8 +93,8 @@ async function run() {
 
   const firstEmp = emps.data[0]
   if (firstEmp) {
-    check('Employee has employeeCode', !!firstEmp.employeeCode)
-    check('Employee has fullName', !!firstEmp.fullName)
+    check('Employee has _id (mã NV)', !!firstEmp._id)
+    check('Employee has displayName', !!firstEmp.displayName)
     check('Employee has departmentId', !!firstEmp.departmentId || firstEmp.departmentId === '')
   }
 
@@ -107,12 +107,14 @@ async function run() {
   check('Filter by department works', filteredEmps.status === 200)
 
   // Create employee
+  const testEmpCode = `TEST-${Date.now()}`
   const newEmp = await request('POST', '/api/hr/employees', {
-    fullName: 'Test NV Sanity', position: 'Kỹ thuật viên', departmentId: 'DEPT-HD', departmentName: 'Hải Dương',
-    phone: '0999888000', hireDate: '2026-04-01',
+    _id: testEmpCode, password: 'test1234',
+    displayName: 'Test NV Sanity', position: 'Kỹ thuật viên', departmentId: 'DEPT-HD',
+    phone: '0999888000', joinDate: '2026-04-01',
   })
   check('Create employee returns 201', newEmp.status === 201)
-  check('Employee has auto code', !!newEmp.data.employee?.employeeCode)
+  check('Employee has _id matching payload', newEmp.data.employee?._id === testEmpCode)
   const testEmpId = newEmp.data.employee?._id
 
   // Update employee

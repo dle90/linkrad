@@ -1,12 +1,12 @@
 /**
- * Seed HR data: Departments, Employees, RolePermissions
+ * Seed HR data: Departments, RolePermissions (+ backfill departmentId/position on User)
  * Run: node scripts/seed-hr.js
  */
+const path = require('path')
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') })
 require('../db')
-const crypto = require('crypto')
 
 const Department = require('../models/Department')
-const Employee = require('../models/Employee')
 const RolePermission = require('../models/RolePermission')
 const User = require('../models/User')
 const { ROLE_CATALOG } = require('../shared/permissions')
@@ -62,56 +62,26 @@ async function seed() {
   departments.forEach(d => { deptNameMap[d._id] = d.name })
 
   // ═══════════════════════════════════════════════════════
-  // UPDATE USERS with departmentId
-  // ═══════════════════════════════════════════════════════
-  const users = await User.find({}).lean()
-  let updatedUsers = 0
-  for (const u of users) {
-    if (u.department && deptMap[u.department]) {
-      await User.findByIdAndUpdate(u._id, { departmentId: deptMap[u.department] })
-      updatedUsers++
-    }
-  }
-  console.log(`✓ ${updatedUsers} tài khoản đã cập nhật departmentId`)
-
-  // ═══════════════════════════════════════════════════════
-  // EMPLOYEES (one per existing user)
+  // BACKFILL Users: departmentId + default position/employmentStatus
   // ═══════════════════════════════════════════════════════
   const positionMap = {
     admin: 'Quản trị viên', guest: 'Khách',
     nhanvien: 'Nhân viên', truongphong: 'Trưởng phòng',
     giamdoc: 'Giám đốc', bacsi: 'Bác sĩ điện quang',
   }
-
-  let empIdx = 0
+  const users = await User.find({}).lean()
+  let updatedUsers = 0
   for (const u of users) {
-    empIdx++
-    const deptId = u.department ? (deptMap[u.department] || '') : ''
-    const deptName = deptId ? (deptNameMap[deptId] || u.department || '') : ''
-
-    await Employee.findOneAndUpdate(
-      { userId: u._id },
-      {
-        $setOnInsert: { _id: crypto.randomUUID() },
-        $set: {
-          employeeCode: `NV-${String(empIdx).padStart(3, '0')}`,
-          userId: u._id,
-          fullName: u.displayName || u._id,
-          phone: '', email: '',
-          position: positionMap[u.role] || 'Nhân viên',
-          departmentId: deptId,
-          departmentName: deptName,
-          site: u.department || '',
-          hireDate: '2025-01-01',
-          birthDate: '', gender: 'other', address: '', idNumber: '',
-          employmentStatus: 'active', notes: '',
-          createdAt: now(), updatedAt: now(),
-        },
-      },
-      { upsert: true }
-    )
+    const $set = {}
+    if (u.department && deptMap[u.department] && !u.departmentId) $set.departmentId = deptMap[u.department]
+    if (!u.position) $set.position = positionMap[u.role] || 'Nhân viên'
+    if (!u.employmentStatus) $set.employmentStatus = 'active'
+    if (Object.keys($set).length > 0) {
+      await User.findByIdAndUpdate(u._id, { $set })
+      updatedUsers++
+    }
   }
-  console.log(`✓ ${empIdx} nhân viên`)
+  console.log(`✓ ${updatedUsers} tài khoản đã backfill departmentId/position/employmentStatus`)
 
   // ═══════════════════════════════════════════════════════
   // ROLE PERMISSIONS
@@ -132,7 +102,7 @@ async function seed() {
 
   // ═══════════════════════════════════════════════════════
   console.log('\n✅ Seed HR data hoàn tất!')
-  console.log(`\n📋 Tổng: ${departments.length} phòng ban, ${empIdx} nhân viên, ${Object.keys(ROLE_CATALOG).length} vai trò`)
+  console.log(`\n📋 Tổng: ${departments.length} phòng ban, ${updatedUsers} tài khoản backfilled, ${Object.keys(ROLE_CATALOG).length} vai trò`)
   process.exit(0)
 }
 

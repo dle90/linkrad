@@ -3,7 +3,6 @@ const crypto = require('crypto')
 const router = express.Router()
 const { requireAuth, requirePermission } = require('../middleware/auth')
 const Department = require('../models/Department')
-const Employee = require('../models/Employee')
 const RolePermission = require('../models/RolePermission')
 const User = require('../models/User')
 const { PERMISSIONS, PERMISSION_GROUPS } = require('../shared/permissions')
@@ -14,7 +13,7 @@ const now = () => new Date().toISOString()
 router.use(requireAuth)
 
 // ═══════════════════════════════════════════════════════
-// EMPLOYEES
+// EMPLOYEES — backed by the User collection (login = HR record)
 // ═══════════════════════════════════════════════════════
 
 router.get('/employees', async (req, res) => {
@@ -23,67 +22,59 @@ router.get('/employees', async (req, res) => {
     const filter = {}
     if (q) {
       const re = new RegExp(q, 'i')
-      filter.$or = [{ fullName: re }, { employeeCode: re }, { phone: re }, { email: re }]
+      filter.$or = [{ displayName: re }, { _id: re }, { phone: re }, { email: re }]
     }
     if (departmentId) filter.departmentId = departmentId
     if (status) filter.employmentStatus = status
-    if (site) filter.site = site
-    const employees = await Employee.find(filter).sort({ employeeCode: 1 }).limit(Number(limit)).lean()
-    res.json(employees)
+    if (site) filter.department = site
+    const users = await User.find(filter).select('-password').sort({ _id: 1 }).limit(Number(limit)).lean()
+    res.json(users)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 router.get('/employees/:id', async (req, res) => {
   try {
-    const emp = await Employee.findById(req.params.id).lean()
-    if (!emp) return res.status(404).json({ error: 'Không tìm thấy nhân viên' })
-    res.json(emp)
+    const user = await User.findById(req.params.id).select('-password').lean()
+    if (!user) return res.status(404).json({ error: 'Không tìm thấy nhân viên' })
+    res.json(user)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 router.post('/employees', requirePermission('hr.manage'), async (req, res) => {
   try {
-    const { fullName, phone, email, position, departmentId, departmentName, site,
-      hireDate, birthDate, gender, address, idNumber, notes, userId } = req.body
-    if (!fullName) return res.status(400).json({ error: 'Vui lòng nhập họ tên' })
-
-    // Auto-generate employee code
-    const count = await Employee.countDocuments()
-    const code = `NV-${String(count + 1).padStart(3, '0')}`
-
-    const emp = new Employee({
-      _id: crypto.randomUUID(),
-      employeeCode: code,
-      userId: userId || '',
-      fullName, phone: phone || '', email: email || '',
-      position: position || '', departmentId: departmentId || '',
-      departmentName: departmentName || '', site: site || '',
-      hireDate: hireDate || '', birthDate: birthDate || '',
-      gender: gender || 'other', address: address || '',
-      idNumber: idNumber || '', notes: notes || '',
-      employmentStatus: 'active',
-      createdAt: now(), updatedAt: now(),
+    const { _id, password, displayName } = req.body
+    if (!_id?.trim()) return res.status(400).json({ error: 'Mã nhân viên là bắt buộc' })
+    if (!displayName?.trim()) return res.status(400).json({ error: 'Vui lòng nhập họ tên' })
+    const existing = await User.findById(_id)
+    if (existing) return res.status(400).json({ error: 'Mã nhân viên đã tồn tại' })
+    const user = new User({
+      ...req.body,
+      _id: _id.trim(),
+      password: password || _id.trim(),
+      employmentStatus: req.body.employmentStatus || 'active',
     })
-    await emp.save()
-    res.status(201).json({ ok: true, employee: emp.toObject() })
+    await user.save()
+    const result = user.toObject()
+    delete result.password
+    res.status(201).json({ ok: true, employee: result })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 router.put('/employees/:id', requirePermission('hr.manage'), async (req, res) => {
   try {
-    const update = { ...req.body, updatedAt: now() }
+    const update = { ...req.body }
     delete update._id
-    delete update.employeeCode // cannot change code
-    const emp = await Employee.findByIdAndUpdate(req.params.id, update, { new: true })
-    if (!emp) return res.status(404).json({ error: 'Không tìm thấy nhân viên' })
-    res.json({ ok: true, employee: emp.toObject() })
+    if (!update.password) delete update.password  // don't overwrite password with empty
+    const user = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('-password').lean()
+    if (!user) return res.status(404).json({ error: 'Không tìm thấy nhân viên' })
+    res.json({ ok: true, employee: user })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 router.delete('/employees/:id', requirePermission('hr.manage'), async (req, res) => {
   try {
-    const emp = await Employee.findByIdAndUpdate(req.params.id, { employmentStatus: 'inactive', updatedAt: now() }, { new: true })
-    if (!emp) return res.status(404).json({ error: 'Không tìm thấy nhân viên' })
+    const user = await User.findByIdAndUpdate(req.params.id, { employmentStatus: 'inactive' }, { new: true }).select('-password').lean()
+    if (!user) return res.status(404).json({ error: 'Không tìm thấy nhân viên' })
     res.json({ ok: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })

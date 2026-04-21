@@ -27,7 +27,6 @@ const DEPT_TYPE_LABEL = { branch: 'Chi nhánh', hq: 'Phòng ban' }
 function EmployeeSection() {
   const [employees, setEmployees] = useState([])
   const [departments, setDepartments] = useState([])
-  const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -45,15 +44,13 @@ function EmployeeSection() {
       if (search) params.q = search
       if (deptFilter) params.departmentId = deptFilter
       if (statusFilter) params.status = statusFilter
-      const [emps, depts, usrs, rols] = await Promise.all([
+      const [emps, depts, rols] = await Promise.all([
         api.get('/hr/employees', { params }).then(r => r.data),
         api.get('/hr/departments').then(r => r.data),
-        api.get('/hr/users').then(r => r.data),
         api.get('/hr/roles').then(r => r.data).catch(() => []),
       ])
       setEmployees(emps)
       setDepartments(depts)
-      setUsers(usrs)
       setRoles(rols)
     } catch {}
     setLoading(false)
@@ -63,38 +60,33 @@ function EmployeeSection() {
 
   const startNew = () => {
     setEditing('new')
-    setForm({ fullName: '', phone: '', email: '', position: '', departmentId: '', site: '', hireDate: '', birthDate: '', gender: 'M', address: '', idNumber: '', notes: '', userId: '' })
+    setForm({ _id: '', password: '', displayName: '', phone: '', email: '', position: '', departmentId: '', joinDate: '', dob: '', gender: 'M', address: '', idCard: '', notes: '', role: 'nhanvien', employmentStatus: 'active' })
     setAssignments([])
   }
 
   const startEdit = (emp) => {
     setEditing(emp)
-    setForm({ ...emp })
-    // Pull assignments from the linked User account, if any
-    if (emp.userId) {
-      const u = users.find(x => x._id === emp.userId)
-      setAssignments(u?.assignments || [])
-    } else {
-      setAssignments([])
-    }
+    setForm({ ...emp, password: '' })
+    setAssignments(emp.assignments || [])
   }
 
   const save = async () => {
     setSaving(true)
     try {
-      // Set departmentName from selected department
       const dept = departments.find(d => d._id === form.departmentId)
-      const payload = { ...form, departmentName: dept ? dept.name : '', site: dept ? dept.name : form.site }
+      const payload = { ...form, department: dept ? dept.name : form.department }
 
+      let savedId
       if (editing === 'new') {
-        await api.post('/hr/employees', payload)
+        const r = await api.post('/hr/employees', payload)
+        savedId = r.data?.employee?._id || payload._id
       } else {
         await api.put(`/hr/employees/${editing._id}`, payload)
+        savedId = editing._id
       }
-      // Persist assignments to the linked User account (if one is selected)
-      if (form.userId) {
+      if (savedId) {
         try {
-          await api.put(`/hr/users/${form.userId}/assignments`, { assignments })
+          await api.put(`/hr/users/${savedId}/assignments`, { assignments })
         } catch (e) {
           alert('Lưu nhân viên thành công, nhưng lỗi lưu vai trò: ' + (e.response?.data?.error || e.message))
         }
@@ -108,7 +100,7 @@ function EmployeeSection() {
   }
 
   const remove = async (emp) => {
-    if (!confirm(`Ngừng nhân viên ${emp.fullName}?`)) return
+    if (!confirm(`Ngừng nhân viên ${emp.displayName}?`)) return
     await api.delete(`/hr/employees/${emp._id}`)
     load()
   }
@@ -162,24 +154,27 @@ function EmployeeSection() {
               <th className="px-3 py-2">TT</th><th className="px-3 py-2 w-20"></th>
             </tr></thead>
             <tbody>
-              {employees.map(emp => (
-                <tr key={emp._id} className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => startEdit(emp)}>
-                  <td className="px-3 py-2 font-mono text-xs">{emp.employeeCode}</td>
-                  <td className="px-3 py-2 font-medium">{emp.fullName}</td>
-                  <td className="px-3 py-2">{emp.position}</td>
-                  <td className="px-3 py-2">{emp.departmentName}</td>
-                  <td className="px-3 py-2">{emp.phone}</td>
-                  <td className="px-3 py-2">{emp.hireDate}</td>
-                  <td className="px-3 py-2">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_BADGE[emp.employmentStatus] || 'bg-gray-100'}`}>
-                      {STATUS_LABEL[emp.employmentStatus] || emp.employmentStatus}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => remove(emp)} className="text-xs text-red-500 hover:text-red-700">Ngừng</button>
-                  </td>
-                </tr>
-              ))}
+              {employees.map(emp => {
+                const dept = departments.find(d => d._id === emp.departmentId)
+                return (
+                  <tr key={emp._id} className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => startEdit(emp)}>
+                    <td className="px-3 py-2 font-mono text-xs">{emp._id}</td>
+                    <td className="px-3 py-2 font-medium">{emp.displayName}</td>
+                    <td className="px-3 py-2">{emp.position}</td>
+                    <td className="px-3 py-2">{dept?.name || emp.department || ''}</td>
+                    <td className="px-3 py-2">{emp.phone}</td>
+                    <td className="px-3 py-2">{emp.joinDate}</td>
+                    <td className="px-3 py-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_BADGE[emp.employmentStatus] || 'bg-gray-100'}`}>
+                        {STATUS_LABEL[emp.employmentStatus] || emp.employmentStatus || 'active'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => remove(emp)} className="text-xs text-red-500 hover:text-red-700">Ngừng</button>
+                    </td>
+                  </tr>
+                )
+              })}
               {employees.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400">Không có nhân viên</td></tr>}
             </tbody>
           </table>
@@ -190,24 +185,25 @@ function EmployeeSection() {
       {editing && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={() => setEditing(null)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold mb-4">{editing === 'new' ? 'Thêm nhân viên' : `Sửa: ${editing.employeeCode}`}</h3>
+            <h3 className="text-lg font-semibold mb-4">{editing === 'new' ? 'Thêm nhân viên' : `Sửa: ${editing._id}`}</h3>
             <div className="grid grid-cols-2 gap-3">
-              {F('fullName', 'Họ tên', { required: true })}
+              {editing === 'new' && F('_id', 'Mã nhân viên (username)', { required: true })}
+              {editing === 'new' && F('password', 'Mật khẩu (mặc định = mã NV)')}
+              {F('displayName', 'Họ tên', { required: true })}
               {F('position', 'Chức vụ')}
               {F('departmentId', 'Phòng ban', { type: 'select', options: departments.map(d => ({ value: d._id, label: `${d.name} (${DEPT_TYPE_LABEL[d.type] || d.type})` })) })}
-              {F('userId', 'Tài khoản đăng nhập', { type: 'select', options: users.map(u => ({ value: u._id, label: `${u._id} — ${u.displayName} (${u.role})` })) })}
               {F('phone', 'SĐT')}
               {F('email', 'Email')}
               {F('gender', 'Giới tính', { type: 'select', options: [{ value: 'M', label: 'Nam' }, { value: 'F', label: 'Nữ' }, { value: 'other', label: 'Khác' }] })}
-              {F('birthDate', 'Ngày sinh', { type: 'date' })}
-              {F('hireDate', 'Ngày vào làm', { type: 'date' })}
-              {F('idNumber', 'Số CCCD/CMND')}
+              {F('dob', 'Ngày sinh', { type: 'date' })}
+              {F('joinDate', 'Ngày vào làm', { type: 'date' })}
+              {F('idCard', 'Số CCCD/CMND')}
               {F('address', 'Địa chỉ', { wide: true })}
               {F('notes', 'Ghi chú', { wide: true, type: 'textarea' })}
               {editing !== 'new' && F('employmentStatus', 'Trạng thái', { type: 'select', options: [{ value: 'active', label: 'Đang làm' }, { value: 'inactive', label: 'Ngừng' }, { value: 'resigned', label: 'Nghỉ việc' }] })}
             </div>
 
-            {/* Assignments (multi-role) — requires a linked User account */}
+            {/* Assignments (multi-role) */}
             <div className="mt-5 border-t border-gray-200 pt-4">
               <div className="flex items-center justify-between mb-2">
                 <div>
@@ -215,12 +211,10 @@ function EmployeeSection() {
                   <p className="text-xs text-gray-500">Gán nhiều vai trò. Vai trò phạm vi chi nhánh cần chọn cơ sở.</p>
                 </div>
                 <button type="button" onClick={() => setAssignments(a => [...a, { roleId: '', siteId: null }])}
-                  disabled={!form.userId}
-                  className="text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white px-3 py-1 rounded">+ Thêm vai trò</button>
+                  className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded">+ Thêm vai trò</button>
               </div>
-              {!form.userId && <div className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded px-3 py-2">Cần chọn "Tài khoản đăng nhập" trước khi gán vai trò.</div>}
-              {form.userId && assignments.length === 0 && <div className="text-xs text-gray-400 italic">Chưa gán vai trò nào.</div>}
-              {form.userId && assignments.length > 0 && (
+              {assignments.length === 0 && <div className="text-xs text-gray-400 italic">Chưa gán vai trò nào.</div>}
+              {assignments.length > 0 && (
                 <div className="space-y-1.5">
                   {assignments.map((a, i) => {
                     const role = roles.find(r => r._id === a.roleId)
@@ -475,11 +469,18 @@ function PermissionMatrix() {
             <tr className="bg-gray-50 border-t border-gray-100">
               <th className="sticky left-0 bg-gray-50"></th>
               <th></th>
-              {(permDefs.groups || []).flatMap(g => g.perms.map(p => (
-                <th key={p} className="px-1 py-1 text-center text-[10px] text-gray-400 border-l border-gray-100 min-w-[60px] whitespace-nowrap" title={permDefs.permissions[p]}>
-                  {(permDefs.permissions[p] || p).replace(/^(Xem|Quản lý|Nhập) /, '').slice(0, 12)}
-                </th>
-              )))}
+              {(permDefs.groups || []).flatMap(g => g.perms.map(p => {
+                const full = permDefs.permissions[p] || p
+                const m = full.match(/^(Xem|Quản lý|Nhập)\s+(.+)$/)
+                const verb = m ? (m[1] === 'Quản lý' ? 'QL' : m[1]) : ''
+                const noun = (m ? m[2] : full).replace(/\s*\([^)]*\)\s*$/, '').slice(0, 14)
+                return (
+                  <th key={p} className="px-1 py-1 text-center border-l border-gray-100 min-w-[64px] whitespace-nowrap" title={full}>
+                    {verb && <div className="text-[9px] font-semibold text-gray-500 uppercase tracking-wide">{verb}</div>}
+                    <div className="text-[10px] text-gray-600">{noun}</div>
+                  </th>
+                )
+              }))}
               <th></th>
             </tr>
           </thead>

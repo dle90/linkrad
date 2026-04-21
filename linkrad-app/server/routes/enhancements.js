@@ -17,7 +17,7 @@ const Notification = require('../models/Notification')
 const Patient = require('../models/Patient')
 const Service = require('../models/Service')
 const ReferralDoctor = require('../models/ReferralDoctor')
-const Employee = require('../models/Employee')
+const User = require('../models/User')
 const Invoice = require('../models/Invoice')
 
 // ═══════════════════════════════════════════════════════════════════
@@ -376,14 +376,14 @@ router.get('/search', requireAuth, async (req, res) => {
       Patient.find({ $or: [{ name: re }, { phone: re }, { patientId: re }, { _id: re }] }).limit(8).lean(),
       Study.find({ $or: [{ patientName: re }, { patientId: re }, { studyUID: re }, { _id: re }] }).limit(8).lean(),
       Service.find({ $or: [{ name: re }, { code: re }] }).limit(6).lean(),
-      Employee.find({ $or: [{ name: re }, { code: re }, { phone: re }] }).limit(6).lean(),
+      User.find({ $or: [{ displayName: re }, { _id: re }, { phone: re }] }).select('-password').limit(6).lean(),
       ReferralDoctor.find({ $or: [{ name: re }, { code: re }, { phone: re }, { workplace: re }] }).limit(6).lean(),
     ])
     res.json({
       patients:        patients.map(p => ({ id: p._id, label: p.name, sub: `${p.patientId || ''} · ${p.phone || ''}`, link: '/catalogs/patients' })),
       studies:         studies.map(s => ({ id: s._id, label: `${s.patientName} (${s.modality || ''})`, sub: `${s.studyDate || ''} · ${s.bodyPart || ''}`, link: '/ris' })),
       services:        services.map(s => ({ id: s._id, label: s.name, sub: s.code, link: '/catalogs/services' })),
-      employees:       employees.map(e => ({ id: e._id, label: e.name, sub: e.code, link: '/hr/employees' })),
+      employees:       employees.map(e => ({ id: e._id, label: e.displayName || e._id, sub: `${e._id} · ${e.phone || ''}`, link: '/hr/employees' })),
       referralDoctors: referralDoctors.map(d => ({ id: d._id, label: d.name, sub: `${d.code || ''} · ${d.workplace || ''}`, link: '/catalogs/referral-doctors' })),
     })
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -453,7 +453,6 @@ router.post('/mwl/sync', requireAuth, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 //  REPORT SIGNERS — radiologist + technician with snapshot signatures
 // ═══════════════════════════════════════════════════════════════════
-const User = require('../models/User')
 
 // GET /api/signers?role=bacsi  — list potential signers with their signature URLs
 router.get('/signers', requireAuth, async (req, res) => {

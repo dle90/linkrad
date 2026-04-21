@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api'
 
@@ -392,7 +392,6 @@ function UsersTable({ isAdmin }) {
 
   const handleSave = async () => {
     if (!form.displayName?.trim()) return setMsg('Họ tên là bắt buộc')
-    if (!form.role) return setMsg('Chức vụ là bắt buộc')
     setSaving(true); setMsg('')
     try {
       if (selected === '__new__') {
@@ -475,12 +474,15 @@ function UsersTable({ isAdmin }) {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
                   {saving ? 'Đang lưu...' : 'Lưu'}
                 </button>
+                <Link to="/hr/employees" className="px-3 py-1.5 text-sm border border-[#1e3a5f] text-[#1e3a5f] rounded hover:bg-blue-50 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  Phân quyền tại HR
+                </Link>
                 {msg && <span className={`text-xs ${msg.includes('thành công') ? 'text-green-600' : 'text-red-600'}`}>{msg}</span>}
               </div>
             )}
             <div className="grid grid-cols-5 gap-3 mb-4">
               <Field label="Mã nhân viên" k="_id" required />
-              <Field label="Chức vụ" k="role" required type="select" options={ROLE_OPTIONS} />
               <Field label="Loại hình HV" k="employeeType" required type="select" options={EMP_TYPE_OPTIONS} />
               <Field label="Họ tên" k="displayName" required />
               <Field label="Giới tính" k="gender" type="select" options={GENDER_OPTIONS} />
