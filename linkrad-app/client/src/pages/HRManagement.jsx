@@ -28,12 +28,14 @@ function EmployeeSection() {
   const [employees, setEmployees] = useState([])
   const [departments, setDepartments] = useState([])
   const [users, setUsers] = useState([])
+  const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [editing, setEditing] = useState(null) // null | 'new' | employee object
   const [form, setForm] = useState({})
+  const [assignments, setAssignments] = useState([])
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -43,14 +45,16 @@ function EmployeeSection() {
       if (search) params.q = search
       if (deptFilter) params.departmentId = deptFilter
       if (statusFilter) params.status = statusFilter
-      const [emps, depts, usrs] = await Promise.all([
+      const [emps, depts, usrs, rols] = await Promise.all([
         api.get('/hr/employees', { params }).then(r => r.data),
         api.get('/hr/departments').then(r => r.data),
         api.get('/hr/users').then(r => r.data),
+        api.get('/hr/roles').then(r => r.data).catch(() => []),
       ])
       setEmployees(emps)
       setDepartments(depts)
       setUsers(usrs)
+      setRoles(rols)
     } catch {}
     setLoading(false)
   }, [search, deptFilter, statusFilter])
@@ -60,11 +64,19 @@ function EmployeeSection() {
   const startNew = () => {
     setEditing('new')
     setForm({ fullName: '', phone: '', email: '', position: '', departmentId: '', site: '', hireDate: '', birthDate: '', gender: 'M', address: '', idNumber: '', notes: '', userId: '' })
+    setAssignments([])
   }
 
   const startEdit = (emp) => {
     setEditing(emp)
     setForm({ ...emp })
+    // Pull assignments from the linked User account, if any
+    if (emp.userId) {
+      const u = users.find(x => x._id === emp.userId)
+      setAssignments(u?.assignments || [])
+    } else {
+      setAssignments([])
+    }
   }
 
   const save = async () => {
@@ -78,6 +90,14 @@ function EmployeeSection() {
         await api.post('/hr/employees', payload)
       } else {
         await api.put(`/hr/employees/${editing._id}`, payload)
+      }
+      // Persist assignments to the linked User account (if one is selected)
+      if (form.userId) {
+        try {
+          await api.put(`/hr/users/${form.userId}/assignments`, { assignments })
+        } catch (e) {
+          alert('Lưu nhân viên thành công, nhưng lỗi lưu vai trò: ' + (e.response?.data?.error || e.message))
+        }
       }
       setEditing(null)
       load()
@@ -186,6 +206,56 @@ function EmployeeSection() {
               {F('notes', 'Ghi chú', { wide: true, type: 'textarea' })}
               {editing !== 'new' && F('employmentStatus', 'Trạng thái', { type: 'select', options: [{ value: 'active', label: 'Đang làm' }, { value: 'inactive', label: 'Ngừng' }, { value: 'resigned', label: 'Nghỉ việc' }] })}
             </div>
+
+            {/* Assignments (multi-role) — requires a linked User account */}
+            <div className="mt-5 border-t border-gray-200 pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800">Vai trò chức năng</h4>
+                  <p className="text-xs text-gray-500">Gán nhiều vai trò. Vai trò phạm vi chi nhánh cần chọn cơ sở.</p>
+                </div>
+                <button type="button" onClick={() => setAssignments(a => [...a, { roleId: '', siteId: null }])}
+                  disabled={!form.userId}
+                  className="text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white px-3 py-1 rounded">+ Thêm vai trò</button>
+              </div>
+              {!form.userId && <div className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded px-3 py-2">Cần chọn "Tài khoản đăng nhập" trước khi gán vai trò.</div>}
+              {form.userId && assignments.length === 0 && <div className="text-xs text-gray-400 italic">Chưa gán vai trò nào.</div>}
+              {form.userId && assignments.length > 0 && (
+                <div className="space-y-1.5">
+                  {assignments.map((a, i) => {
+                    const role = roles.find(r => r._id === a.roleId)
+                    const isSite = role?.scope === 'site'
+                    return (
+                      <div key={i} className="flex items-center gap-2 text-sm">
+                        <select value={a.roleId}
+                          onChange={e => {
+                            const r = roles.find(x => x._id === e.target.value)
+                            setAssignments(arr => arr.map((x, j) => j === i ? { roleId: e.target.value, siteId: r?.scope === 'site' ? x.siteId : null } : x))
+                          }}
+                          className="border border-gray-200 rounded px-2 py-1 text-sm flex-1">
+                          <option value="">-- Chọn vai trò --</option>
+                          {roles.map(r => (
+                            <option key={r._id} value={r._id}>{r.label}{r.scope === 'site' ? ' (chi nhánh)' : ' (tập đoàn)'}</option>
+                          ))}
+                        </select>
+                        <select value={a.siteId || ''}
+                          disabled={!isSite}
+                          onChange={e => setAssignments(arr => arr.map((x, j) => j === i ? { ...x, siteId: e.target.value || null } : x))}
+                          className="border border-gray-200 rounded px-2 py-1 text-sm flex-1 disabled:bg-gray-50 disabled:text-gray-400">
+                          <option value="">{isSite ? '-- Chọn cơ sở --' : 'Không áp dụng'}</option>
+                          {departments.filter(d => d.type === 'branch').map(d => (
+                            <option key={d._id} value={d._id}>{d.name}</option>
+                          ))}
+                        </select>
+                        <button type="button" onClick={() => setAssignments(arr => arr.filter((_, j) => j !== i))}
+                          className="text-red-400 hover:text-red-600 text-lg leading-none px-1">×</button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-2 mt-4">
               <button onClick={save} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-5 py-2 rounded-lg disabled:opacity-50">
                 {saving ? 'Đang lưu...' : 'Lưu'}
@@ -331,13 +401,16 @@ function PermissionMatrix() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState({})
+  const [showCreate, setShowCreate] = useState(false)
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true)
     Promise.all([
       api.get('/hr/roles').then(r => setRoles(r.data)),
       api.get('/hr/permissions').then(r => setPermDefs(r.data)),
     ]).finally(() => setLoading(false))
-  }, [])
+  }
+  useEffect(() => { load() }, [])
 
   const toggle = (roleId, perm) => {
     if (roleId === 'admin') return // admin always has all
@@ -350,37 +423,58 @@ function PermissionMatrix() {
     setDirty(prev => ({ ...prev, [roleId]: true }))
   }
 
+  const changeScope = (roleId, scope) => {
+    setRoles(prev => prev.map(r => r._id === roleId ? { ...r, scope } : r))
+    setDirty(prev => ({ ...prev, [roleId]: true }))
+  }
+
   const saveRole = async (roleId) => {
     setSaving(true)
     try {
       const role = roles.find(r => r._id === roleId)
-      await api.put(`/hr/roles/${roleId}`, { permissions: role.permissions })
+      await api.put(`/hr/roles/${roleId}`, { permissions: role.permissions, scope: role.scope, label: role.label })
       setDirty(prev => ({ ...prev, [roleId]: false }))
     } catch (err) { alert(err.response?.data?.error || 'Lỗi lưu') }
     setSaving(false)
+  }
+
+  const deleteRole = async (role) => {
+    if (!confirm(`Xóa vai trò "${role.label || role._id}"? Thao tác không thể hoàn tác.`)) return
+    try {
+      await api.delete(`/hr/roles/${role._id}`)
+      load()
+    } catch (err) { alert(err.response?.data?.error || 'Lỗi xóa') }
   }
 
   if (loading) return <div className="text-gray-400 py-8 text-center">Đang tải...</div>
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Ma trận phân quyền</h3>
-      <p className="text-sm text-gray-500 mb-4">Tick vào ô để cấp quyền cho vai trò. Admin luôn có tất cả quyền.</p>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800">Ma trận phân quyền</h3>
+          <p className="text-sm text-gray-500">Tick để cấp quyền cho vai trò. Admin luôn có tất cả quyền. Vai trò phạm vi <b>site</b> chỉ áp dụng cho chi nhánh được gán.</p>
+        </div>
+        <button onClick={() => setShowCreate(true)}
+          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg font-medium">+ Thêm vai trò</button>
+      </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-auto">
         <table className="text-sm">
           <thead>
             <tr className="bg-gray-50">
-              <th className="px-3 py-2 text-left text-xs text-gray-500 sticky left-0 bg-gray-50 min-w-[120px]">Vai trò</th>
+              <th className="px-3 py-2 text-left text-xs text-gray-500 sticky left-0 bg-gray-50 min-w-[140px]">Vai trò</th>
+              <th className="px-2 py-2 text-center text-xs text-gray-500 min-w-[80px]">Phạm vi</th>
               {(permDefs.groups || []).map(g => (
                 <th key={g.key} colSpan={g.perms.length} className="px-2 py-2 text-center text-xs text-gray-600 border-l border-gray-200">
                   {g.label}
                 </th>
               ))}
-              <th className="px-3 py-2 w-20"></th>
+              <th className="px-3 py-2 w-28"></th>
             </tr>
             <tr className="bg-gray-50 border-t border-gray-100">
               <th className="sticky left-0 bg-gray-50"></th>
+              <th></th>
               {(permDefs.groups || []).flatMap(g => g.perms.map(p => (
                 <th key={p} className="px-1 py-1 text-center text-[10px] text-gray-400 border-l border-gray-100 min-w-[60px] whitespace-nowrap" title={permDefs.permissions[p]}>
                   {(permDefs.permissions[p] || p).replace(/^(Xem|Quản lý|Nhập) /, '').slice(0, 12)}
@@ -394,7 +488,16 @@ function PermissionMatrix() {
               <tr key={role._id} className="border-t border-gray-100 hover:bg-gray-50">
                 <td className="px-3 py-2 font-medium sticky left-0 bg-white">
                   {role.label || role._id}
-                  <div className="text-[10px] text-gray-400">{role._id}</div>
+                  <div className="text-[10px] text-gray-400">{role._id}{role.isSystem ? ' · hệ thống' : ''}</div>
+                </td>
+                <td className="text-center text-xs">
+                  <select value={role.scope || 'group'}
+                    disabled={role._id === 'admin'}
+                    onChange={e => changeScope(role._id, e.target.value)}
+                    className="border border-gray-200 rounded px-1.5 py-0.5 text-xs">
+                    <option value="group">Tập đoàn</option>
+                    <option value="site">Chi nhánh</option>
+                  </select>
                 </td>
                 {(permDefs.groups || []).flatMap(g => g.perms.map(p => (
                   <td key={p} className="text-center border-l border-gray-100">
@@ -407,18 +510,81 @@ function PermissionMatrix() {
                     />
                   </td>
                 )))}
-                <td className="px-2">
+                <td className="px-2 text-right whitespace-nowrap">
                   {dirty[role._id] && (
                     <button onClick={() => saveRole(role._id)} disabled={saving}
-                      className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">
-                      Lưu
-                    </button>
+                      className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50 mr-1">Lưu</button>
+                  )}
+                  {!role.isSystem && (
+                    <button onClick={() => deleteRole(role)}
+                      className="text-xs text-red-600 hover:text-red-800 px-1">Xóa</button>
                   )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {showCreate && <CreateRoleModal onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); load() }} />}
+    </div>
+  )
+}
+
+function CreateRoleModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({ _id: '', label: '', description: '', scope: 'site' })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const submit = async () => {
+    if (!form._id.trim() || !form.label.trim()) return setErr('Mã và tên là bắt buộc')
+    if (!/^[a-z0-9_]+$/.test(form._id)) return setErr('Mã chỉ cho phép chữ thường, số và _')
+    setSaving(true); setErr('')
+    try {
+      await api.post('/hr/roles', { ...form, permissions: [] })
+      onCreated()
+    } catch (e) { setErr(e.response?.data?.error || 'Lỗi'); setSaving(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b flex items-center justify-between">
+          <h3 className="font-semibold text-gray-800">Thêm vai trò mới</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+        </div>
+        <div className="p-5 space-y-3">
+          {err && <div className="text-sm text-red-600 bg-red-50 rounded px-3 py-2">{err}</div>}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Mã vai trò (ASCII, dùng để định danh)</label>
+            <input value={form._id} onChange={e => setForm(f => ({ ...f, _id: e.target.value.toLowerCase() }))}
+              placeholder="vd: truongnhom_xn" className="w-full border rounded px-3 py-2 text-sm font-mono" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Tên hiển thị *</label>
+            <input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+              placeholder="Trưởng nhóm XN" className="w-full border rounded px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Phạm vi</label>
+            <select value={form.scope} onChange={e => setForm(f => ({ ...f, scope: e.target.value }))}
+              className="w-full border rounded px-3 py-2 text-sm">
+              <option value="group">Tập đoàn (áp dụng mọi chi nhánh)</option>
+              <option value="site">Chi nhánh (gán riêng theo từng cơ sở)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Mô tả</label>
+            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              rows={2} className="w-full border rounded px-3 py-2 text-sm" />
+          </div>
+          <p className="text-xs text-gray-400">Sau khi tạo, quay về ma trận để tick các quyền cần thiết.</p>
+        </div>
+        <div className="px-5 py-3 border-t flex justify-end gap-2">
+          <button onClick={onClose} className="text-sm text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded">Hủy</button>
+          <button onClick={submit} disabled={saving}
+            className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50">
+            {saving ? 'Đang tạo…' : 'Tạo vai trò'}
+          </button>
+        </div>
       </div>
     </div>
   )

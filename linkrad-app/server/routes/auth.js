@@ -25,6 +25,46 @@ const verify = (token) => {
   } catch { return null }
 }
 
+// Compute effective permissions + sites for a user by unioning permissions from
+// the legacy `role` field and every entry in `assignments[]`. Group-scope roles
+// grant their perms everywhere; site-scope roles grant their perms only at that
+// siteId (but the union here is the full set — route-level code enforces site).
+async function computeEffective(user) {
+  const roleIds = new Set()
+  if (user.role) roleIds.add(user.role)
+  ;(user.assignments || []).forEach(a => { if (a?.roleId) roleIds.add(a.roleId) })
+  const roles = await RolePermission.find({ _id: { $in: [...roleIds] } }).lean()
+  const permissions = new Set()
+  const groupPerms = new Set() // perms granted everywhere (from group-scope roles)
+  const sitePerms = {} // { siteId: Set<permKey> }
+  for (const r of roles) {
+    const myScope = r.scope || 'group'
+    // For the legacy `role` field or group-scope assignment, perms apply everywhere
+    const appliesEverywhere =
+      r._id === user.role || (user.assignments || []).some(a => a.roleId === r._id && (!a.siteId || myScope === 'group'))
+    if (appliesEverywhere) {
+      for (const p of r.permissions || []) { permissions.add(p); groupPerms.add(p) }
+    }
+    // For each site-scope assignment at a specific siteId, track perms per site
+    for (const a of user.assignments || []) {
+      if (a.roleId === r._id && a.siteId) {
+        sitePerms[a.siteId] = sitePerms[a.siteId] || new Set()
+        for (const p of r.permissions || []) { permissions.add(p); sitePerms[a.siteId].add(p) }
+      }
+    }
+  }
+  // Union of all sites the user has any site-scope role at + their primary department
+  const sites = new Set()
+  if (user.department) sites.add(user.department)
+  Object.keys(sitePerms).forEach(s => sites.add(s))
+  return {
+    permissions: [...permissions],
+    groupPerms: [...groupPerms],
+    sitePerms: Object.fromEntries(Object.entries(sitePerms).map(([k, v]) => [k, [...v]])),
+    sites: [...sites],
+  }
+}
+
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body
@@ -32,15 +72,16 @@ router.post('/login', async (req, res) => {
     if (!user || user.password !== password) {
       return res.status(401).json({ error: 'Sai tên đăng nhập hoặc mật khẩu' })
     }
-    // Load role permissions
-    const rolePerm = await RolePermission.findById(user.role).lean()
-    const permissions = rolePerm ? rolePerm.permissions : []
+    const eff = await computeEffective(user)
     const session = {
       username, role: user.role,
       department: user.department || null,
       departmentId: user.departmentId || null,
       displayName: user.displayName || username,
-      permissions,
+      assignments: user.assignments || [],
+      permissions: eff.permissions,
+      sites: eff.sites,
+      sitePerms: eff.sitePerms,
     }
     const token = sign(session)
     res.json({ token, ...session })
@@ -92,4 +133,4 @@ router.get('/users', async (req, res) => {
   }
 })
 
-module.exports = { router, sign, verify }
+module.exports = { router, sign, verify, computeEffective }

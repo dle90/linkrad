@@ -3,7 +3,16 @@ const mongoose = require('mongoose')
 const userSchema = new mongoose.Schema({
   _id: String,          // username / mã nhân viên
   password: String,
-  role: String,         // chức vụ
+  role: String,         // legacy primary role (admin, giamdoc, truongphong, bacsi, nhanvien, guest)
+  // Multi-role assignments — each entry is a functional role.
+  // siteId is null for group-scope roles, set to a specific site for site-scope roles.
+  assignments: {
+    type: [{
+      roleId: { type: String, required: true },
+      siteId: { type: String, default: null },
+    }],
+    default: [],
+  },
   employeeType: String, // loại hình HV (full_time, part_time, contract, intern)
   department: String,
   departmentId: String,

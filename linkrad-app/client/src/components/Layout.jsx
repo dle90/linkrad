@@ -110,21 +110,21 @@ const NAV = [
   {
     group: 'Quản lý',
     items: [
-      { path: '/hr/employees',   label: 'DS nhân viên',     icon: '👤', adminOnly: true },
-      { path: '/hr/departments', label: 'Phòng ban / CN',   icon: '🏢', adminOnly: true },
-      { path: '/hr/permissions', label: 'Ma trận quyền',    icon: '🔐', adminOnly: true },
-      { path: '/audit-log',      label: 'Nhật ký hệ thống', icon: '📜', adminOnly: true },
+      { path: '/hr/employees',   label: 'DS nhân viên',     icon: '👤', perm: 'hr.view' },
+      { path: '/hr/departments', label: 'Phòng ban / CN',   icon: '🏢', perm: 'hr.manage' },
+      { path: '/hr/permissions', label: 'Ma trận quyền',    icon: '🔐', perm: 'system.admin' },
+      { path: '/audit-log',      label: 'Nhật ký hệ thống', icon: '📜', perm: 'system.admin' },
     ]
   },
   {
     group: 'Tài chính',
-    financialsOnly: true,
+    perm: 'financials.view',
     items: [
-      { path: '/actuals',   label: 'Nhập số liệu',          icon: '✏️', adminOnly: true },
-      { path: '/pl',        label: 'Kết quả kinh doanh',    icon: '📋' },
-      { path: '/cf',        label: 'Dòng tiền',             icon: '💰' },
-      { path: '/bs',        label: 'Bảng cân đối kế toán',  icon: '⚖️' },
-      { path: '/breakeven', label: 'Điểm hòa vốn',          icon: '📈' }
+      { path: '/actuals',   label: 'Nhập số liệu',          icon: '✏️', perm: 'financials.manage' },
+      { path: '/pl',        label: 'Kết quả kinh doanh',    icon: '📋', perm: 'financials.view' },
+      { path: '/cf',        label: 'Dòng tiền',             icon: '💰', perm: 'financials.view' },
+      { path: '/bs',        label: 'Bảng cân đối kế toán',  icon: '⚖️', perm: 'financials.view' },
+      { path: '/breakeven', label: 'Điểm hòa vốn',          icon: '📈', perm: 'financials.view' },
     ]
   },
   {
@@ -162,14 +162,16 @@ const ROLE_LABELS = {
 }
 
 export default function Layout({ children }) {
-  const { auth, logout } = useAuth()
+  const { auth, logout, hasPerm } = useAuth()
   const isAdmin = auth?.role === 'admin'
-  const isFinancialsUser = auth?.role === 'admin' || auth?.role === 'giamdoc'
+  // Legacy flags kept as fallback for items that haven't migrated to `perm` yet.
+  const isFinancialsUser = hasPerm('financials.view') || auth?.role === 'giamdoc'
   const isWorkflowUser = auth?.role && auth.role !== 'guest'
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
   const [collapsed, setCollapsed] = React.useState({})
   const toggleSub = (key) => setCollapsed(c => ({ ...c, [key]: !c[key] }))
   const filterItems = (items) => items.filter(item => {
+    if (item.perm && !hasPerm(item.perm)) return false
     if (item.adminOnly && !isAdmin) return false
     if (item.financialsOnly && !isFinancialsUser) return false
     if (item.workflowOnly && !isWorkflowUser) return false
@@ -212,6 +214,7 @@ export default function Layout({ children }) {
         <nav className="flex-1 py-4">
           {NAV.map((section) => {
             if (section.financialsOnly && !isFinancialsUser) return null
+            if (section.perm && !hasPerm(section.perm)) return null
 
             if (section.subgroups) {
               const visibleSubs = section.subgroups

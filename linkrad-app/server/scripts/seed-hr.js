@@ -9,7 +9,7 @@ const Department = require('../models/Department')
 const Employee = require('../models/Employee')
 const RolePermission = require('../models/RolePermission')
 const User = require('../models/User')
-const { DEFAULT_ROLE_PERMISSIONS } = require('../shared/permissions')
+const { ROLE_CATALOG } = require('../shared/permissions')
 
 const now = () => new Date().toISOString()
 
@@ -116,29 +116,23 @@ async function seed() {
   // ═══════════════════════════════════════════════════════
   // ROLE PERMISSIONS
   // ═══════════════════════════════════════════════════════
-  const roleLabels = {
-    admin: 'Admin',
-    giamdoc: 'Giám đốc',
-    truongphong: 'Trưởng phòng',
-    nhanvien: 'Nhân viên',
-    bacsi: 'Bác sĩ',
-    guest: 'Khách',
-  }
-
-  for (const [role, perms] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
-    await RolePermission.findByIdAndUpdate(role, {
-      _id: role,
-      label: roleLabels[role] || role,
-      description: '',
-      permissions: perms,
+  for (const [roleId, cfg] of Object.entries(ROLE_CATALOG)) {
+    await RolePermission.findByIdAndUpdate(roleId, {
+      _id: roleId,
+      label: cfg.label,
+      description: cfg.description || '',
+      scope: cfg.scope || 'group',
+      permissions: cfg.permissions || [],
+      isSystem: true,
+      createdAt: now(),
       updatedAt: now(),
     }, { upsert: true })
   }
-  console.log(`✓ ${Object.keys(DEFAULT_ROLE_PERMISSIONS).length} vai trò với quyền mặc định`)
+  console.log(`✓ ${Object.keys(ROLE_CATALOG).length} vai trò (system roles seeded)`)
 
   // ═══════════════════════════════════════════════════════
   console.log('\n✅ Seed HR data hoàn tất!')
-  console.log(`\n📋 Tổng: ${departments.length} phòng ban, ${empIdx} nhân viên, ${Object.keys(DEFAULT_ROLE_PERMISSIONS).length} vai trò`)
+  console.log(`\n📋 Tổng: ${departments.length} phòng ban, ${empIdx} nhân viên, ${Object.keys(ROLE_CATALOG).length} vai trò`)
   process.exit(0)
 }
 

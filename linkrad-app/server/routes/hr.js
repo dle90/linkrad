@@ -156,15 +156,69 @@ router.get('/roles', async (req, res) => {
 
 router.put('/roles/:roleId', requirePermission('system.admin'), async (req, res) => {
   try {
-    const { permissions, label, description } = req.body
+    const { permissions, label, description, scope } = req.body
     const update = { updatedAt: now() }
     if (permissions !== undefined) update.permissions = permissions
     if (label !== undefined) update.label = label
     if (description !== undefined) update.description = description
+    if (scope !== undefined && ['group', 'site'].includes(scope)) update.scope = scope
 
     const role = await RolePermission.findByIdAndUpdate(req.params.roleId, update, { new: true })
     if (!role) return res.status(404).json({ error: 'Không tìm thấy vai trò' })
     res.json({ ok: true, role })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /hr/roles — create a new custom role
+router.post('/roles', requirePermission('system.admin'), async (req, res) => {
+  try {
+    const { _id, label, description, scope, permissions } = req.body
+    if (!_id || !label) return res.status(400).json({ error: 'Mã vai trò và tên hiển thị là bắt buộc' })
+    if (!/^[a-z0-9_]+$/.test(_id)) return res.status(400).json({ error: 'Mã vai trò chỉ cho phép chữ thường, số và _' })
+    const existing = await RolePermission.findById(_id).lean()
+    if (existing) return res.status(400).json({ error: 'Mã vai trò đã tồn tại' })
+    const role = new RolePermission({
+      _id, label, description: description || '',
+      scope: scope === 'site' ? 'site' : 'group',
+      permissions: Array.isArray(permissions) ? permissions : [],
+      isSystem: false,
+      createdAt: now(), updatedAt: now(),
+    })
+    await role.save()
+    res.status(201).json({ ok: true, role: role.toObject() })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /hr/roles/:roleId — delete a custom (non-system) role
+router.delete('/roles/:roleId', requirePermission('system.admin'), async (req, res) => {
+  try {
+    const role = await RolePermission.findById(req.params.roleId).lean()
+    if (!role) return res.status(404).json({ error: 'Không tìm thấy vai trò' })
+    if (role.isSystem) return res.status(400).json({ error: 'Không thể xóa vai trò hệ thống' })
+    // Refuse delete if any user still has this role assigned
+    const inUse = await User.countDocuments({
+      $or: [{ role: role._id }, { 'assignments.roleId': role._id }],
+    })
+    if (inUse > 0) return res.status(400).json({ error: `Vai trò đang được gán cho ${inUse} nhân viên — gỡ gán trước khi xóa` })
+    await RolePermission.findByIdAndDelete(role._id)
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// PUT /hr/users/:id/assignments — admin/HR can update a user's functional-role assignments
+router.put('/users/:id/assignments', requirePermission('hr.manage'), async (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body.assignments) ? req.body.assignments : []
+    const cleaned = incoming
+      .filter(a => a && typeof a.roleId === 'string' && a.roleId.trim())
+      .map(a => ({ roleId: a.roleId.trim(), siteId: a.siteId || null }))
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: { assignments: cleaned } },
+      { new: true },
+    ).select('-password').lean()
+    if (!user) return res.status(404).json({ error: 'Không tìm thấy nhân viên' })
+    res.json({ ok: true, user })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
