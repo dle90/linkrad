@@ -64,13 +64,19 @@ router.get('/patients/:id', requireAuth, async (req, res) => {
 // POST /his/patients
 router.post('/patients', requireAuth, async (req, res) => {
   try {
-    const { name, dob, gender, phone, address, idCard, insuranceNumber, notes } = req.body
+    const {
+      name, dob, gender, phone, address, idCard, insuranceNumber, notes,
+      sourceCode, sourceName, referralType, referralId, referralName,
+    } = req.body
     if (!name) return res.status(400).json({ error: 'name required' })
     const id = genPatientId()
     const patient = new Patient({
       _id: id,
       patientId: id,
       name, dob, gender, phone, address, idCard, insuranceNumber, notes,
+      sourceCode, sourceName,
+      referralType: referralType || '',
+      referralId, referralName,
       registeredSite: req.user.department || '',
       createdAt: now(),
       updatedAt: now(),
@@ -85,7 +91,10 @@ router.post('/patients', requireAuth, async (req, res) => {
 // PUT /his/patients/:id
 router.put('/patients/:id', requireAuth, async (req, res) => {
   try {
-    const allowed = ['name', 'dob', 'gender', 'phone', 'address', 'idCard', 'insuranceNumber', 'notes']
+    const allowed = [
+      'name', 'dob', 'gender', 'phone', 'address', 'idCard', 'insuranceNumber', 'notes',
+      'sourceCode', 'sourceName', 'referralType', 'referralId', 'referralName',
+    ]
     const update = {}
     allowed.forEach(k => { if (req.body[k] !== undefined) update[k] = req.body[k] })
     update.updatedAt = now()
@@ -136,6 +145,7 @@ router.post('/appointments', requireAuth, async (req, res) => {
       patientId, patientName, dob, gender, phone,
       site, modality, room, scheduledAt, duration,
       referringDoctor, clinicalInfo, notes,
+      sourceCode, sourceName, referralType, referralId, referralName,
     } = req.body
     if (!site || !modality || !scheduledAt) {
       return res.status(400).json({ error: 'site, modality, scheduledAt required' })
@@ -148,6 +158,9 @@ router.post('/appointments', requireAuth, async (req, res) => {
       duration: duration || 30,
       status: 'scheduled',
       referringDoctor, clinicalInfo, notes,
+      sourceCode, sourceName,
+      referralType: referralType || '',
+      referralId, referralName,
       createdBy: req.user.username,
       createdAt: now(),
       updatedAt: now(),
@@ -165,6 +178,7 @@ router.put('/appointments/:id', requireAuth, async (req, res) => {
     const allowed = [
       'status', 'scheduledAt', 'room', 'duration', 'modality',
       'referringDoctor', 'clinicalInfo', 'notes', 'site',
+      'sourceCode', 'sourceName', 'referralType', 'referralId', 'referralName',
     ]
     const update = {}
     allowed.forEach(k => { if (req.body[k] !== undefined) update[k] = req.body[k] })

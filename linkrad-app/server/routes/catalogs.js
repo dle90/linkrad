@@ -17,6 +17,7 @@ const TaxGroup = require('../models/TaxGroup')
 const AdminUnit = require('../models/AdminUnit')
 const User = require('../models/User')
 const Patient = require('../models/Patient')
+const CustomerSource = require('../models/CustomerSource')
 
 const now = () => new Date().toISOString()
 
@@ -85,6 +86,27 @@ catalogCRUD(BillingCancelReason, 'billing-cancel-reasons')
 catalogCRUD(MedicalFacility, 'medical-facilities')
 catalogCRUD(TaxGroup, 'tax-groups')
 catalogCRUD(AdminUnit, 'admin-units')
+
+// customer-sources: seed 3 defaults on first GET so the Registration dropdown is never empty
+const DEFAULT_CUSTOMER_SOURCES = [
+  { code: 'TUDEN',    name: 'Tự đến',           requiresReferralPartner: false },
+  { code: 'ONLMKT',   name: 'Online Marketing', requiresReferralPartner: false },
+  { code: 'GIOITHIEU',name: 'Được giới thiệu',  requiresReferralPartner: true  },
+]
+router.get('/customer-sources', requireAuth, async (req, res) => {
+  try {
+    let items = await CustomerSource.find({}).sort({ name: 1 }).lean()
+    if (items.length === 0) {
+      const ts = now()
+      await CustomerSource.insertMany(DEFAULT_CUSTOMER_SOURCES.map((s, i) => ({
+        ...s, _id: `CUSTOMER-SOURCES-SEED-${i}`, status: 'active', createdAt: ts, updatedAt: ts,
+      })))
+      items = await CustomerSource.find({}).sort({ name: 1 }).lean()
+    }
+    res.json(items)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+catalogCRUD(CustomerSource, 'customer-sources')
 
 // ── Public services endpoint (for booking form) ──────────
 router.get('/services/public', async (req, res) => {

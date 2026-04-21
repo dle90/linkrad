@@ -18,6 +18,12 @@ const appointmentSchema = new mongoose.Schema({
     default: 'scheduled',
   },
   referringDoctor: String,
+  // Referral source attribution — captured at registration, used for revenue/KPI rollup.
+  sourceCode: String,
+  sourceName: String,
+  referralType: { type: String, enum: ['doctor', 'facility', 'salesperson', ''], default: '' },
+  referralId: String,
+  referralName: String,
   clinicalInfo: String,
   notes: String,
   studyId: String,            // linked RIS study (set when appointment → in_progress)

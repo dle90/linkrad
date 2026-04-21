@@ -10,6 +10,7 @@ const MENU = [
   {
     group: 'Danh mục đối tác',
     items: [
+      { key: 'customer-sources', label: 'Nguồn khách hàng', icon: '📥' },
       { key: 'referral-doctors', label: 'Bác sĩ giới thiệu', icon: '👨‍⚕️' },
       { key: 'partner-facilities', label: 'Cơ sở y tế đối tác', icon: '🏥' },
       { key: 'commission-groups', label: 'Nhóm hoa hồng', icon: '📋' },
@@ -37,6 +38,16 @@ const MENU = [
 
 // ── Field definitions per catalog ────────────────────────
 const CATALOG_FIELDS = {
+  'customer-sources': {
+    columns: ['code', 'name', 'requiresReferralPartner', 'status'],
+    columnLabels: { code: 'Mã', name: 'Tên nguồn', requiresReferralPartner: 'Cần đối tác giới thiệu?', status: 'TT' },
+    editFields: [
+      { key: 'code', label: 'Mã' },
+      { key: 'name', label: 'Tên nguồn', required: true },
+      { key: 'requiresReferralPartner', label: 'Cần đối tác giới thiệu?', type: 'boolean' },
+    ],
+    formatCell: { requiresReferralPartner: v => v ? 'Có' : 'Không' },
+  },
   'referral-doctors': {
     columns: ['code', 'name', 'phone', 'email', 'idCard', 'address', 'gender', 'dob', 'specialty', 'workplace', 'area', 'paymentMethod', 'bankAccount', 'bankName', 'assignedStaff', 'firstReferralDate', 'contractDate', 'notes'],
     columnLabels: { code: 'Mã', name: 'Tên', phone: 'Số điện thoại', email: 'Email', idCard: 'Số CCCD', address: 'Địa chỉ', gender: 'Giới tính', dob: 'Ngày sinh', specialty: 'Chuyên khoa', workplace: 'Nơi làm việc', area: 'Địa bàn', paymentMethod: 'Hình thức thanh toán', bankAccount: 'STK', bankName: 'Ngân hàng', assignedStaff: 'Nhân viên theo dõi', firstReferralDate: 'Ngày gửi đầu tiên', contractDate: 'Ngày hợp đồng', notes: 'Ghi chú' },
@@ -50,7 +61,7 @@ const CATALOG_FIELDS = {
       { key: 'area', label: 'Địa bàn' },
       { key: 'paymentMethod', label: 'Hình thức thanh toán', type: 'select', options: [{ value: 'cash', label: 'Tiền mặt' }, { value: 'transfer', label: 'Chuyển khoản' }, { value: 'both', label: 'Cả hai' }] },
       { key: 'bankAccount', label: 'STK' }, { key: 'bankName', label: 'Ngân hàng' },
-      { key: 'assignedStaff', label: 'Nhân viên theo dõi' },
+      { key: 'assignedStaff', label: 'Nhân viên KD theo dõi', type: 'userSelect', userRole: 'sale' },
       { key: 'firstReferralDate', label: 'Ngày gửi đầu tiên', type: 'date' },
       { key: 'contractDate', label: 'Ngày hợp đồng', type: 'date' },
       { key: 'notes', label: 'Ghi chú', wide: true },
@@ -70,7 +81,7 @@ const CATALOG_FIELDS = {
       { key: 'bankAccount', label: 'STK' }, { key: 'bankName', label: 'Ngân hàng' },
       { key: 'firstReferralDate', label: 'Ngày gửi đầu tiên', type: 'date' },
       { key: 'contractDate', label: 'Ngày hợp đồng', type: 'date' },
-      { key: 'assignedStaff', label: 'Người theo dõi' },
+      { key: 'assignedStaff', label: 'Nhân viên KD theo dõi', type: 'userSelect', userRole: 'sale' },
       { key: 'type', label: 'Loại cơ sở', type: 'select', options: [{ value: 'hospital', label: 'Bệnh viện' }, { value: 'clinic', label: 'Phòng khám' }, { value: 'lab', label: 'Xét nghiệm' }, { value: 'other', label: 'Khác' }] },
       { key: 'notes', label: 'Ghi chú', wide: true },
     ],
@@ -178,6 +189,17 @@ function EditModal({ title, fields, record, onClose, onSave }) {
   const [form, setForm] = useState(record || {})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // Async-loaded option lists keyed by role for userSelect fields
+  const [userOptions, setUserOptions] = useState({})
+  const userRoles = [...new Set(fields.filter(f => f.type === 'userSelect').map(f => f.userRole || 'nhanvien'))]
+  useEffect(() => {
+    let cancelled = false
+    Promise.all(userRoles.map(role =>
+      api.get('/catalogs/users', { params: { role } }).then(r => [role, r.data || []]).catch(() => [role, []])
+    )).then(pairs => { if (!cancelled) setUserOptions(Object.fromEntries(pairs)) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRoles.join(',')])
   const handleSave = async () => {
     for (const f of fields) { if (f.required && !form[f.key]?.toString().trim()) return setError(`${f.label} là bắt buộc`) }
     setSaving(true); setError('')
@@ -196,6 +218,21 @@ function EditModal({ title, fields, record, onClose, onSave }) {
                 {f.type === 'select' ? (
                   <select className="w-full border rounded px-2 py-1.5 text-sm" value={form[f.key] || ''} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}>
                     <option value="">-- Chọn --</option>{f.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                ) : f.type === 'boolean' ? (
+                  <select className="w-full border rounded px-2 py-1.5 text-sm"
+                    value={form[f.key] === true ? '1' : form[f.key] === false ? '0' : ''}
+                    onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value === '1' }))}>
+                    <option value="">-- Chọn --</option>
+                    <option value="1">Có</option>
+                    <option value="0">Không</option>
+                  </select>
+                ) : f.type === 'userSelect' ? (
+                  <select className="w-full border rounded px-2 py-1.5 text-sm" value={form[f.key] || ''} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}>
+                    <option value="">-- Chọn --</option>
+                    {(userOptions[f.userRole || 'nhanvien'] || []).map(u => (
+                      <option key={u._id} value={u._id}>{(u.displayName || u._id)}{u.department ? ` — ${u.department}` : ''}</option>
+                    ))}
                   </select>
                 ) : f.type === 'number' ? (
                   <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={form[f.key] || 0} onChange={e => setForm(p => ({ ...p, [f.key]: +e.target.value }))} />

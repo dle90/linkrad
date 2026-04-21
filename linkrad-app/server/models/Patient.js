@@ -15,6 +15,12 @@ const patientSchema = new mongoose.Schema({
   ward: String,               // Phường/Xã
   address: String,
   registeredSite: String,     // site where first registered
+  // Referral source — last-known value on patient; per-visit truth lives on Appointment.
+  sourceCode: String,
+  sourceName: String,
+  referralType: { type: String, enum: ['doctor', 'facility', 'salesperson', ''], default: '' },
+  referralId: String,
+  referralName: String,
   notes: String,
   createdAt: String,
   updatedAt: String,

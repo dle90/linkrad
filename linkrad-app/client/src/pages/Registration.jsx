@@ -5,7 +5,12 @@ import { useAuth } from '../context/AuthContext'
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const GENDERS = { M: 'Nam', F: 'Nữ', other: 'Khác' }
-const SUBJECT_TYPES = ['Tự đến', 'Giới thiệu']
+
+const REFERRAL_TYPES = [
+  { value: 'doctor',      label: 'Bác sĩ giới thiệu' },
+  { value: 'facility',    label: 'Cơ sở giới thiệu' },
+  { value: 'salesperson', label: 'Nhân viên kinh doanh' },
+]
 
 const SERVICE_GROUPS = [
   { code: 'CDHA', name: 'Chẩn đoán hình ảnh' },
@@ -167,7 +172,9 @@ function RegistrationForm({ patient, onSave, onClear }) {
   const emptyForm = {
     name: '', dob: '', gender: 'M', phone: '', address: '', idCard: '',
     insuranceNumber: '', notes: '', email: '', contact: '',
-    subjectType: 'Tự đến', partner: '', clinicalInfo: '',
+    sourceCode: '', sourceName: '',
+    referralType: '', referralId: '', referralName: '',
+    clinicalInfo: '',
     city: '', ward: '', street: '', _addrShortcut: '',
   }
 
@@ -176,6 +183,36 @@ function RegistrationForm({ patient, onSave, onClear }) {
   const [err, setErr] = useState('')
   const [regDate] = useState(todayISO())
   const [regTime] = useState(nowTime())
+  const [sources, setSources] = useState([])
+  const [referralOptions, setReferralOptions] = useState({ doctor: [], facility: [], salesperson: [] })
+
+  // Load customer sources (server auto-seeds 3 defaults on first read)
+  useEffect(() => {
+    api.get('/catalogs/customer-sources').then(r => setSources(r.data || [])).catch(() => setSources([]))
+  }, [])
+
+  // Load referral entity lists (lazy per type)
+  const loadReferralOptions = useCallback(async (type) => {
+    if (!type || referralOptions[type]?.length) return
+    try {
+      if (type === 'doctor') {
+        const r = await api.get('/catalogs/referral-doctors', { params: { status: 'active' } })
+        setReferralOptions(o => ({ ...o, doctor: r.data || [] }))
+      } else if (type === 'facility') {
+        const r = await api.get('/catalogs/partner-facilities', { params: { status: 'active' } })
+        setReferralOptions(o => ({ ...o, facility: r.data || [] }))
+      } else if (type === 'salesperson') {
+        const r = await api.get('/catalogs/users', { params: { role: 'sale' } })
+        setReferralOptions(o => ({ ...o, salesperson: r.data || [] }))
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => { if (form.referralType) loadReferralOptions(form.referralType) }, [form.referralType, loadReferralOptions])
+
+  const currentSource = sources.find(s => s.code === form.sourceCode) || null
+  const showReferralPicker = !!currentSource?.requiresReferralPartner
 
   useEffect(() => {
     if (patient) {
@@ -187,8 +224,11 @@ function RegistrationForm({ patient, onSave, onClear }) {
         street: patient.street || '',
         contact: patient.contact || '',
         email: patient.email || '',
-        subjectType: patient.subjectType || 'Tự đến',
-        partner: patient.partner || '',
+        sourceCode: patient.sourceCode || '',
+        sourceName: patient.sourceName || '',
+        referralType: patient.referralType || '',
+        referralId: patient.referralId || '',
+        referralName: patient.referralName || '',
         clinicalInfo: patient.clinicalInfo || '',
       })
     }
@@ -198,6 +238,10 @@ function RegistrationForm({ patient, onSave, onClear }) {
 
   const handleSave = async () => {
     if (!form.name.trim()) { setErr('Họ tên là bắt buộc'); return }
+    if (showReferralPicker && (!form.referralType || !form.referralId)) {
+      setErr('Nguồn "Được giới thiệu" yêu cầu chọn đối tác giới thiệu')
+      return
+    }
     setSaving(true)
     try {
       let saved
@@ -258,16 +302,69 @@ function RegistrationForm({ patient, onSave, onClear }) {
         {/* Left column - Patient info */}
         <div className="flex-1 min-w-0">
           <div className="grid grid-cols-3 gap-x-4 gap-y-2">
-            {/* Row 1 */}
-            <Field label="Đối tượng *">
-              <select value={form.subjectType} onChange={e => set('subjectType', e.target.value)} className={selectCls}>
-                {SUBJECT_TYPES.map(s => <option key={s}>{s}</option>)}
+            {/* Row 1 — Nguồn & referral partner (conditional) */}
+            <Field label="Nguồn *">
+              <select value={form.sourceCode}
+                onChange={e => {
+                  const src = sources.find(s => s.code === e.target.value)
+                  setForm(f => ({
+                    ...f,
+                    sourceCode: e.target.value,
+                    sourceName: src?.name || '',
+                    // Clear referral fields when source no longer requires a partner
+                    referralType: src?.requiresReferralPartner ? f.referralType : '',
+                    referralId:   src?.requiresReferralPartner ? f.referralId : '',
+                    referralName: src?.requiresReferralPartner ? f.referralName : '',
+                  }))
+                  setErr('')
+                }}
+                className={selectCls}>
+                <option value="">-- Chọn --</option>
+                {sources.filter(s => s.status !== 'inactive').map(s => (
+                  <option key={s.code || s._id} value={s.code || s._id}>{s.name}</option>
+                ))}
               </select>
             </Field>
-            <Field label="Đối tác giới thiệu">
-              <input value={form.partner} onChange={e => set('partner', e.target.value)} className={inputCls} />
-            </Field>
-            <div></div>
+            {showReferralPicker ? (
+              <>
+                <Field label="Loại đối tác *">
+                  <select value={form.referralType}
+                    onChange={e => setForm(f => ({ ...f, referralType: e.target.value, referralId: '', referralName: '' }))}
+                    className={selectCls}>
+                    <option value="">-- Chọn --</option>
+                    {REFERRAL_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Đối tác giới thiệu *">
+                  <select value={form.referralId}
+                    onChange={e => {
+                      const list = referralOptions[form.referralType] || []
+                      const picked = list.find(x => (x._id || '') === e.target.value)
+                      setForm(f => ({
+                        ...f,
+                        referralId: e.target.value,
+                        referralName: picked ? (picked.name || picked.displayName || picked._id) : '',
+                      }))
+                    }}
+                    disabled={!form.referralType}
+                    className={selectCls}>
+                    <option value="">-- Chọn --</option>
+                    {(referralOptions[form.referralType] || []).map(x => (
+                      <option key={x._id} value={x._id}>
+                        {(x.name || x.displayName || x._id)}
+                        {x.department ? ` — ${x.department}` : ''}
+                        {x.workplace ? ` — ${x.workplace}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </>
+            ) : (
+              <>
+                <div></div>
+                <div></div>
+              </>
+            )}
 
             {/* Row 2 */}
             <Field label="Ngày đăng ký">
@@ -393,6 +490,12 @@ function ScheduleTab({ patient }) {
         modality: 'US',
         scheduledAt: appointmentDate ? new Date(appointmentDate).toISOString() : new Date().toISOString(),
         notes: note,
+        // Carry referral source from patient so revenue is attributable per visit
+        sourceCode: patient.sourceCode || '',
+        sourceName: patient.sourceName || '',
+        referralType: patient.referralType || '',
+        referralId: patient.referralId || '',
+        referralName: patient.referralName || '',
       })
       setAppointmentNo(res.data._id?.slice(-8)?.toUpperCase() || 'LH-' + Date.now())
       setSaved(true)
