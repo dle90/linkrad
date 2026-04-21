@@ -156,7 +156,7 @@ export default function TeleradReading() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-800">Đọc phim — Của tôi</h1>
+          <h1 className="text-xl font-bold text-gray-800">Ca đọc — Của tôi</h1>
           <p className="text-xs text-gray-400 mt-0.5">BS. {auth.displayName || auth.username} {auth.department ? `— ${auth.department}` : ''}</p>
         </div>
         <div className="flex items-center gap-3">

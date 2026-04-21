@@ -962,7 +962,7 @@ export default function RIS() {
             <div className="flex-1 overflow-y-auto p-4">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h1 className="text-lg font-bold text-gray-800">Hệ thống RIS</h1>
+                  <h1 className="text-lg font-bold text-gray-800">Ca chụp</h1>
                   <p className="text-xs text-gray-400">Double-click hàng để mở ca trong tab mới · ⌘K để tìm</p>
                 </div>
                 <div className="text-xs text-gray-500">

@@ -52,7 +52,7 @@ export default function ReportTemplates() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-gray-800">Mẫu kết quả</h2>
-          <p className="text-sm text-gray-500">Mẫu cá nhân + mẫu chia sẻ. Sử dụng từ trang RIS để điền nhanh.</p>
+          <p className="text-sm text-gray-500">Mẫu cá nhân + mẫu chia sẻ. Sử dụng từ trang Ca đọc — Của tôi để điền nhanh.</p>
         </div>
         <button onClick={() => setEditing({ ...blank })} className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg">
           + Tạo mẫu mới

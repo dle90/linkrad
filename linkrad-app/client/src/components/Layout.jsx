@@ -15,26 +15,25 @@ const NAV = [
     ]
   },
   {
-    group: 'Lâm sàng',
+    group: 'Tiếp đón',
     items: [
-      { path: '/registration',     label: 'Đăng ký',     icon: '🏥', workflowOnly: true },
-      { path: '/ris',              label: 'RIS',         icon: '🩻', workflowOnly: true },
-      { path: '/report-templates', label: 'Mẫu kết quả', icon: '📋', workflowOnly: true },
+      { path: '/registration', label: 'Đăng ký',   icon: '🏥', workflowOnly: true },
+      { path: '/billing',      label: 'Phiếu thu', icon: '💳', workflowOnly: true },
     ]
   },
   {
     group: 'Chẩn đoán hình ảnh',
     items: [
-      { path: '/teleradiology',   label: 'Đọc phim',           icon: '🖥️', workflowOnly: true },
-      { path: '/telerad-reading', label: 'Đọc phim — Của tôi', icon: '🔬', workflowOnly: true },
-      { path: '/telerad-admin',   label: 'Đọc phim — Quản lý', icon: '📋', adminOnly: true },
+      { path: '/ris',             label: 'Ca chụp',             icon: '🩻', workflowOnly: true },
+      { path: '/teleradiology',   label: 'Ca đọc',              icon: '🖥️', workflowOnly: true },
+      { path: '/telerad-reading', label: 'Ca đọc — Của tôi',    icon: '🔬', workflowOnly: true },
+      { path: '/telerad-admin',   label: 'Ca đọc — Phân công',  icon: '📋', adminOnly: true },
     ]
   },
   {
     group: 'Vận hành',
     items: [
       { path: '/workflow',  label: 'Công việc',   icon: '✅', workflowOnly: true },
-      { path: '/billing',   label: 'Phiếu thu',   icon: '💳', workflowOnly: true },
       { path: '/inventory', label: 'Quản lý kho', icon: '📦', workflowOnly: true },
     ]
   },
@@ -72,6 +71,7 @@ const NAV = [
         items: [
           { path: '/catalogs/users',                  label: 'Nhân sự',            icon: '👤', workflowOnly: true },
           { path: '/catalogs/patients',               label: 'Bệnh nhân',          icon: '🧑', workflowOnly: true },
+          { path: '/report-templates',                label: 'Mẫu kết quả',        icon: '📋', workflowOnly: true },
           { path: '/catalogs/registration-reasons',   label: 'Lý do ĐK',           icon: '📝', workflowOnly: true },
           { path: '/catalogs/billing-cancel-reasons', label: 'Lý do huỷ PT',       icon: '❌', workflowOnly: true },
           { path: '/catalogs/admin-units',            label: 'Địa chỉ hành chính', icon: '📍', workflowOnly: true },
