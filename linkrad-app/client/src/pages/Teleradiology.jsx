@@ -13,117 +13,28 @@ const fmtDateTime = (iso) => {
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
-// ─── Service Tree (Left Panel) ────────────────────────────────────────────────
+// ─── Image Viewer Button ──────────────────────────────────────────────────────
 
-function ServiceTree({ studies, sites, selected, onSelect }) {
-  const [expanded, setExpanded] = useState({})
-
-  // Build tree: modality → site combinations
-  const tree = useMemo(() => {
-    // Get unique modalities from studies
-    const modalities = ['US', 'MR', 'CT', 'CR', 'XQ', 'MG', 'DX']
-
-    return modalities.map(mod => {
-      // Find all sites that have studies with this modality
-      const siteSet = new Map()
-      studies.forEach(s => {
-        if (s.modality === mod || (mod === 'MR' && s.modality === 'MRI') || (mod === 'XQ' && s.modality === 'XR')) {
-          const siteName = s.site || 'Chưa phân'
-          if (!siteSet.has(siteName)) {
-            siteSet.set(siteName, { name: siteName, count: 0 })
-          }
-          siteSet.get(siteName).count++
-        }
-      })
-
-      // Also add sites from sites list even if no studies yet
-      sites.forEach(siteName => {
-        if (!siteSet.has(siteName)) {
-          siteSet.set(siteName, { name: siteName, count: 0 })
-        }
-      })
-
-      const children = Array.from(siteSet.values()).sort((a, b) => a.name.localeCompare(b.name))
-      const totalCount = children.reduce((s, c) => s + c.count, 0)
-
-      return {
-        modality: mod,
-        children,
-        count: totalCount,
-      }
-    }).filter(m => m.children.length > 0 || m.count > 0)
-  }, [studies, sites])
-
-  const totalAll = studies.length
-
-  const toggle = (mod) => {
-    setExpanded(prev => ({ ...prev, [mod]: !prev[mod] }))
+function ViewImagesButton({ studyUID, imageStatus, imageCount }) {
+  const [opening, setOpening] = useState(false)
+  if (imageStatus !== 'available' || !studyUID) {
+    return <span className="text-xs text-gray-400">—</span>
   }
-
-  const isSelected = (key) => selected === key
-
+  const open = async (e) => {
+    e.stopPropagation()
+    setOpening(true)
+    try {
+      const res = await api.get(`/ris/orthanc/viewer-url/${encodeURIComponent(studyUID)}`)
+      window.open(res.data.url, '_blank', 'noopener,noreferrer')
+    } catch {
+      alert('Không mở được trình xem ảnh')
+    } finally { setOpening(false) }
+  }
   return (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200">
-      {/* Header */}
-      <div className="px-3 py-2.5 border-b border-gray-200 bg-gray-50">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Danh sách máy</h3>
-      </div>
-
-      {/* Tree */}
-      <div className="flex-1 overflow-y-auto text-sm">
-        {/* Toàn bộ */}
-        <button
-          onClick={() => onSelect('all')}
-          className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
-            isSelected('all') ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-xs">▸</span>
-            <span className="font-medium">Toàn bộ</span>
-          </div>
-          {totalAll > 0 && <span className="text-xs text-gray-400">{totalAll}</span>}
-        </button>
-
-        {/* Modality groups */}
-        {tree.map(group => (
-          <div key={group.modality}>
-            {/* Modality header */}
-            <button
-              onClick={() => toggle(group.modality)}
-              className={`w-full text-left px-3 py-1.5 flex items-center justify-between transition-colors ${
-                isSelected(`mod:${group.modality}`) ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400 w-3">{expanded[group.modality] ? '▾' : '▸'}</span>
-                <span className="font-medium">{group.modality}</span>
-              </div>
-              {group.count > 0 && <span className="text-xs text-gray-400">{group.count}</span>}
-            </button>
-
-            {/* Site children */}
-            {expanded[group.modality] && group.children.map(site => {
-              const key = `${group.modality}:${site.name}`
-              return (
-                <button
-                  key={key}
-                  onClick={() => onSelect(key)}
-                  className={`w-full text-left pl-8 pr-3 py-1.5 flex items-center justify-between transition-colors text-xs ${
-                    isSelected(key)
-                      ? 'bg-blue-50 text-blue-700 font-medium'
-                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                  }`}
-                >
-                  <span className="truncate">{group.modality} {site.name}</span>
-                  {site.count > 0 && <span className="text-gray-400 flex-shrink-0 ml-1">{site.count}</span>}
-                </button>
-              )
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
+    <button onClick={open} disabled={opening}
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white transition-colors whitespace-nowrap">
+      {opening ? '...' : `Xem ảnh${imageCount ? ` (${imageCount})` : ''}`}
+    </button>
   )
 }
 
@@ -322,51 +233,54 @@ function StudyDetail({ study, onBack, onRefresh }) {
 
 // ─── Study List (Right Panel) ─────────────────────────────────────────────────
 
-function StudyList({ studies, filter, onRefresh }) {
+function StudyList({ studies, onRefresh }) {
   const [dateFrom, setDateFrom] = useState(todayISO())
   const [dateTo, setDateTo] = useState(todayISO())
+  const [modalityFilter, setModalityFilter] = useState('')
+  const [siteFilter, setSiteFilter] = useState('')
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(10)
-  const [reportStudy, setReportStudy] = useState(null)
 
-  // Filter by tree selection + date
+  const siteOptions = useMemo(
+    () => Array.from(new Set(studies.map(s => s.site).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [studies]
+  )
+
   const filtered = useMemo(() => {
     return studies.filter(s => {
-      // Tree filter
-      if (filter && filter !== 'all') {
-        if (filter.includes(':')) {
-          const [mod, site] = filter.split(':')
-          const sMod = s.modality === 'MRI' ? 'MR' : s.modality === 'XR' ? 'XQ' : s.modality
-          if (sMod !== mod) return false
-          if ((s.site || 'Chưa phân') !== site) return false
-        }
-      }
-      // Date filter
+      if (modalityFilter && s.modality !== modalityFilter) return false
+      if (siteFilter && s.site !== siteFilter) return false
       const d = (s.appointmentTime || s.createdAt || '').slice(0, 10)
       if (dateFrom && d && d < dateFrom) return false
       if (dateTo && d && d > dateTo) return false
       return true
     })
-  }, [studies, filter, dateFrom, dateTo])
+  }, [studies, modalityFilter, siteFilter, dateFrom, dateTo])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const paged = filtered.slice(page * pageSize, (page + 1) * pageSize)
 
-  useEffect(() => { setPage(0) }, [filter, dateFrom, dateTo])
-
-  // Title based on filter
-  const title = !filter || filter === 'all'
-    ? 'Toàn bộ'
-    : filter.includes(':')
-      ? filter
-      : filter
+  useEffect(() => { setPage(0) }, [modalityFilter, siteFilter, dateFrom, dateTo])
 
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center gap-3 flex-shrink-0">
-        <span className="text-sm text-gray-600">Hiển thị {filtered.length} trên tổng số {studies.length} ca</span>
-        <div className="ml-auto flex items-center gap-2 text-sm text-gray-600">
+      <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center gap-3 flex-shrink-0 flex-wrap">
+        <span className="text-sm text-gray-600">Hiển thị {filtered.length} / {studies.length} ca</span>
+        <div className="ml-auto flex items-center gap-2 text-sm text-gray-600 flex-wrap">
+          <select value={modalityFilter} onChange={e => setModalityFilter(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-blue-400">
+            <option value="">Loại máy: tất cả</option>
+            <option value="CT">CT</option>
+            <option value="MRI">MRI</option>
+            <option value="XR">X-Ray</option>
+            <option value="US">Siêu âm</option>
+          </select>
+          <select value={siteFilter} onChange={e => setSiteFilter(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-blue-400">
+            <option value="">Cơ sở: tất cả</option>
+            {siteOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
           <span>Ngày chụp:</span>
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
             className="border border-gray-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-blue-400" />
@@ -383,14 +297,14 @@ function StudyList({ studies, filter, onRefresh }) {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
             <tr>
-              {['Mã bệnh nhân', 'Tên bệnh nhân', 'Bác sĩ chỉ định', 'Trạng thái ca', 'Ngày chụp', 'Ngày đọc', 'Bác sĩ đọc', 'Chỉ định', 'Giới tính'].map(h => (
+              {['Mã BN', 'Tên bệnh nhân', 'Loại máy', 'Cơ sở', 'BS chỉ định', 'Trạng thái', 'Ngày chụp', 'Ngày đọc', 'BS đọc', 'Chỉ định', 'Giới tính', 'Ảnh'].map(h => (
                 <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {paged.length === 0 ? (
-              <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400 text-sm">Không có dữ liệu</td></tr>
+              <tr><td colSpan={12} className="px-4 py-10 text-center text-gray-400 text-sm">Không có dữ liệu</td></tr>
             ) : paged.map((s, i) => (
               <tr key={s._id} onDoubleClick={() => window.open(`/teleradiology/study/${s._id}`, '_blank')}
                 className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors cursor-pointer`}>
@@ -398,7 +312,11 @@ function StudyList({ studies, filter, onRefresh }) {
                 <td className="px-3 py-2.5">
                   <span className="font-medium text-gray-800">{s.patientName || '—'}</span>
                 </td>
-                <td className="px-3 py-2.5 text-xs text-gray-500">{s.referringDoctor || s.radiologistName || '—'}</td>
+                <td className="px-3 py-2.5">
+                  <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">{s.modality}</span>
+                </td>
+                <td className="px-3 py-2.5 text-xs text-gray-500">{s.site || '—'}</td>
+                <td className="px-3 py-2.5 text-xs text-gray-500">{s.referringDoctor || '—'}</td>
                 <td className="px-3 py-2.5">
                   <StatusLabel status={s.status} />
                 </td>
@@ -414,6 +332,9 @@ function StudyList({ studies, filter, onRefresh }) {
                 </td>
                 <td className="px-3 py-2.5 text-xs text-gray-500">
                   {s.gender === 'M' ? 'Nam' : s.gender === 'F' ? 'Nữ' : '—'}
+                </td>
+                <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                  <ViewImagesButton studyUID={s.studyUID} imageStatus={s.imageStatus} imageCount={s.imageCount} />
                 </td>
               </tr>
             ))}
@@ -468,48 +389,20 @@ function StatusLabel({ status }) {
 export default function Teleradiology() {
   const { auth } = useAuth()
   const [studies, setStudies] = useState([])
-  const [sites, setSites] = useState([])
   const [loading, setLoading] = useState(true)
-  const [treeFilter, setTreeFilter] = useState('all')
-  const [treeWidth, setTreeWidth] = useState(220)
-  const [dragging, setDragging] = useState(false)
-
-  useEffect(() => { load() }, [])
-
-  // Resize drag handler
-  useEffect(() => {
-    if (!dragging) return
-    const onMove = (e) => {
-      const newWidth = Math.max(140, Math.min(400, e.clientX - (document.querySelector('aside')?.offsetWidth || 0)))
-      setTreeWidth(newWidth)
-    }
-    const onUp = () => setDragging(false)
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-    return () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [dragging])
 
   const load = async () => {
     try {
-      const [studiesRes, sitesRes] = await Promise.all([
-        api.get('/ris/studies'),
-        api.get('/sites'),
-      ])
-      setStudies(studiesRes.data)
-      setSites((sitesRes.data || []).map(s => s.name || s).filter(Boolean))
+      const r = await api.get('/ris/studies')
+      setStudies(r.data)
     } catch (e) {
       console.error('Teleradiology load error:', e)
     } finally {
       setLoading(false)
     }
   }
+
+  useEffect(() => { load() }, [])
 
   if (loading) {
     return (
@@ -523,31 +416,8 @@ export default function Teleradiology() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] -mx-6 -mt-4">
-      {/* Left - Service Tree */}
-      <div className="flex-shrink-0" style={{ width: treeWidth }}>
-        <ServiceTree
-          studies={studies}
-          sites={sites}
-          selected={treeFilter}
-          onSelect={setTreeFilter}
-        />
-      </div>
-
-      {/* Resize handle */}
-      <div
-        onMouseDown={() => setDragging(true)}
-        className={`flex-shrink-0 w-1 cursor-col-resize hover:bg-blue-400 transition-colors ${dragging ? 'bg-blue-400' : 'bg-gray-200'}`}
-      />
-
-      {/* Right - Study List */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white">
-        <StudyList
-          studies={studies}
-          filter={treeFilter}
-          onRefresh={load}
-        />
-      </div>
+    <div className="flex flex-col h-[calc(100vh-8rem)] bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <StudyList studies={studies} onRefresh={load} />
     </div>
   )
 }

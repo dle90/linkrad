@@ -4,12 +4,10 @@ import { useAuth } from '../context/AuthContext'
 import api from '../api'
 import CaseTabBar from '../components/CaseTabBar'
 import PatientDetailView from '../components/PatientDetailView'
-import MWL from './MWL'
 import CriticalFindings from './CriticalFindings'
 
 // System tab IDs (must not collide with study _ids)
 const SYS_WORKLIST = '__worklist__'
-const SYS_MWL      = '__mwl__'
 const SYS_CRITICAL = '__critical__'
 
 // ─── Error Boundary ────────────────────────────────────────────────────────────
@@ -621,6 +619,26 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase }) {
     await updateStudy(study._id, { status: 'reported' })
   }
 
+  const handlePushOne = async (study) => {
+    try {
+      const r = await api.post('/mwl/sync', { studyIds: [study._id] })
+      alert(`✓ Đã đẩy ${r.data.syncedCount || 1} ca tới scanner.`)
+    } catch (e) {
+      alert('✗ Lỗi đẩy: ' + (e.response?.data?.error || e.message))
+    }
+  }
+
+  const handlePushAll = async () => {
+    if (!confirm('Đẩy TOÀN BỘ worklist (scheduled + in_progress) tới scanner?')) return
+    try {
+      const r = await api.post('/mwl/sync', { studyIds: null })
+      alert(`✓ Đã đẩy ${r.data.syncedCount} ca.`)
+      onRefresh()
+    } catch (e) {
+      alert('✗ Lỗi đẩy: ' + (e.response?.data?.error || e.message))
+    }
+  }
+
   const handlePick = async (study) => {
     if (!confirm(`Nhận ca của ${study.patientName}?`)) return
     try {
@@ -640,12 +658,14 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase }) {
       case 'waiting':
         return (
           <div className="flex items-center gap-0.5">
+            <button onClick={() => handlePushOne(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Đẩy ca tới scanner">📡</button>
             <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
           </div>
         )
       case 'in_progress':
         return (
           <div className="flex items-center gap-0.5">
+            <button onClick={() => handlePushOne(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Đẩy lại ca">📡</button>
             <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
           </div>
         )
@@ -737,6 +757,7 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase }) {
         </select>
         <button onClick={onRefresh} className="p-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors" title="Làm mới">⟳</button>
         <button onClick={() => setShowUpload(true)} className="px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium text-gray-600" title="Upload DICOM">&#128194; Upload DICOM</button>
+        <button onClick={handlePushAll} className="px-3 py-1.5 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors text-xs font-medium text-blue-700" title="Đẩy worklist DICOM tới máy chụp">📡 Đẩy worklist</button>
       </div>
 
       {/* Table */}
@@ -846,12 +867,11 @@ export default function RIS() {
   const [activeCaseId, setActiveCaseId] = useState(SYS_WORKLIST)  // SYS_* or study._id
   const [criticalUnread, setCriticalUnread] = useState(0)
 
-  // Pick up ?view=mwl|critical from old route redirects
+  // Pick up ?view=critical from old route redirects
   const [searchParams, setSearchParams] = useSearchParams()
   useEffect(() => {
     const v = searchParams.get('view')
-    if (v === 'mwl')      setActiveCaseId(SYS_MWL)
-    else if (v === 'critical') setActiveCaseId(SYS_CRITICAL)
+    if (v === 'critical') setActiveCaseId(SYS_CRITICAL)
     if (v) {
       // Clear param so it doesn't override later tab clicks
       setSearchParams({}, { replace: true })
@@ -933,12 +953,11 @@ export default function RIS() {
   }
 
   const activeCase = openCases.find(c => c._id === activeCaseId)
-  const isSystemTab = activeCaseId === SYS_WORKLIST || activeCaseId === SYS_MWL || activeCaseId === SYS_CRITICAL
+  const isSystemTab = activeCaseId === SYS_WORKLIST || activeCaseId === SYS_CRITICAL
 
   const systemTabs = [
-    { id: SYS_WORKLIST, label: 'Danh sách ca',       icon: '📋' },
-    { id: SYS_MWL,      label: 'Modality Worklist',  icon: '📡' },
-    { id: SYS_CRITICAL, label: 'Phát hiện nghiêm trọng', icon: '⚠', badge: criticalUnread, badgeColor: 'bg-red-500 text-white' },
+    { id: SYS_WORKLIST, label: 'Danh sách ca',            icon: '📋' },
+    { id: SYS_CRITICAL, label: 'Phát hiện nghiêm trọng',  icon: '⚠', badge: criticalUnread, badgeColor: 'bg-red-500 text-white' },
   ]
 
   return (
@@ -954,8 +973,6 @@ export default function RIS() {
         <ErrorBoundary>
           {activeCase ? (
             <PatientDetailView study={activeCase} onRefresh={load} onOpenCase={openCase} />
-          ) : activeCaseId === SYS_MWL ? (
-            <div className="flex-1 overflow-y-auto p-4"><MWL /></div>
           ) : activeCaseId === SYS_CRITICAL ? (
             <div className="flex-1 overflow-y-auto p-4"><CriticalFindings /></div>
           ) : (

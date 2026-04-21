@@ -21,7 +21,6 @@ const PAGE_LINKS = [
   { label: 'BC Số ca theo bác sĩ đọc', link: '/rad-reports/cases-by-radiologist' },
   { label: 'BC Theo thời gian',        link: '/rad-reports/cases-by-time' },
   { label: 'Mẫu kết quả (Templates)',  link: '/report-templates' },
-  { label: 'Modality Worklist (MWL)',  link: '/ris?view=mwl' },
   { label: 'Nhật ký hệ thống (Audit)', link: '/audit-log' },
   { label: 'Phát hiện nghiêm trọng',   link: '/ris?view=critical' },
   { label: 'CRM',                      link: '/crm' },

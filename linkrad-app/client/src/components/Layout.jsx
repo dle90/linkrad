@@ -24,10 +24,8 @@ const NAV = [
   {
     group: 'Chẩn đoán hình ảnh',
     items: [
-      { path: '/ris',             label: 'Ca chụp',             icon: '🩻', workflowOnly: true },
-      { path: '/teleradiology',   label: 'Ca đọc',              icon: '🖥️', workflowOnly: true },
-      { path: '/telerad-reading', label: 'Ca đọc — Của tôi',    icon: '🔬', workflowOnly: true },
-      { path: '/telerad-admin',   label: 'Ca đọc — Phân công',  icon: '📋', adminOnly: true },
+      { path: '/ris',             label: 'Ca chụp', icon: '🩻', workflowOnly: true },
+      { path: '/teleradiology',   label: 'Ca đọc',  icon: '🖥️', workflowOnly: true },
     ]
   },
   {
@@ -135,6 +133,13 @@ const NAV = [
       { path: '/crm',        label: 'Phân tích KH',  icon: '👥' },
       { path: '/kpi-sales',  label: 'KPI Sales',     icon: '🎯' },
       { path: '/marketing',  label: 'Marketing',     icon: '📣' }
+    ]
+  },
+  {
+    group: 'Inactive',
+    items: [
+      { path: '/telerad-reading', label: 'Ca đọc — Của tôi',   icon: '🔬', workflowOnly: true },
+      { path: '/telerad-admin',   label: 'Ca đọc — Phân công', icon: '📋', adminOnly: true },
     ]
   },
   {

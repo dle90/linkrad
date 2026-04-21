@@ -37,7 +37,6 @@ import DashboardFinance from './pages/DashboardFinance'
 import CriticalFindings from './pages/CriticalFindings'
 import AuditLog from './pages/AuditLog'
 import ReportTemplates from './pages/ReportTemplates'
-import MWL from './pages/MWL'
 
 function AuthenticatedRoutes() {
   const { auth } = useAuth()
