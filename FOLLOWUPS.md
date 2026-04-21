@@ -2,6 +2,20 @@
 
 Known limits and deferred work. Organise by area.
 
+## Phân quyền / multi-role RBAC (commit 54f34fe)
+
+Phase 1 shipped: `User.assignments[]` + `RolePermission.scope`, token embeds `permissions/sites/sitePerms`, 12 roles seeded (admin / giamdoc / ketoan / hr / bacsi / gd_chinhanh / letan / ktv / nv_kho + legacy truongphong/nhanvien/guest). Ma trận quyền has create/delete/scope UI; HR employee edit has multi-role + site-picker assignment UI.
+
+**Still to do:**
+
+- **Per-route site scoping** — the token carries `sites[]` and `sitePerms[siteId][]`, but no route enforces "Lễ tân at site A can only register at site A" yet. Current routes still rely on `user.department` for site filtering (one primary site per user). Migrate when someone needs multi-site users.
+- **Page-level role check migration** — ~30 `auth?.role === 'admin'` (or similar) sites across [client pages](linkrad-app/client/src/pages/) and 29 `req.user.role ===` on the server. These all still work because legacy roles stay populated. Migrate opportunistically to `hasPerm(key)` as each page is touched.
+- **"sale" role is orphaned** — earlier (commit fa03e6a) I used `User.role === 'sale'` to represent NVKD for referral attribution. That role value isn't in the new `ROLE_CATALOG`, so sale users have no permissions in the new system (still work for referral attribution since that just reads the string). When revisiting commission: either add `sale`/`kinhdoanh` to ROLE_CATALOG or migrate existing sale users onto the `kinhdoanh`-equivalent functional role assignment.
+- **Existing sessions**: users logged in before deploy still carry old tokens (no `permissions[]`). They need to log out + back in to pick up the new gating. Not an issue for Railway auto-deploy because the server restart invalidates sessions? Actually no — tokens are stateless HMAC, so old tokens keep working. Worst case: stale tokens trigger the DB-fallback path in `requirePermission`. Acceptable.
+- **Sidebar migration incomplete** — only `Quản lý` and `Tài chính` groups use `perm:` keys. Other groups still use `workflowOnly`/`adminOnly`/`financialsOnly` legacy flags. Works but inconsistent.
+
+
+
 ## Mock catalog data — cleanup before real-data import
 
 Seed script `linkrad-app/server/scripts/seed-catalogs-mock.js` populates the Danh mục pages for demo. Every inserted doc has an `_id` containing `MOCK-`. Collections affected:
