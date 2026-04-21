@@ -268,7 +268,7 @@ export default function Teleradiology() {
           onClose={closeCase}
         />
         {activeCase ? (
-          <PatientDetailView study={activeCase} onRefresh={load} onOpenCase={openCase} />
+          <PatientDetailView study={activeCase} onRefresh={load} onOpenCase={openCase} showConsumables={false} />
         ) : (
           <div className="flex-1 overflow-hidden bg-white">
             <StudyList studies={studies} onRefresh={load} onOpenCase={openCase} />

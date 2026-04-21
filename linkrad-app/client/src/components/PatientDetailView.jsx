@@ -526,7 +526,7 @@ function ConsumablesPanel({ study, onRefresh }) {
   )
 }
 
-export default function PatientDetailView({ study, onRefresh, onOpenCase }) {
+export default function PatientDetailView({ study, onRefresh, onOpenCase, showConsumables = true }) {
   const { auth } = useAuth()
   const [report, setReport] = useState(null)
   const [form, setForm] = useState({ technique: '', clinicalInfo: '', findings: '', impression: '', recommendation: '', criticalFinding: false, criticalNote: '' })
@@ -668,7 +668,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase }) {
               </div>
             )}
           </div>
-          <ConsumablesPanel study={study} onRefresh={onRefresh} />
+          {showConsumables && <ConsumablesPanel study={study} onRefresh={onRefresh} />}
         </div>
       </div>
       <HistoryRail
