@@ -126,7 +126,7 @@ The infrastructure from Phase 2 (snapshotted `effectiveSalespersonId` per invoic
 
 **Deferred — Pass 2 (next session):**
 
-- **Inline DICOM viewer** — verified OHIF (`linkrad-ohif-production.up.railway.app`) sends no `X-Frame-Options` / CSP frame-ancestors header, so iframe embedding is technically unblocked. Plan: Phase 1 swap `window.open(viewerUrl)` → `<iframe src={viewerUrl}>` with a "⇗ Cửa sổ riêng" undock button that reverts to `window.open`, persist docked/undocked pref in localStorage. Phase 2 adds a draggable divider + side-by-side prior-comparison using existing `/ris/compare-url`. Rationale for deferral: user wanted to ship reading-side improvements first and validate with bacsi before committing to the viewer split.
+- **~~Inline DICOM viewer~~** — shipped in Pass 2, see below.
 - **"Danh sách kết quả đã đọc" list page** — still only reachable via status filters on RIS/Teleradiology or `HistoryRail` per patient. `/rad-reports` is analytics, not a report browser. Add if requested.
 - **Template categories / tags** — `ReportTemplate` model has no `tag` field. The wireframes showed category chips ("Bình thường", "Thoái hóa", "Thoát vị", etc.). Would need a schema addition to group templates. Not implemented; templates are shown as a flat search-filtered grid.
 - **Lot-number display per consumable row** on the Kết thúc chụp modal — the wireframe hinted at `OMN-2611 · HSD 03/2027` per row, but FIFO lot is only determined at deduction time. A pre-display would require either (a) a "peek FIFO" endpoint or (b) separate UI showing which lots *will* be used. Not shipped.
@@ -150,3 +150,30 @@ The infrastructure from Phase 2 (snapshotted `effectiveSalespersonId` per invoic
 - **Queue rail doesn't live-refresh** when another bacsi claims in a different session — the rail shows a polled snapshot. Manual ⟳ fixes it, but a 15-30s polling interval or websocket push would be cleaner.
 - **Truongphong can bypass the lock server-side** (deliberate for supervisor corrections) but there's no UI for them to do it explicitly — they'd need to use the Lấy quyền flow (admin) or `POST /assign` directly. Fine for now.
 - **No "claim expired" notification** — if an admin uses Lấy quyền on your case while you were writing, you'll next see the 409 when you try to save. Not ideal UX; a soft "your claim was overridden" toast would help but requires polling the study state.
+
+## Ca đọc reading-workspace — Pass 2: inline DICOM viewer (2026-04-22)
+
+**Shipped:**
+
+- **InlineViewer** at [components/InlineViewer.jsx](linkrad-app/client/src/components/InlineViewer.jsx) — persistent OHIF iframe side-by-side with the report editor. src swaps on case change without unmounting so OHIF's JS context (and HTTP-cached bundle) stays warm — one OHIF cold-start per reading session, not per case switch.
+- **Dock / undock** (`⇗ Cửa sổ riêng`) pops the viewer into a named popup (`linkrad-viewer`). Popup-reuse: if popup is still alive AND showing the same study, we just `focus()` it — no reload. Inline iframe stays mounted while undocked (CSS `display:none`) and keeps tracking the active study, so re-dock is instant and already on the right case. Pref in `localStorage.linkrad.reader.viewerDocked`.
+- **Undock banner** above the report with `⇦ Kéo viewer về` button.
+- **Draggable divider** between viewer and report. Width 360–900px (default 576), persisted in `localStorage.linkrad.reader.reportWidth`. ±6px hit area via `before:` pseudo. Transparent full-viewport overlay during drag to keep cursor + stop iframe from stealing pointer events.
+- **Expand preset** (`⇔ Mở rộng ảnh`) — report shrinks to 380px, the whole reading trio becomes `position: fixed inset-0 z-50`, covering the Layout sidebar + top header + Ca đọc tab bar. `↔ Thu gọn` restores last non-narrow width. Wrapper div is always present so className flip preserves iframe mount — no cold-start on expand toggle.
+- **QueueRail + HistoryRail hidden during reading** (per Claude Design States 1–3). `PatientDetailView` has new `showHistoryRail` prop (default true for backward compat); Teleradiology passes `false`. `QueueRail` function body left in place, unused, in case we re-enable it as a collapsible.
+- **Save & Next removed.** Primary button changed `Lưu & Hoàn tất & ca tiếp →` → `Lưu & Hoàn tất` (critical: `⚠ Lưu & gửi cảnh báo`). Current tab stays open after finalize; no auto-pick-next, no auto-close. `handleSaveAndNext` in Teleradiology deleted; `onSaveAndNext` prop on PatientDetailView removed. Internal rename `saveAndNext` → `saveAndFinalize`. Ctrl+Enter still finalizes.
+
+**Deferred — Pass 3:**
+
+- **Popup case-switch without cold-start** — switching cases while undocked still forces a popup reload on the next undock. Needs OHIF to accept a `postMessage({ studyUID })` and route internally — that's a patch to the OHIF Docker image, not a LinkRad-side change.
+- **Prior-comparison dual-viewer (Claude Design State 5)** — side-by-side current vs older exam using existing `/ris/compare-url`. HistoryRail needs to come back, probably as a collapsible strip inside the report column.
+- **Tablet layout (State 7)** — viewer top 55% / report bottom 45%, compact top bar. Current layout assumes desktop; below ~900px the draggable divider gets cramped.
+- **postMessage W/L / slice sync** across docked + popup (Claude Design State 6 "Đồng bộ W/L / slice / annotation").
+- **z-index audit** — expand overlay uses `z-50`; haven't verified it doesn't collide with NotificationBell dropdown, Cmd+K palette, or any toast layer.
+- **`.env` still points Orthanc + OHIF at prod Railway.** Local docker-compose at [linkrad-app/pacs/](linkrad-app/pacs/) runs fine but is unused by the app. Wire `ORTHANC_URL=http://localhost:8042` + `OHIF_URL=http://localhost:3000` if local-only dev is ever needed.
+
+## Next session queue (set 2026-04-22)
+
+- **UIUX pass on Inventory, Danh mục, HR & phân quyền, Reports, Dashboard** — match the bg-gray-50 page + white rounded-xl cards + pill tabs + blue-600 primary house style already on Đăng ký / Billing / Ca đọc. Dashboard especially will likely need a Claude Design export.
+- **Danh mục ↔ workflow wiring audit** — walk every Danh mục list page and verify there's a live back-link to where those items are consumed (Services → registration picker, Referral doctors → referral picker, etc.). Flag any orphan catalogs for cleanup.
+- **`/` route still points at the old Dashboard** — `App.jsx` root redirect predates phase-1. Check what it should route to per role (`/dashboard/clinical` vs `/dashboard/ops` vs `/dashboard/finance`) and fix.

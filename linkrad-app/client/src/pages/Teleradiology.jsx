@@ -1,9 +1,19 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useRef, useState, useMemo } from 'react'
 import api from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useTeleradTabs, SYS_WORKLIST } from '../context/TeleradTabsContext'
 import CaseTabBar from '../components/CaseTabBar'
 import PatientDetailView from '../components/PatientDetailView'
+import InlineViewer from '../components/InlineViewer'
+
+const VIEWER_DOCKED_KEY = 'linkrad.reader.viewerDocked'
+const REPORT_WIDTH_KEY = 'linkrad.reader.reportWidth'
+const REPORT_WIDTH_MIN = 360
+const REPORT_WIDTH_MAX = 900
+const REPORT_WIDTH_DEFAULT = 576
+// "Expand viewer" preset: narrow the report to ~20% of a typical 1920 screen.
+// Below the divider min but still usable for the editor.
+const REPORT_WIDTH_EXPANDED = 380
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const fmtDate = (s) => s ? s.slice(0, 10) : ''
@@ -71,6 +81,63 @@ function PageHeader({ userName, date, counts }) {
         {userName && <span className="px-2 py-1 bg-gray-100 rounded-md">👤 {userName}</span>}
         <span className="px-2 py-1 bg-gray-100 rounded-md">{fmtDate(date)}</span>
       </div>
+    </div>
+  )
+}
+
+// ── Draggable divider between viewer and report. The iframe swallows pointer
+//    events, so the divider lives as a thin strip between them. We widen the
+//    hit target with ::before (via Tailwind before:) and guard the drag with
+//    an invisible full-viewport overlay so the cursor stays "col-resize" and
+//    text doesn't select while dragging.
+function ViewerDivider({ reportWidth, onChange }) {
+  const [dragging, setDragging] = useState(false)
+
+  useEffect(() => {
+    if (!dragging) return
+    const onMove = (e) => {
+      // Report width = distance from pointer X to the right edge of the window.
+      onChange(window.innerWidth - e.clientX)
+    }
+    const onUp = () => setDragging(false)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [dragging, onChange])
+
+  return (
+    <>
+      <div
+        onPointerDown={(e) => { e.preventDefault(); setDragging(true) }}
+        className="relative w-1 flex-shrink-0 bg-gray-300 hover:bg-blue-400 cursor-col-resize transition-colors
+                   before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5 before:content-['']"
+        title="Kéo để thay đổi kích thước"
+      />
+      {dragging && (
+        <div className="fixed inset-0 z-50 cursor-col-resize" style={{ userSelect: 'none' }} />
+      )}
+    </>
+  )
+}
+
+// ── Undocked viewer banner — shown above the report when the viewer is in
+//    a separate window. Click "Kéo viewer về" to re-dock.
+function UndockedBanner({ onRedock }) {
+  return (
+    <div className="flex items-center justify-between px-4 py-2 bg-indigo-50 border-b border-indigo-200 flex-none">
+      <div className="flex items-center gap-2 text-xs text-indigo-800">
+        <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-white border border-indigo-300 rounded-full">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          <span className="font-medium">Viewer đang mở trong cửa sổ riêng</span>
+        </span>
+      </div>
+      <button onClick={onRedock}
+        className="text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-md transition-colors">
+        ⇦ Kéo viewer về
+      </button>
     </div>
   )
 }
@@ -341,6 +408,70 @@ export default function Teleradiology() {
   const [siteFilter, setSiteFilter] = useState('')
   const [dateFrom, setDateFrom] = useState(todayISO())
   const [dateTo, setDateTo] = useState(todayISO())
+  const [viewerDocked, setViewerDocked] = useState(() => {
+    try { return localStorage.getItem(VIEWER_DOCKED_KEY) !== 'false' } catch { return true }
+  })
+  const [reportWidth, setReportWidth] = useState(() => {
+    try {
+      const n = parseInt(localStorage.getItem(REPORT_WIDTH_KEY) || '', 10)
+      if (Number.isFinite(n) && n >= REPORT_WIDTH_MIN && n <= REPORT_WIDTH_MAX) return n
+    } catch {}
+    return REPORT_WIDTH_DEFAULT
+  })
+
+  const persistViewerDocked = (docked) => {
+    setViewerDocked(docked)
+    try { localStorage.setItem(VIEWER_DOCKED_KEY, String(docked)) } catch {}
+  }
+
+  const persistReportWidth = (w) => {
+    const clamped = Math.max(REPORT_WIDTH_MIN, Math.min(REPORT_WIDTH_MAX, w))
+    setReportWidth(clamped)
+    try { localStorage.setItem(REPORT_WIDTH_KEY, String(clamped)) } catch {}
+  }
+
+  // Toggle between the "viewer-expanded" preset and the user's previous width.
+  // Considered expanded when current width is at (or below) the preset.
+  const prevReportWidthRef = useRef(null)
+  const isViewerExpanded = reportWidth <= REPORT_WIDTH_EXPANDED
+  const toggleViewerExpanded = () => {
+    if (isViewerExpanded) {
+      persistReportWidth(prevReportWidthRef.current || REPORT_WIDTH_DEFAULT)
+    } else {
+      prevReportWidthRef.current = reportWidth
+      persistReportWidth(REPORT_WIDTH_EXPANDED)
+    }
+  }
+
+  // Popup-reuse: if the popup is still alive AND already showing the same
+  // study, focusing it skips the OHIF cold-start. First undock per study is
+  // unavoidable — popup has its own browsing context and must boot OHIF.
+  const popupRef = useRef(null)
+  const popupStudyRef = useRef(null)
+
+  const undockViewer = async (study) => {
+    if (!study?.studyUID) return
+    const existing = popupRef.current
+    if (existing && !existing.closed && popupStudyRef.current === study.studyUID) {
+      try { existing.focus() } catch {}
+      persistViewerDocked(false)
+      return
+    }
+    try {
+      const r = await api.get(`/ris/orthanc/viewer-url/${encodeURIComponent(study.studyUID)}`)
+      if (r.data?.found === false) {
+        alert('Ca này chưa có ảnh DICOM trong PACS.')
+        return
+      }
+      // Named window so any existing popup is reused (navigated) rather than
+      // opened as a second window.
+      popupRef.current = window.open(r.data.url, 'linkrad-viewer')
+      popupStudyRef.current = study.studyUID
+      persistViewerDocked(false)
+    } catch {
+      alert('Không mở được viewer')
+    }
+  }
 
   const load = async () => {
     try {
@@ -387,32 +518,6 @@ export default function Teleradiology() {
   const selected = useMemo(() => filtered.find(s => s._id === selectedId), [filtered, selectedId])
   const activeCase = openCases.find(c => c._id === activeCaseId)
 
-  // Save & Next: after a report is finalised, close the current tab and
-  // auto-advance to the next unclaimed pending_read case (claiming it along
-  // the way). Falls back to the system worklist tab if the queue is empty.
-  const handleSaveAndNext = async (finishedCaseId) => {
-    try {
-      const r = await api.get('/ris/studies')
-      const fresh = r.data || []
-      setStudies(fresh)
-      syncWithStudies(fresh)
-      const next = fresh.find(s => s.status === 'pending_read' && !s.radiologist && s._id !== finishedCaseId)
-      if (next) {
-        try { await api.post(`/ris/studies/${next._id}/pick`) } catch {}
-        const r2 = await api.get('/ris/studies')
-        const freshAfterPick = r2.data || []
-        setStudies(freshAfterPick)
-        syncWithStudies(freshAfterPick)
-        const picked = freshAfterPick.find(s => s._id === next._id) || next
-        openCase(picked)
-      } else {
-        setActiveCaseId(SYS_WORKLIST)
-      }
-      closeCase(finishedCaseId)
-    } catch {
-      closeCase(finishedCaseId)
-    }
-  }
 
   // Jump to another case from the queue rail — opens as a tab if it isn't
   // already one. Doesn't auto-claim (the "Ca kế tiếp" button handles claiming).
@@ -456,29 +561,35 @@ export default function Teleradiology() {
       />
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {activeCase ? (
-          <>
-            <QueueRail
-              studies={studies}
-              currentId={activeCase._id}
-              onJumpTo={jumpToCase}
-              onOpenNext={async (s) => {
-                // Claim + open the next unclaimed case without closing the current one
-                try { await api.post(`/ris/studies/${s._id}/pick`) } catch {}
-                const r = await api.get('/ris/studies')
-                setStudies(r.data || [])
-                syncWithStudies(r.data || [])
-                const picked = (r.data || []).find(x => x._id === s._id) || s
-                openCase(picked)
-              }}
+          // Wrapper is always present so React keeps the InlineViewer mounted
+          // across expanded toggles. Only the className changes: normal flow
+          // vs fixed-fullscreen overlay that covers the Layout sidebar + header.
+          <div className={(isViewerExpanded && viewerDocked) ? 'fixed inset-0 z-50 flex bg-gray-50' : 'flex-1 flex'}>
+            <InlineViewer
+              studyUID={activeCase.studyUID}
+              onUndock={() => undockViewer(activeCase)}
+              hidden={!viewerDocked}
+              expanded={isViewerExpanded}
+              onToggleExpanded={toggleViewerExpanded}
             />
-            <PatientDetailView
-              study={activeCase}
-              onRefresh={load}
-              onOpenCase={openCase}
-              onSaveAndNext={handleSaveAndNext}
-              showConsumables={false}
-            />
-          </>
+            {viewerDocked && (
+              <ViewerDivider reportWidth={reportWidth} onChange={persistReportWidth} />
+            )}
+            <div
+              className={viewerDocked ? 'flex-shrink-0 flex flex-col border-l border-gray-200 bg-gray-50' : 'flex-1 flex flex-col'}
+              style={viewerDocked ? { width: `${reportWidth}px` } : undefined}>
+              {!viewerDocked && (
+                <UndockedBanner onRedock={() => persistViewerDocked(true)} />
+              )}
+              <PatientDetailView
+                study={activeCase}
+                onRefresh={load}
+                onOpenCase={openCase}
+                showConsumables={false}
+                showHistoryRail={false}
+              />
+            </div>
+          </div>
         ) : (
           <>
             <StudyList

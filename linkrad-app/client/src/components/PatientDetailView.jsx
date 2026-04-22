@@ -845,7 +845,7 @@ function ConsumablesPanel({ study, onRefresh }) {
   )
 }
 
-export default function PatientDetailView({ study, onRefresh, onOpenCase, onSaveAndNext, showConsumables = true }) {
+export default function PatientDetailView({ study, onRefresh, onOpenCase, showConsumables = true, showHistoryRail = true }) {
   const { auth } = useAuth()
   const [report, setReport] = useState(null)
   const [form, setForm] = useState({ technique: '', clinicalInfo: '', findings: '', impression: '', recommendation: '', criticalFinding: false, criticalNote: '' })
@@ -914,19 +914,16 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
     } finally { setSaving(false) }
   }
 
-  // Save & advance to next pending case (closes current tab, claims + opens next
-  // via the onSaveAndNext callback wired by Teleradiology/RIS).
-  const saveAndNext = async () => {
+  // Finalize the report. For critical findings, shows a confirmation modal
+  // first — the parent of that modal completes the save.
+  const saveAndFinalize = async () => {
     if (form.criticalFinding && !showCriticalConfirm) {
       setShowCriticalConfirm(true)
       return
     }
     if (!form.findings.trim() || !form.impression.trim()) return
     const saved = await save('final')
-    if (saved) {
-      setShowCriticalConfirm(false)
-      onSaveAndNext?.(study._id)
-    }
+    if (saved) setShowCriticalConfirm(false)
   }
 
   // Insert template text at the cursor of the currently-focused field.
@@ -1030,7 +1027,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
   }
   const canFinalize = completion.findings && completion.impression && !saving
 
-  // Ctrl/Cmd + Enter = Save & Hoàn tất & ca tiếp
+  // Ctrl/Cmd + Enter = Save & Hoàn tất
   useEffect(() => {
     const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -1042,7 +1039,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
         }
         if (canFinalize) {
           e.preventDefault()
-          saveAndNext()
+          saveAndFinalize()
         }
       }
     }
@@ -1211,19 +1208,19 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
               <Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd>
             </div>
           )}
-          <button onClick={saveAndNext} disabled={!canFinalize || locked}
+          <button onClick={saveAndFinalize} disabled={!canFinalize || locked}
             className={`px-4 py-2 text-xs font-semibold rounded-lg shadow-sm disabled:opacity-40
               ${form.criticalFinding
                 ? 'bg-rose-600 hover:bg-rose-700 text-white'
                 : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
             {saving ? 'Đang lưu…'
-              : form.criticalFinding ? '⚠ Lưu, gửi cảnh báo & ca tiếp →'
-              : 'Lưu & Hoàn tất & ca tiếp →'}
+              : form.criticalFinding ? '⚠ Lưu & gửi cảnh báo'
+              : 'Lưu & Hoàn tất'}
           </button>
         </div>
       </div>
 
-      <HistoryRail
+      {showHistoryRail && <HistoryRail
         patientId={study.patientId}
         currentStudyId={study._id}
         onOpenPrior={(it) => {
@@ -1248,7 +1245,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
           }
           onOpenCase?.(priorAsStudy)
         }}
-      />
+      />}
 
       {showCriticalConfirm && (
         <CriticalConfirmModal
@@ -1258,10 +1255,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
           onCancel={() => setShowCriticalConfirm(false)}
           onConfirm={async () => {
             const saved = await save('final')
-            if (saved) {
-              setShowCriticalConfirm(false)
-              onSaveAndNext?.(study._id)
-            }
+            if (saved) setShowCriticalConfirm(false)
           }}
         />
       )}
