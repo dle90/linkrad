@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import api from '../api'
 import { useAuth } from '../context/AuthContext'
 
@@ -28,13 +28,214 @@ function techniqueStarter(study) {
 // Hoisted out of the render scope so React doesn't unmount/remount the
 // textarea on every parent re-render (which was stealing focus after each
 // keystroke).
-function ReportField({ label, value, rows = 3, onChange }) {
+const ReportField = React.forwardRef(function ReportField(
+  { label, hint, value, rows = 3, onChange, onFocus, active = false, critical = false, anchorId },
+  ref
+) {
+  const ringCls = critical ? 'border-rose-400 ring-2 ring-rose-100'
+    : active ? 'border-blue-400 ring-2 ring-blue-100'
+    : 'border-gray-200'
   return (
-    <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
-      <textarea rows={rows} value={value} onChange={onChange}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 resize-y" />
+    <div id={anchorId} className="scroll-mt-4">
+      <div className="flex items-baseline justify-between mb-1">
+        <label className="text-xs font-semibold text-gray-700">
+          {label}
+          {hint && <span className="ml-2 text-[10px] font-normal text-gray-400">{hint}</span>}
+        </label>
+        {value && <span className="text-[10px] text-emerald-600">✓ {value.length} ký tự</span>}
+      </div>
+      <textarea rows={rows} value={value}
+        ref={ref}
+        onChange={onChange}
+        onFocus={onFocus}
+        className={`w-full border rounded-lg px-3 py-2 text-sm outline-none resize-y ${ringCls}`} />
     </div>
+  )
+})
+
+// ── Section tabs (Kỹ thuật / Lâm sàng / Findings / Impression / Đề nghị) ────
+
+const REPORT_SECTIONS = [
+  { id: 'technique',      label: 'Kỹ thuật' },
+  { id: 'clinicalInfo',   label: 'Lâm sàng' },
+  { id: 'findings',       label: 'Findings',    required: true },
+  { id: 'impression',     label: 'Impression',  required: true },
+  { id: 'recommendation', label: 'Đề nghị' },
+]
+
+function SectionTabs({ active, onSelect, completion }) {
+  return (
+    <div className="flex items-center gap-1 px-1 pb-1 border-b border-gray-200 overflow-x-auto">
+      {REPORT_SECTIONS.map(s => {
+        const done = completion[s.id]
+        const isActive = active === s.id
+        return (
+          <button key={s.id} onClick={() => onSelect(s.id)}
+            className={`flex items-center gap-1.5 px-3 h-9 text-xs font-medium whitespace-nowrap border-b-2 -mb-px transition-colors
+              ${isActive ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-600 hover:text-gray-800'}`}>
+            {done ? <span className="text-emerald-500 text-[10px]">✓</span>
+                  : s.required ? <span className="text-rose-400 text-[10px]">●</span>
+                  : <span className="text-gray-300 text-[10px]">○</span>}
+            {s.label}
+            {s.required && !done && <span className="text-rose-400">*</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Templates panel: expandable, search + chip filter, click-to-insert ──────
+
+function TemplatesPanel({ templates, modality, bodyPart, activeSection, onInsert }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const activeLabel = REPORT_SECTIONS.find(s => s.id === activeSection)?.label || activeSection
+
+  // Filter: by modality/bodyPart (server already does this but allow local narrowing)
+  // + by search query over name + the field we'd insert
+  const sectionField = activeSection
+  const filtered = useMemo(() => {
+    const lq = q.trim().toLowerCase()
+    return templates.filter(t => {
+      const text = `${t.name || ''} ${t[sectionField] || ''}`.toLowerCase()
+      return !lq || text.includes(lq)
+    })
+  }, [templates, q, sectionField])
+
+  if (templates.length === 0) return null
+
+  return (
+    <div className={`border rounded-lg ${open ? 'border-blue-200 bg-blue-50/40' : 'border-gray-200 bg-gray-50/40'}`}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 text-left">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-gray-800">Template & cụm thường dùng</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-gray-200 text-gray-600 font-mono">
+            {modality || 'tất cả'}{bodyPart ? ` · ${bodyPart}` : ''}
+          </span>
+          <span className="text-[10px] text-gray-500">· {templates.length} mẫu</span>
+        </div>
+        <span className={`text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`}>▸</span>
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs">
+            <input value={q} onChange={e => setQ(e.target.value)}
+              placeholder={`Tìm trong ${templates.length} mẫu…`}
+              className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs bg-white outline-none focus:border-blue-400" />
+            <span className="text-[10px] text-blue-700 whitespace-nowrap">
+              Chèn vào: <b>{activeLabel}</b>
+            </span>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="text-center py-4 text-xs text-gray-400">Không có mẫu phù hợp</div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+              {filtered.map(t => {
+                const preview = t[sectionField] || ''
+                const hasContent = !!preview.trim()
+                return (
+                  <button key={t._id} type="button"
+                    disabled={!hasContent}
+                    onClick={() => onInsert(t, sectionField)}
+                    className={`text-left border rounded-md bg-white p-2 transition-colors
+                      ${hasContent ? 'border-gray-200 hover:border-blue-400 hover:shadow-sm' : 'border-gray-100 opacity-50 cursor-not-allowed'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold text-gray-500 truncate">{t.name}</span>
+                      {hasContent && <span className="text-[9px] text-blue-600 flex-shrink-0 ml-1">＋ chèn</span>}
+                    </div>
+                    <div className="text-[11px] text-gray-700 mt-1 leading-snug line-clamp-3">
+                      {preview || <span className="italic text-gray-400">không có nội dung cho mục này</span>}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="text-[10px] text-gray-500 italic">
+            💡 Chèn vào vị trí con trỏ của ô <b>{activeLabel}</b> — không ghi đè nội dung đang có.
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Critical banner + confirmation modal ─────────────────────────────────────
+
+function CriticalBanner({ onToggleOff }) {
+  return (
+    <div className="bg-rose-50 border-2 border-rose-300 rounded-lg px-4 py-2.5 flex items-start gap-2.5">
+      <div className="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-bold">⚠</div>
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-semibold text-rose-900">Đã đánh dấu phát hiện nghiêm trọng</div>
+        <div className="text-[11px] text-rose-700 mt-0.5">
+          Khi lưu, thông báo sẽ gửi tới quản trị viên / giám đốc CM / trưởng phòng tại cơ sở. BN sẽ được ưu tiên liên hệ.
+        </div>
+      </div>
+      <button onClick={onToggleOff} className="text-[10px] text-rose-700 underline whitespace-nowrap flex-shrink-0">Bỏ cờ</button>
+    </div>
+  )
+}
+
+function CriticalConfirmModal({ study, form, onCancel, onConfirm, saving }) {
+  const recipients = [
+    { role: 'Quản trị viên', hint: 'admin / giamdoc / truongphong' },
+    { role: 'BS chỉ định',   hint: study.referringDoctor || '(không có)' },
+  ]
+  return (
+    <div className="fixed inset-0 z-50 bg-gray-900/40 flex items-center justify-center p-4" onClick={onCancel}>
+      <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="px-5 py-3 bg-rose-50 border-b border-rose-200">
+          <div className="text-base font-semibold text-rose-900 flex items-center gap-2">⚠ Gửi cảnh báo phát hiện nghiêm trọng?</div>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-gray-500 font-medium mb-1.5">Sẽ thông báo tới</div>
+            <div className="space-y-1.5">
+              {recipients.map((r, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-gray-50">
+                  <span className="font-medium text-gray-800 flex-shrink-0">{r.role}</span>
+                  <span className="text-gray-500 truncate">· {r.hint}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-gray-500 font-medium mb-1">Nội dung thông báo</div>
+            <div className="bg-gray-50 border border-gray-200 rounded-md p-2.5 text-[11px] text-gray-700 leading-snug">
+              [LinkRad] BN <b>{study.patientName}</b> ({study.patientId}) — {study.modality} {study.bodyPart || ''}.
+              Phát hiện nghiêm trọng.
+              {form.criticalNote && <> Ghi chú: "{form.criticalNote}".</>}
+              {' '}Vui lòng xử lý khẩn.
+            </div>
+          </div>
+        </div>
+        <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 flex items-center gap-2">
+          <button onClick={onCancel} disabled={saving}
+            className="flex-1 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded-md disabled:opacity-40">
+            Huỷ
+          </button>
+          <button onClick={onConfirm} disabled={saving}
+            className="flex-1 px-3 py-1.5 text-xs font-semibold bg-rose-600 text-white rounded-md hover:bg-rose-700 disabled:opacity-40">
+            {saving ? 'Đang gửi…' : 'Xác nhận & gửi'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Small keyboard-hint kbd pill used next to the primary save button
+function Kbd({ children }) {
+  return (
+    <span className="inline-flex items-center justify-center min-w-[20px] px-1.5 h-5 text-[10px] font-mono font-medium bg-gray-100 border border-gray-300 text-gray-700 rounded">
+      {children}
+    </span>
   )
 }
 
@@ -585,13 +786,24 @@ function ConsumablesPanel({ study, onRefresh }) {
   )
 }
 
-export default function PatientDetailView({ study, onRefresh, onOpenCase, showConsumables = true }) {
+export default function PatientDetailView({ study, onRefresh, onOpenCase, onSaveAndNext, showConsumables = true }) {
   const { auth } = useAuth()
   const [report, setReport] = useState(null)
   const [form, setForm] = useState({ technique: '', clinicalInfo: '', findings: '', impression: '', recommendation: '', criticalFinding: false, criticalNote: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [templates, setTemplates] = useState([])
+  const [activeSection, setActiveSection] = useState('findings')
+  const [showCriticalConfirm, setShowCriticalConfirm] = useState(false)
+
+  // One ref per section — used for scrollIntoView + cursor-position inserts
+  const refs = {
+    technique:      useRef(null),
+    clinicalInfo:   useRef(null),
+    findings:       useRef(null),
+    impression:     useRef(null),
+    recommendation: useRef(null),
+  }
 
   const loadReport = async () => {
     setLoading(true)
@@ -632,21 +844,62 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
       const r = await api.post('/ris/reports', { studyId: study._id, studyUID: study.studyUID, ...form, status })
       setReport(r.data)
       onRefresh?.()
+      return r.data
     } finally { setSaving(false) }
   }
 
-  const applyTemplate = async (t) => {
-    if (!t) return
-    if ((form.findings || form.impression) && !confirm('Áp dụng mẫu sẽ ghi đè nội dung đang có. Tiếp tục?')) return
-    setForm(f => ({
-      ...f,
-      technique: t.technique || f.technique,
-      clinicalInfo: t.clinicalInfo || f.clinicalInfo,
-      findings: t.findings || f.findings,
-      impression: t.impression || f.impression,
-      recommendation: t.recommendation || f.recommendation,
-    }))
+  // Save & advance to next pending case (closes current tab, claims + opens next
+  // via the onSaveAndNext callback wired by Teleradiology/RIS).
+  const saveAndNext = async () => {
+    if (form.criticalFinding && !showCriticalConfirm) {
+      setShowCriticalConfirm(true)
+      return
+    }
+    if (!form.findings.trim() || !form.impression.trim()) return
+    const saved = await save('final')
+    if (saved) {
+      setShowCriticalConfirm(false)
+      onSaveAndNext?.(study._id)
+    }
+  }
+
+  // Insert template text at the cursor of the currently-focused field.
+  // Falls back to appending if cursor position is unavailable.
+  const insertTemplate = async (t, sectionId) => {
+    const snippet = t[sectionId] || ''
+    if (!snippet) return
+    const el = refs[sectionId]?.current
+    setForm(f => {
+      const curr = f[sectionId] || ''
+      let next
+      if (el && typeof el.selectionStart === 'number') {
+        const start = el.selectionStart, end = el.selectionEnd
+        const sep = start > 0 && curr[start - 1] && curr[start - 1] !== '\n' ? '\n' : ''
+        next = curr.slice(0, start) + sep + snippet + curr.slice(end)
+      } else {
+        next = curr ? curr + '\n' + snippet : snippet
+      }
+      return { ...f, [sectionId]: next }
+    })
+    // Restore cursor after paint
+    if (el) {
+      const origStart = el.selectionStart
+      requestAnimationFrame(() => {
+        el.focus()
+        const pos = (origStart || 0) + snippet.length + 1
+        el.setSelectionRange(pos, pos)
+      })
+    }
     try { await api.post(`/templates/${t._id}/use`) } catch {}
+  }
+
+  const focusSection = (id) => {
+    setActiveSection(id)
+    const el = refs[id]?.current
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setTimeout(() => el.focus(), 300)
+    }
   }
 
   const onReceive = async () => {
@@ -668,65 +921,188 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
 
   const onField = (name) => (e) => setForm(f => ({ ...f, [name]: e.target.value }))
 
+  const completion = {
+    technique:      !!form.technique?.trim(),
+    clinicalInfo:   !!form.clinicalInfo?.trim(),
+    findings:       !!form.findings?.trim(),
+    impression:     !!form.impression?.trim(),
+    recommendation: !!form.recommendation?.trim(),
+  }
+  const canFinalize = completion.findings && completion.impression && !saving
+
+  // Ctrl/Cmd + Enter = Save & Hoàn tất & ca tiếp
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const tag = document.activeElement?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || document.activeElement?.isContentEditable) {
+          // Only fire when a report form field is focused (not e.g. a catalog input on another page)
+          const id = document.activeElement?.id || ''
+          if (!id.startsWith('sec-')) return
+        }
+        if (canFinalize) {
+          e.preventDefault()
+          saveAndNext()
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  })
+
   return (
     <div className="flex flex-1 overflow-hidden bg-gray-50">
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <ActionToolbar study={study} report={report} onReceive={onReceive} onViewImages={onViewImages} />
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          <PatientSummaryCard study={study} />
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-            <h2 className="text-sm font-semibold text-gray-800 mb-3">Kết quả chẩn đoán — {(study.bodyPart || study.modality || '').toUpperCase()}</h2>
-            {templates.length > 0 && (
-              <div className="mb-3 bg-blue-50 border border-blue-200 rounded p-2 flex items-center gap-2">
-                <span className="text-xs font-semibold text-blue-700">📋 Mẫu kết quả:</span>
-                <select onChange={e => { applyTemplate(templates.find(t => t._id === e.target.value)); e.target.value = '' }}
-                  className="flex-1 border border-blue-300 rounded px-2 py-1 text-xs bg-white" defaultValue="">
-                  <option value="">Chọn mẫu để áp dụng nhanh ({templates.length})</option>
-                  {templates.map(t => (<option key={t._id} value={t._id}>{t.name}</option>))}
-                </select>
-              </div>
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4 space-y-3">
+            <PatientSummaryCard study={study} />
+
+            {form.criticalFinding && (
+              <CriticalBanner onToggleOff={() => setForm(f => ({ ...f, criticalFinding: false, criticalNote: '' }))} />
             )}
-            {loading ? (
-              <div className="text-center py-8 text-gray-400 text-sm">Đang tải...</div>
-            ) : (
-              <div className="space-y-3">
-                <ReportField label="Kỹ thuật chụp"             value={form.technique}      onChange={onField('technique')}      rows={2} />
-                <ReportField label="Thông tin lâm sàng"        value={form.clinicalInfo}   onChange={onField('clinicalInfo')}   rows={2} />
-                <ReportField label="Mô tả hình ảnh (Findings)" value={form.findings}       onChange={onField('findings')}       rows={5} />
-                <ReportField label="Kết luận (Impression)"     value={form.impression}     onChange={onField('impression')}     rows={3} />
-                <ReportField label="Đề nghị (Recommendation)"  value={form.recommendation} onChange={onField('recommendation')} rows={2} />
-                <div className={`rounded-lg p-3 border ${form.criticalFinding ? 'bg-red-50 border-red-300' : 'bg-gray-50 border-gray-200'}`}>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer">
-                    <input type="checkbox" checked={!!form.criticalFinding}
-                      onChange={e => setForm(f => ({ ...f, criticalFinding: e.target.checked }))} />
-                    ⚠ Phát hiện nghiêm trọng — cần thông báo khẩn
+
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-5 pt-4 pb-0">
+                <div className="flex items-baseline justify-between mb-2">
+                  <h2 className="text-sm font-semibold text-gray-800">
+                    Kết quả chẩn đoán — {(study.bodyPart || study.modality || '').toUpperCase()}
+                  </h2>
+                  <span className="text-[10px] text-gray-400">
+                    {Object.values(completion).filter(Boolean).length} / {REPORT_SECTIONS.length} mục đã nhập
+                  </span>
+                </div>
+                <SectionTabs active={activeSection} onSelect={focusSection} completion={completion} />
+              </div>
+
+              {loading ? (
+                <div className="text-center py-8 text-gray-400 text-sm">Đang tải...</div>
+              ) : (
+                <div className="px-5 py-4 space-y-3">
+                  <TemplatesPanel
+                    templates={templates}
+                    modality={study.modality}
+                    bodyPart={study.bodyPart}
+                    activeSection={activeSection}
+                    onInsert={insertTemplate}
+                  />
+
+                  <ReportField
+                    ref={refs.technique}
+                    anchorId="sec-technique"
+                    label="Kỹ thuật chụp"
+                    value={form.technique}
+                    onChange={onField('technique')}
+                    onFocus={() => setActiveSection('technique')}
+                    active={activeSection === 'technique'}
+                    critical={form.criticalFinding && activeSection === 'technique'}
+                    rows={2}
+                  />
+                  <ReportField
+                    ref={refs.clinicalInfo}
+                    anchorId="sec-clinicalInfo"
+                    label="Thông tin lâm sàng"
+                    value={form.clinicalInfo}
+                    onChange={onField('clinicalInfo')}
+                    onFocus={() => setActiveSection('clinicalInfo')}
+                    active={activeSection === 'clinicalInfo'}
+                    rows={2}
+                  />
+                  <ReportField
+                    ref={refs.findings}
+                    anchorId="sec-findings"
+                    label="Mô tả hình ảnh (Findings)"
+                    hint="bắt buộc"
+                    value={form.findings}
+                    onChange={onField('findings')}
+                    onFocus={() => setActiveSection('findings')}
+                    active={activeSection === 'findings'}
+                    critical={form.criticalFinding}
+                    rows={7}
+                  />
+                  <ReportField
+                    ref={refs.impression}
+                    anchorId="sec-impression"
+                    label="Kết luận (Impression)"
+                    hint="bắt buộc"
+                    value={form.impression}
+                    onChange={onField('impression')}
+                    onFocus={() => setActiveSection('impression')}
+                    active={activeSection === 'impression'}
+                    critical={form.criticalFinding}
+                    rows={4}
+                  />
+                  <ReportField
+                    ref={refs.recommendation}
+                    anchorId="sec-recommendation"
+                    label="Đề nghị (Recommendation)"
+                    value={form.recommendation}
+                    onChange={onField('recommendation')}
+                    onFocus={() => setActiveSection('recommendation')}
+                    active={activeSection === 'recommendation'}
+                    critical={form.criticalFinding && activeSection === 'recommendation'}
+                    rows={2}
+                  />
+
+                  {/* Critical toggle (the banner appears above when flagged) */}
+                  <label className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer
+                    ${form.criticalFinding ? 'bg-rose-50 border-rose-300' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
+                    <input type="checkbox"
+                      className="mt-0.5 w-4 h-4 accent-rose-600"
+                      checked={!!form.criticalFinding}
+                      onChange={e => setForm(f => ({ ...f, criticalFinding: e.target.checked, criticalNote: e.target.checked ? f.criticalNote : '' }))} />
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-xs font-semibold ${form.criticalFinding ? 'text-rose-800' : 'text-gray-700'}`}>
+                        ⚠ Phát hiện nghiêm trọng — cần thông báo khẩn
+                      </div>
+                      {form.criticalFinding && (
+                        <textarea rows={2} value={form.criticalNote}
+                          onChange={e => setForm(f => ({ ...f, criticalNote: e.target.value }))}
+                          onClick={e => e.stopPropagation()}
+                          placeholder="Mô tả ngắn gọn (đưa vào nội dung cảnh báo gửi admin/giám đốc)"
+                          className="w-full mt-2 border border-rose-200 rounded px-2 py-1 text-sm bg-white" />
+                      )}
+                    </div>
                   </label>
-                  {form.criticalFinding && (
-                    <textarea rows={2} value={form.criticalNote}
-                      onChange={e => setForm(f => ({ ...f, criticalNote: e.target.value }))}
-                      placeholder="Mô tả ngắn gọn (sẽ gửi tới admin/giám đốc/trưởng phòng)"
-                      className="w-full mt-2 border border-red-200 rounded px-2 py-1 text-sm" />
-                  )}
-                </div>
 
-                <SignerPanel report={report} study={study} onSigned={loadReport} />
-
-                <div className="flex gap-2 pt-3 border-t border-gray-200">
-                  <button onClick={() => save('preliminary')} disabled={saving}
-                    className="bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 text-sm px-4 py-2 rounded-lg">
-                    Lưu tạm
-                  </button>
-                  <button onClick={() => save('final')} disabled={saving || !form.findings.trim() || !form.impression.trim()}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
-                    {saving ? 'Đang lưu...' : 'Lưu & Hoàn tất'}
-                  </button>
+                  <SignerPanel report={report} study={study} onSigned={loadReport} />
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+
+            {showConsumables && <ConsumablesPanel study={study} onRefresh={onRefresh} />}
           </div>
-          {showConsumables && <ConsumablesPanel study={study} onRefresh={onRefresh} />}
+        </div>
+
+        {/* Pinned footer — save actions always reachable */}
+        <div className="border-t border-gray-200 bg-white px-4 py-3 flex items-center gap-3 flex-shrink-0">
+          <button onClick={() => save('preliminary')} disabled={saving}
+            className="px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-40">
+            Lưu tạm
+          </button>
+          <div className="flex-1" />
+          {!canFinalize && (
+            <span className="text-[11px] text-gray-400">
+              {!completion.findings && 'Thiếu Findings'}
+              {!completion.findings && !completion.impression && ' · '}
+              {!completion.impression && 'Thiếu Impression'}
+            </span>
+          )}
+          <div className="flex items-center gap-1 text-[10px] text-gray-500">
+            <Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd>
+          </div>
+          <button onClick={saveAndNext} disabled={!canFinalize}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg shadow-sm disabled:opacity-40
+              ${form.criticalFinding
+                ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
+            {saving ? 'Đang lưu…'
+              : form.criticalFinding ? '⚠ Lưu, gửi cảnh báo & ca tiếp →'
+              : 'Lưu & Hoàn tất & ca tiếp →'}
+          </button>
         </div>
       </div>
+
       <HistoryRail
         patientId={study.patientId}
         currentStudyId={study._id}
@@ -753,6 +1129,22 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
           onOpenCase?.(priorAsStudy)
         }}
       />
+
+      {showCriticalConfirm && (
+        <CriticalConfirmModal
+          study={study}
+          form={form}
+          saving={saving}
+          onCancel={() => setShowCriticalConfirm(false)}
+          onConfirm={async () => {
+            const saved = await save('final')
+            if (saved) {
+              setShowCriticalConfirm(false)
+              onSaveAndNext?.(study._id)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
