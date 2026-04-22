@@ -5,6 +5,26 @@ import { useAuth } from '../context/AuthContext'
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('vi-VN') : '-'
 const fmtDateTime = (d) => d ? new Date(d).toLocaleString('vi-VN') : '-'
 
+function initials(name) {
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+function calcAge(dob) {
+  if (!dob) return ''
+  const diff = Date.now() - new Date(dob).getTime()
+  if (!Number.isFinite(diff) || diff < 0) return ''
+  return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000))
+}
+
+// Starter for "Kỹ thuật chụp" when no draft exists yet — gives the doctor
+// a scaffold they can elaborate on instead of starting from blank.
+function techniqueStarter(study) {
+  const parts = [study.modality, study.bodyPart].filter(Boolean)
+  return parts.length ? parts.join(' ') : ''
+}
+
 const ACTION_BUTTONS = [
   { key: 'receive',   label: 'Nhận ca',          icon: '🛎️',  variant: 'primary' },
   { key: 'view',      label: 'Xem ảnh',          icon: '👁️',  variant: 'default' },
@@ -125,38 +145,49 @@ function ActionToolbar({ study, report, onReceive, onViewImages }) {
   )
 }
 
-function PatientInfoPanel({ study }) {
+// Horizontal patient summary card — matches Đăng ký Screen C style.
+// Replaces the old 256px-wide left sidebar, reclaiming horizontal space for
+// the report editor. The always-visible right HistoryRail still handles
+// prior-exam comparison.
+function PatientSummaryCard({ study }) {
+  const age = calcAge(study.dob)
   return (
-    <div className="bg-white border-r border-gray-200 w-64 flex-shrink-0 overflow-y-auto">
-      <div className="px-4 py-3 border-b border-gray-200">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase">Thông tin bệnh nhân</h3>
+    <div className="flex items-center gap-4 px-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm">
+      <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center flex-shrink-0">
+        {initials(study.patientName)}
       </div>
-      <dl className="px-4 py-3 text-xs space-y-2">
-        <Row label="PID" value={study.patientId} mono />
-        <Row label="Họ và tên" value={study.patientName} bold />
-        <Row label="Năm sinh" value={(study.dob || '').slice(0, 4)} />
-        <Row label="Giới tính" value={study.gender === 'M' ? 'Nam' : study.gender === 'F' ? 'Nữ' : study.gender} />
-        <Row label="CĐ lâm sàng" value={study.clinicalInfo || '—'} />
-      </dl>
-      <div className="px-4 py-3 border-t border-gray-200">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Thông tin ca</h3>
-        <dl className="text-xs space-y-1.5">
-          <Row label="Ngày chụp" value={fmtDateTime(study.studyDate)} />
-          <Row label="Bộ phận" value={study.bodyPart} />
-          <Row label="Modality" value={study.modality} mono />
-          <Row label="Site" value={study.site} />
-          <Row label="Ưu tiên" value={study.priority} />
-        </dl>
+      <div className="min-w-0">
+        <div className="font-semibold text-gray-800 truncate">{study.patientName || '—'}</div>
+        <div className="text-xs text-gray-500 font-mono">
+          {study.patientId || '—'}
+          {' · '}{study.gender === 'M' ? 'Nam' : study.gender === 'F' ? 'Nữ' : '—'}
+          {age !== '' && ` · ${age}t`}
+          {study.dob && ` · ${(study.dob || '').slice(0, 10)}`}
+        </div>
       </div>
-    </div>
-  )
-}
-
-function Row({ label, value, mono, bold }) {
-  return (
-    <div>
-      <dt className="text-gray-400 text-[11px]">{label}</dt>
-      <dd className={`text-gray-700 ${mono ? 'font-mono text-[11px]' : ''} ${bold ? 'font-semibold text-gray-800' : ''}`}>{value || '—'}</dd>
+      <div className="w-px h-8 bg-gray-200" />
+      <div>
+        <div className="text-[10px] uppercase text-gray-400 tracking-wide">Modality</div>
+        <div className="text-sm font-mono text-gray-700">{study.modality || '—'}</div>
+      </div>
+      <div>
+        <div className="text-[10px] uppercase text-gray-400 tracking-wide">Bộ phận</div>
+        <div className="text-sm text-gray-700">{study.bodyPart || '—'}</div>
+      </div>
+      <div>
+        <div className="text-[10px] uppercase text-gray-400 tracking-wide">Ngày chụp</div>
+        <div className="text-sm text-gray-700">{fmtDateTime(study.studyDate)}</div>
+      </div>
+      <div>
+        <div className="text-[10px] uppercase text-gray-400 tracking-wide">Site</div>
+        <div className="text-sm text-gray-700">{study.site || '—'}</div>
+      </div>
+      <div className="flex-1" />
+      {study.priority && study.priority !== 'routine' && (
+        <span className="px-2 py-1 text-xs font-semibold rounded-md bg-amber-100 text-amber-700 uppercase">
+          {study.priority === 'urgent' ? 'Khẩn' : study.priority === 'stat' ? 'Cấp cứu' : study.priority}
+        </span>
+      )}
     </div>
   )
 }
@@ -541,7 +572,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
       if (r.data) {
         setReport(r.data)
         setForm({
-          technique:        r.data.technique || '',
+          technique:        r.data.technique || techniqueStarter(study),
           clinicalInfo:     r.data.clinicalInfo || study.clinicalInfo || '',
           findings:         r.data.findings || '',
           impression:       r.data.impression || '',
@@ -550,7 +581,11 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
           criticalNote:     r.data.criticalNote || '',
         })
       } else {
-        setForm(f => ({ ...f, clinicalInfo: study.clinicalInfo || '' }))
+        setForm(f => ({
+          ...f,
+          technique: f.technique || techniqueStarter(study),
+          clinicalInfo: study.clinicalInfo || '',
+        }))
       }
     } finally { setLoading(false) }
   }
@@ -613,13 +648,13 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
   )
 
   return (
-    <div className="flex flex-1 overflow-hidden">
-      <PatientInfoPanel study={study} />
+    <div className="flex flex-1 overflow-hidden bg-gray-50">
       <div className="flex-1 flex flex-col overflow-hidden">
         <ActionToolbar study={study} report={report} onReceive={onReceive} onViewImages={onViewImages} />
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <h2 className="text-sm font-semibold text-gray-800 mb-3">YÊU CẦU: {(study.bodyPart || study.modality || '').toUpperCase()}</h2>
+          <PatientSummaryCard study={study} />
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+            <h2 className="text-sm font-semibold text-gray-800 mb-3">Kết quả chẩn đoán — {(study.bodyPart || study.modality || '').toUpperCase()}</h2>
             {templates.length > 0 && (
               <div className="mb-3 bg-blue-50 border border-blue-200 rounded p-2 flex items-center gap-2">
                 <span className="text-xs font-semibold text-blue-700">📋 Mẫu kết quả:</span>

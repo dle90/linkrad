@@ -1,9 +1,13 @@
 const express = require('express')
+const crypto = require('crypto')
 const router = express.Router()
 const Patient = require('../models/Patient')
 const Appointment = require('../models/Appointment')
 const Study = require('../models/Study')
+const Invoice = require('../models/Invoice')
+const Service = require('../models/Service')
 const { requireAuth } = require('../middleware/auth')
+const { resolveEffectiveSalesperson, nextInvoiceNumber } = require('../lib/invoicing')
 
 // Helper: site filter based on role
 function buildSiteFilter(user) {
@@ -231,6 +235,164 @@ router.delete('/appointments/:id', requireAuth, async (req, res) => {
     ).lean()
     if (!appt) return res.status(404).json({ error: 'Not found' })
     res.json(appt)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── CHECK-IN (service orders + invoice) ─────────────────────────────────────
+// POST /registration/check-in — atomic bundle for the new Đăng ký flow:
+//   1 Invoice (status=draft, lands on Phiếu thu "Chờ thu")
+//   N Appointments (status=scheduled)
+//   N Studies (status=scheduled, lands on Ca chụp "Chờ thực hiện")
+// Body: { patientId, services: [{code, name, price, modality, qty}], paymentMethod, notes? }
+router.post('/check-in', requireAuth, async (req, res) => {
+  try {
+    const { patientId, services, paymentMethod = 'cash', notes = '' } = req.body
+    if (!patientId) return res.status(400).json({ error: 'patientId required' })
+    if (!Array.isArray(services) || services.length === 0) {
+      return res.status(400).json({ error: 'At least one service required' })
+    }
+
+    const patient = await Patient.findById(patientId).lean()
+    if (!patient) return res.status(404).json({ error: 'Patient not found' })
+
+    // Site precedence: body override → patient's registered site → user's
+    // department → distinct existing site → 'default'. Appointment.site is
+    // required by Mongoose, so we must always have something non-empty.
+    let site = req.body.site || patient.registeredSite || req.user.department || ''
+    if (!site) {
+      const existing = await Appointment.distinct('site')
+      site = existing.find(Boolean) || 'default'
+    }
+    const scheduledAt = now()
+    const scheduledDate = scheduledAt.slice(0, 10)
+    const created = { appointments: [], studies: [] }
+    // Study + Appointment enums only cover imaging modalities. Non-imaging
+    // services (LAB/TDCN/KH) still go on the invoice as line items but
+    // don't create a Ca chụp worklist row — that's a different workflow.
+    const IMAGING_MODALITIES = ['CT', 'MRI', 'XR', 'US']
+    // Study.gender is enum: M | F only, so fold 'other'/empty to 'M'.
+    const studyGender = ['M', 'F'].includes(patient.gender) ? patient.gender : 'M'
+
+    // Pre-fetch bodyPart from Service catalog for the codes we'll need.
+    // Used by the report editor's template matching + pre-fill of "Kỹ thuật chụp".
+    const codesNeeded = services.map(s => s.code).filter(Boolean)
+    const serviceDocs = codesNeeded.length
+      ? await Service.find({ code: { $in: codesNeeded } }).select('code bodyPart').lean()
+      : []
+    const bodyPartByCode = Object.fromEntries(serviceDocs.map(d => [d.code, d.bodyPart || '']))
+
+    try {
+      // Fan out: one Appointment + linked Study per imaging service
+      for (const s of services) {
+        const modality = (s.modality || '').toUpperCase()
+        if (!IMAGING_MODALITIES.includes(modality)) continue
+
+        const studyId = `std-${Date.now()}-${Math.floor(Math.random() * 10000)}`
+        const apptId = genAppointmentId()
+        const bodyPart = bodyPartByCode[s.code] || ''
+
+        const study = await new Study({
+          _id: studyId,
+          patientName: patient.name,
+          patientId: patient.patientId || patient._id,
+          dob: patient.dob || '',
+          gender: studyGender,
+          modality,
+          bodyPart,
+          clinicalInfo: patient.clinicalInfo || '',
+          site,
+          scheduledDate,
+          studyDate: scheduledDate,
+          status: 'scheduled',
+          priority: 'routine',
+          studyUID: `1.2.840.10008.5.1.4.1.1.2.${Date.now()}.${Math.floor(Math.random() * 100000)}`,
+          imageStatus: 'no_images',
+          imageCount: 0,
+          createdAt: now(),
+          updatedAt: now(),
+        }).save()
+        created.studies.push(study)
+
+        const appt = await new Appointment({
+          _id: apptId,
+          patientId: patient._id,
+          patientName: patient.name,
+          dob: patient.dob || '',
+          gender: patient.gender || 'M',
+          phone: patient.phone || '',
+          site,
+          modality,
+          scheduledAt,
+          duration: 30,
+          status: 'scheduled',
+          studyId,
+          clinicalInfo: patient.clinicalInfo || '',
+          notes: `${s.code || ''} · ${s.name || ''} · SL ${s.qty || 1}`,
+          sourceCode: patient.sourceCode || '',
+          sourceName: patient.sourceName || '',
+          referralType: patient.referralType || '',
+          referralId: patient.referralId || '',
+          referralName: patient.referralName || '',
+          createdBy: req.user.username,
+          createdAt: now(),
+          updatedAt: now(),
+        }).save()
+        created.appointments.push(appt)
+      }
+
+      // One Invoice with all items, linked to the first appointment for referral snapshot path
+      const items = services.map(s => ({
+        serviceCode: s.code || '',
+        serviceName: s.name || '',
+        quantity: s.qty || 1,
+        unitPrice: s.price || 0,
+        discountAmount: 0,
+        taxRate: 0,
+        taxAmount: 0,
+        amount: (s.price || 0) * (s.qty || 1),
+      }))
+      const subtotal = items.reduce((a, it) => a + it.amount, 0)
+      const eff = await resolveEffectiveSalesperson(patient.referralType, patient.referralId)
+
+      const invoice = await new Invoice({
+        _id: `INV-${Date.now()}-${crypto.randomUUID().slice(0, 4)}`,
+        invoiceNumber: await nextInvoiceNumber(),
+        patientId: patient._id,
+        patientName: patient.name,
+        phone: patient.phone || '',
+        appointmentId: created.appointments[0]?._id || '',
+        site,
+        sourceCode: patient.sourceCode || '',
+        sourceName: patient.sourceName || '',
+        referralType: patient.referralType || '',
+        referralId: patient.referralId || '',
+        referralName: patient.referralName || '',
+        effectiveSalespersonId: eff.id,
+        effectiveSalespersonName: eff.name,
+        items,
+        subtotal,
+        totalDiscount: 0,
+        totalTax: 0,
+        grandTotal: subtotal,
+        paymentMethod: ['cash', 'transfer', 'card', 'mixed'].includes(paymentMethod) ? paymentMethod : 'cash',
+        status: 'draft',
+        createdBy: req.user.username,
+        notes,
+        createdAt: now(),
+        updatedAt: now(),
+      }).save()
+
+      res.status(201).json({ invoice, appointments: created.appointments, studies: created.studies })
+    } catch (inner) {
+      // Best-effort rollback — no Mongo transactions in use elsewhere in this codebase
+      await Promise.all([
+        ...created.studies.map(s => Study.deleteOne({ _id: s._id }).catch(() => {})),
+        ...created.appointments.map(a => Appointment.deleteOne({ _id: a._id }).catch(() => {})),
+      ])
+      throw inner
+    }
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

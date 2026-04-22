@@ -619,6 +619,21 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase }) {
     await updateStudy(study._id, { status: 'reported' })
   }
 
+  // DEV-only: simulate "imaging complete" without a real DICOM machine.
+  // Pushes Study to pending_read with mock image data so it appears on Ca đọc.
+  const handleMockComplete = async (study) => {
+    if (!confirm(`Mock: đánh dấu ca "${study.patientName}" đã chụp xong? (dùng cho test khi chưa có máy chụp)`)) return
+    try {
+      await updateStudy(study._id, {
+        status: 'pending_read',
+        imageStatus: 'available',
+        imageCount: 5,
+      })
+    } catch (e) {
+      alert(e.response?.data?.error || 'Không cập nhật được ca chụp')
+    }
+  }
+
   const handlePushOne = async (study) => {
     try {
       const r = await api.post('/mwl/sync', { studyIds: [study._id] })
@@ -659,6 +674,11 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase }) {
         return (
           <div className="flex items-center gap-0.5">
             <button onClick={() => handlePushOne(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Đẩy ca tới scanner">📡</button>
+            <button onClick={() => handleMockComplete(study)}
+              className="px-1.5 py-0.5 text-[10px] font-semibold border border-dashed border-purple-400 text-purple-600 rounded hover:bg-purple-50"
+              title="Mock: đánh dấu đã chụp xong (khi chưa có máy thật)">
+              ▶ Mock<span className="ml-0.5 opacity-60">DEV</span>
+            </button>
             <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
           </div>
         )
@@ -666,6 +686,11 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase }) {
         return (
           <div className="flex items-center gap-0.5">
             <button onClick={() => handlePushOne(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Đẩy lại ca">📡</button>
+            <button onClick={() => handleMockComplete(study)}
+              className="px-1.5 py-0.5 text-[10px] font-semibold border border-dashed border-purple-400 text-purple-600 rounded hover:bg-purple-50"
+              title="Mock: đánh dấu đã chụp xong (khi chưa có máy thật)">
+              ▶ Mock<span className="ml-0.5 opacity-60">DEV</span>
+            </button>
             <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
           </div>
         )
