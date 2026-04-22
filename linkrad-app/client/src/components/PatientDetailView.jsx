@@ -25,6 +25,19 @@ function techniqueStarter(study) {
   return parts.length ? parts.join(' ') : ''
 }
 
+// Hoisted out of the render scope so React doesn't unmount/remount the
+// textarea on every parent re-render (which was stealing focus after each
+// keystroke).
+function ReportField({ label, value, rows = 3, onChange }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
+      <textarea rows={rows} value={value} onChange={onChange}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 resize-y" />
+    </div>
+  )
+}
+
 const ACTION_BUTTONS = [
   { key: 'receive',   label: 'Nhận ca',          icon: '🛎️',  variant: 'primary' },
   { key: 'view',      label: 'Xem ảnh',          icon: '👁️',  variant: 'default' },
@@ -41,9 +54,19 @@ function openPrintWindow(study, report, autoPrint = false) {
   const w = window.open('', '_blank', 'width=900,height=1100')
   if (!w) { alert('Trình duyệt chặn cửa sổ in'); return }
   const date = new Date().toLocaleString('vi-VN')
-  const sig = (url, name, ts) => url
-    ? `<div style="text-align:center"><img src="${url}" style="max-height:60px;max-width:160px;display:block;margin:0 auto"/><div style="font-size:11px;margin-top:4px"><strong>${name || ''}</strong></div><div style="font-size:10px;color:#666">${ts ? new Date(ts).toLocaleString('vi-VN') : ''}</div></div>`
-    : `<div style="text-align:center;color:#999;font-size:11px;padding-top:30px">${name ? `<strong>${name}</strong><br/>(chưa có ảnh chữ ký)` : '(chưa ký)'}</div>`
+  const sig = (url, name, ts) => {
+    const dateLine = ts ? `<div style="font-size:10px;color:#666">${new Date(ts).toLocaleString('vi-VN')}</div>` : ''
+    if (url) {
+      return `<div style="text-align:center"><img src="${url}" style="max-height:60px;max-width:160px;display:block;margin:0 auto"/><div style="font-size:11px;margin-top:4px"><strong>${name || ''}</strong></div>${dateLine}</div>`
+    }
+    if (name && ts) {
+      // Signed with typed name (no image uploaded) — render as an italic serif
+      // "signature block," which is how most Vietnamese clinical reports print a
+      // typed signature.
+      return `<div style="text-align:center;padding-top:12px"><div style="font-family:'Times New Roman',serif;font-style:italic;font-size:22px;color:#111;line-height:1">${name}</div><div style="font-size:11px;margin-top:6px"><strong>${name}</strong></div>${dateLine}</div>`
+    }
+    return `<div style="text-align:center;color:#999;font-size:11px;padding-top:30px">(chưa ký)</div>`
+  }
   const html = `
 <!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Kết quả ${study.patientName || ''}</title>
 <style>
@@ -355,22 +378,27 @@ function SignBlock({ title, signerName, signedAt, signatureUrl, onSign, busy, pi
       <div className="h-16 mb-2 flex items-center justify-center bg-white border border-dashed border-gray-300 rounded relative group">
         {signatureUrl ? (
           <img src={signatureUrl} alt="signature" className="max-h-full max-w-full object-contain" />
+        ) : isSigned ? (
+          <span className="italic font-serif text-xl text-gray-800 leading-none">{signerName || '—'}</span>
         ) : (
-          <span className="text-xs text-gray-400">{isSigned ? '(không có ảnh chữ ký)' : 'Chưa ký'}</span>
+          <span className="text-xs text-gray-400">Chưa ký</span>
         )}
         {uploadTargetUsername && (
           <button
             onClick={() => fileRef.current?.click()}
             className="absolute top-0.5 right-0.5 text-[10px] bg-white/80 hover:bg-white border rounded px-1.5 py-0.5 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
-            title={`Upload chữ ký cho ${uploadTargetUsername}`}
+            title={`Upload ảnh chữ ký cho ${uploadTargetUsername} (tuỳ chọn)`}
           >
-            {uploading ? '…' : '📤 Upload'}
+            {uploading ? '…' : '📤 Ảnh'}
           </button>
         )}
         <input ref={fileRef} type="file" accept="image/png,image/jpeg" className="hidden"
           onChange={e => handleFile(e.target.files?.[0])} />
       </div>
-      <div className="text-xs text-gray-700 mb-2">{signerName || '—'}</div>
+      <div className="text-xs text-gray-700 mb-1">{signerName || '—'}</div>
+      {!isSigned && (
+        <div className="text-[10px] text-gray-400 mb-2">Bấm "Ký" để ký bằng tên · tuỳ chọn upload ảnh chữ ký</div>
+      )}
       <div className="flex gap-2 items-center">
         {picker}
         <button
@@ -638,14 +666,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
     } catch (e) { alert('Chưa có ảnh DICOM') }
   }
 
-  const TextField = ({ label, name, rows = 3 }) => (
-    <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1">{label}</label>
-      <textarea rows={rows} value={form[name]}
-        onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 resize-y" />
-    </div>
-  )
+  const onField = (name) => (e) => setForm(f => ({ ...f, [name]: e.target.value }))
 
   return (
     <div className="flex flex-1 overflow-hidden bg-gray-50">
@@ -669,11 +690,11 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
               <div className="text-center py-8 text-gray-400 text-sm">Đang tải...</div>
             ) : (
               <div className="space-y-3">
-                <TextField label="Kỹ thuật chụp" name="technique" rows={2} />
-                <TextField label="Thông tin lâm sàng" name="clinicalInfo" rows={2} />
-                <TextField label="Mô tả hình ảnh (Findings)" name="findings" rows={5} />
-                <TextField label="Kết luận (Impression)" name="impression" rows={3} />
-                <TextField label="Đề nghị (Recommendation)" name="recommendation" rows={2} />
+                <ReportField label="Kỹ thuật chụp"             value={form.technique}      onChange={onField('technique')}      rows={2} />
+                <ReportField label="Thông tin lâm sàng"        value={form.clinicalInfo}   onChange={onField('clinicalInfo')}   rows={2} />
+                <ReportField label="Mô tả hình ảnh (Findings)" value={form.findings}       onChange={onField('findings')}       rows={5} />
+                <ReportField label="Kết luận (Impression)"     value={form.impression}     onChange={onField('impression')}     rows={3} />
+                <ReportField label="Đề nghị (Recommendation)"  value={form.recommendation} onChange={onField('recommendation')} rows={2} />
                 <div className={`rounded-lg p-3 border ${form.criticalFinding ? 'bg-red-50 border-red-300' : 'bg-gray-50 border-gray-200'}`}>
                   <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer">
                     <input type="checkbox" checked={!!form.criticalFinding}

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import api from '../api'
 import CaseTabBar from '../components/CaseTabBar'
 import PatientDetailView from '../components/PatientDetailView'
+import CompleteStudyModal from '../components/CompleteStudyModal'
 import CriticalFindings from './CriticalFindings'
 
 // System tab IDs (must not collide with study _ids)
@@ -558,7 +559,7 @@ function AnnotationPanel({ study }) {
 
 // ─── Worklist Table (shared across all roles) ─────────────────────────────────
 
-function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase }) {
+function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase, onCompleteStudy }) {
   const [activeTab, setActiveTab] = useState('waiting')
   const [dateFrom, setDateFrom] = useState(todayISO())
   const [dateTo, setDateTo] = useState(todayISO())
@@ -615,23 +616,16 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase }) {
     await updateStudy(study._id, { status: 'cancelled' })
   }
 
-  const handleComplete = async (study) => {
-    await updateStudy(study._id, { status: 'reported' })
+  const handleStartImaging = async (study) => {
+    try {
+      await updateStudy(study._id, { status: 'in_progress' })
+    } catch (e) {
+      alert(e.response?.data?.error || 'Không bắt đầu được ca chụp')
+    }
   }
 
-  // DEV-only: simulate "imaging complete" without a real DICOM machine.
-  // Pushes Study to pending_read with mock image data so it appears on Ca đọc.
-  const handleMockComplete = async (study) => {
-    if (!confirm(`Mock: đánh dấu ca "${study.patientName}" đã chụp xong? (dùng cho test khi chưa có máy chụp)`)) return
-    try {
-      await updateStudy(study._id, {
-        status: 'pending_read',
-        imageStatus: 'available',
-        imageCount: 5,
-      })
-    } catch (e) {
-      alert(e.response?.data?.error || 'Không cập nhật được ca chụp')
-    }
+  const handleComplete = async (study) => {
+    await updateStudy(study._id, { status: 'reported' })
   }
 
   const handlePushOne = async (study) => {
@@ -672,24 +666,24 @@ function WorklistView({ studies, updateStudy, onRefresh, auth, onOpenCase }) {
     switch (activeTab) {
       case 'waiting':
         return (
-          <div className="flex items-center gap-0.5">
-            <button onClick={() => handlePushOne(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Đẩy ca tới scanner">📡</button>
-            <button onClick={() => handleMockComplete(study)}
-              className="px-1.5 py-0.5 text-[10px] font-semibold border border-dashed border-purple-400 text-purple-600 rounded hover:bg-purple-50"
-              title="Mock: đánh dấu đã chụp xong (khi chưa có máy thật)">
-              ▶ Mock<span className="ml-0.5 opacity-60">DEV</span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => handlePushOne(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Đẩy MWL tới máy chụp (không đổi trạng thái)">📡</button>
+            <button onClick={() => handleStartImaging(study)}
+              className="px-2.5 py-1 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-md whitespace-nowrap"
+              title="Bắt đầu chụp — chuyển sang Đang thực hiện">
+              ▶ Bắt đầu chụp
             </button>
             <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
           </div>
         )
       case 'in_progress':
         return (
-          <div className="flex items-center gap-0.5">
-            <button onClick={() => handlePushOne(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Đẩy lại ca">📡</button>
-            <button onClick={() => handleMockComplete(study)}
-              className="px-1.5 py-0.5 text-[10px] font-semibold border border-dashed border-purple-400 text-purple-600 rounded hover:bg-purple-50"
-              title="Mock: đánh dấu đã chụp xong (khi chưa có máy thật)">
-              ▶ Mock<span className="ml-0.5 opacity-60">DEV</span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => handlePushOne(study)} className={`${iconBtn} text-blue-500 hover:text-blue-700`} title="Đẩy lại MWL">📡</button>
+            <button onClick={() => onCompleteStudy?.(study)}
+              className="px-2.5 py-1 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-md whitespace-nowrap"
+              title="Ghi vật tư & chuyển sang Chờ đọc">
+              ▶ Kết thúc chụp
             </button>
             <button onClick={() => handleCancel(study)} className={`${iconBtn} text-red-400 hover:text-red-600`} title="Hủy">✕</button>
           </div>
@@ -892,6 +886,9 @@ export default function RIS() {
   const [activeCaseId, setActiveCaseId] = useState(SYS_WORKLIST)  // SYS_* or study._id
   const [criticalUnread, setCriticalUnread] = useState(0)
 
+  // "Kết thúc chụp" modal — KTV logs vật tư + transitions to pending_read
+  const [completeStudy, setCompleteStudy] = useState(null)
+
   // Pick up ?view=critical from old route redirects
   const [searchParams, setSearchParams] = useSearchParams()
   useEffect(() => {
@@ -1017,11 +1014,19 @@ export default function RIS() {
                 onRefresh={load}
                 auth={auth}
                 onOpenCase={openCase}
+                onCompleteStudy={setCompleteStudy}
               />
             </div>
           )}
         </ErrorBoundary>
       </div>
+
+      <CompleteStudyModal
+        study={completeStudy}
+        open={!!completeStudy}
+        onClose={() => setCompleteStudy(null)}
+        onConfirmed={() => { load() }}
+      />
     </div>
   )
 }
