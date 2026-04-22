@@ -65,6 +65,175 @@ function isPhoneLike(q) {
   return /^[\d\s+()-]{3,}$/.test(q.trim())
 }
 
+// ── Phiếu chỉ định print slip ────────────────────────────────────────────────
+// Opens a dedicated A4-sized window with a clinic letterhead + patient info +
+// itemised services + total + signature lines, then auto-prints. Uses the
+// Invoice returned by POST /registration/check-in as the source of truth
+// (invoice number, referral snapshot, line items).
+
+function printOrderSlip(patient, invoice) {
+  const w = window.open('', '_blank', 'width=820,height=1100')
+  if (!w) { alert('Trình duyệt chặn cửa sổ in — vui lòng cho phép pop-up.'); return }
+
+  const now = new Date()
+  const dateStr = now.toLocaleString('vi-VN')
+  const payMap = { cash: 'Tiền mặt', transfer: 'Chuyển khoản', card: 'Thẻ', mixed: 'BHYT / Kết hợp' }
+  const paymentLabel = payMap[invoice.paymentMethod] || invoice.paymentMethod || '—'
+  const age = patient.dob
+    ? Math.floor((Date.now() - new Date(patient.dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+    : null
+  const gender = patient.gender === 'M' ? 'Nam' : patient.gender === 'F' ? 'Nữ' : '—'
+  const esc = (s) => String(s || '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]))
+  const money = (n) => Number(n || 0).toLocaleString('vi-VN')
+
+  const addrParts = [patient.address, patient.street, patient.ward, patient.city].filter(Boolean)
+  const addressLine = addrParts.join(', ') || '—'
+
+  const itemsHtml = (invoice.items || []).map((it, i) => `
+    <tr>
+      <td class="c">${i + 1}</td>
+      <td class="mono">${esc(it.serviceCode)}</td>
+      <td>${esc(it.serviceName)}</td>
+      <td class="c">${it.quantity || 1}</td>
+      <td class="r mono">${money(it.unitPrice)}</td>
+      <td class="r mono"><b>${money(it.amount)}</b></td>
+    </tr>`).join('')
+
+  const referralLine = invoice.referralName
+    ? `<strong>${esc(invoice.referralName)}</strong>${invoice.sourceName ? ` (${esc(invoice.sourceName)})` : ''}`
+    : esc(invoice.sourceName) || '—'
+
+  const html = `
+<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<title>Phiếu chỉ định ${esc(invoice.invoiceNumber || '')}</title>
+<style>
+  @page { size: A4; margin: 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #111; font-size: 13px; line-height: 1.45; margin: 0; }
+  .header { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #1e3a5f; padding-bottom:8px; margin-bottom:14px; }
+  .clinic { font-weight: 700; font-size: 18px; color: #1e3a5f; letter-spacing: -0.2px; }
+  .clinic-sub { font-size: 11px; color: #666; margin-top: 2px; }
+  .meta { text-align: right; font-size: 11px; color: #444; }
+  .meta .num { font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 14px; font-weight: 700; color: #1e3a5f; }
+  h1 { font-size: 20px; text-align: center; margin: 12px 0 4px; letter-spacing: 1px; color: #1e3a5f; }
+  .subtitle { text-align: center; font-size: 11px; color: #666; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  .info { margin-bottom: 12px; }
+  .info td { padding: 4px 6px; vertical-align: top; font-size: 12px; border: none; }
+  .info td.k { color: #666; width: 100px; font-size: 11px; }
+  .info td.v { font-weight: 500; }
+  .svc { margin-top: 4px; }
+  .svc th { background: #f3f4f6; color: #374151; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; padding: 6px 8px; border-bottom: 1.5px solid #1e3a5f; text-align: left; }
+  .svc td { padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-size: 12px; }
+  .svc td.c { text-align: center; }
+  .svc td.r { text-align: right; }
+  .svc td.mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: 11px; }
+  .totals { margin-top: 8px; }
+  .totals td { padding: 3px 8px; font-size: 12px; }
+  .totals td.k { text-align: right; color: #4b5563; }
+  .totals td.v { text-align: right; font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-weight: 600; width: 140px; }
+  .totals tr.grand td { font-size: 14px; color: #1e3a5f; padding-top: 6px; border-top: 2px solid #1e3a5f; }
+  .notice { margin-top: 10px; background: #fff8e1; border: 1px solid #fcd34d; border-radius: 4px; padding: 6px 10px; font-size: 11px; color: #92400e; }
+  .signs { display: flex; justify-content: space-around; margin-top: 36px; padding-top: 8px; }
+  .signs > div { width: 45%; text-align: center; font-size: 12px; }
+  .signs .role { color: #666; font-size: 11px; margin-bottom: 48px; }
+  .signs .hint { font-size: 10px; color: #999; margin-top: 2px; font-style: italic; }
+  .footer { margin-top: 14px; text-align:center; font-size: 10px; color: #888; border-top: 1px solid #e5e7eb; padding-top: 6px; }
+  @media print { .no-print { display: none; } }
+</style>
+</head><body>
+
+<div class="header">
+  <div>
+    <div class="clinic">LINKRAD${invoice.site ? ' — ' + esc(String(invoice.site).toUpperCase()) : ''}</div>
+    <div class="clinic-sub">Trung tâm Chẩn đoán Hình ảnh</div>
+  </div>
+  <div class="meta">
+    <div>Số phiếu: <span class="num">${esc(invoice.invoiceNumber || invoice._id || '')}</span></div>
+    <div>Ngày in: ${esc(dateStr)}</div>
+  </div>
+</div>
+
+<h1>PHIẾU CHỈ ĐỊNH DỊCH VỤ</h1>
+<div class="subtitle">Phiếu dành cho bệnh nhân mang theo khi thực hiện dịch vụ</div>
+
+<table class="info"><tbody>
+  <tr>
+    <td class="k">Họ và tên</td><td class="v"><strong>${esc(patient.name || invoice.patientName)}</strong></td>
+    <td class="k">Mã BN</td><td class="v mono">${esc(patient.patientId || invoice.patientId || '')}</td>
+  </tr>
+  <tr>
+    <td class="k">Ngày sinh</td>
+    <td class="v">${patient.dob ? esc(patient.dob.slice(0, 10).split('-').reverse().join('/')) : '—'}${age != null ? ` · ${age} tuổi` : ''}</td>
+    <td class="k">Giới tính</td><td class="v">${gender}</td>
+  </tr>
+  <tr>
+    <td class="k">Số điện thoại</td><td class="v mono">${esc(patient.phone || invoice.phone || '—')}</td>
+    <td class="k">BHYT</td><td class="v">${esc(patient.insuranceNumber || '—')}</td>
+  </tr>
+  <tr>
+    <td class="k">Địa chỉ</td><td class="v" colspan="3">${esc(addressLine)}</td>
+  </tr>
+  <tr>
+    <td class="k">Nguồn khách</td><td class="v" colspan="3">${referralLine}</td>
+  </tr>
+  ${patient.clinicalInfo ? `<tr>
+    <td class="k">Lâm sàng</td><td class="v" colspan="3">${esc(patient.clinicalInfo)}</td>
+  </tr>` : ''}
+</tbody></table>
+
+<table class="svc"><thead>
+  <tr>
+    <th style="width:28px">STT</th>
+    <th style="width:80px">Mã DV</th>
+    <th>Tên dịch vụ</th>
+    <th style="width:36px">SL</th>
+    <th style="width:100px;text-align:right">Đơn giá</th>
+    <th style="width:120px;text-align:right">Thành tiền</th>
+  </tr>
+</thead><tbody>${itemsHtml || '<tr><td colspan="6" class="c" style="color:#999;padding:12px">(Không có dịch vụ)</td></tr>'}</tbody></table>
+
+<table class="totals"><tbody>
+  <tr><td class="k">Tạm tính</td><td class="v">${money(invoice.subtotal)} ₫</td></tr>
+  ${invoice.totalDiscount > 0 ? `<tr><td class="k">Giảm giá</td><td class="v" style="color:#dc2626">-${money(invoice.totalDiscount)} ₫</td></tr>` : ''}
+  <tr class="grand"><td class="k"><strong>Tổng cộng</strong></td><td class="v">${money(invoice.grandTotal)} ₫</td></tr>
+  <tr><td class="k">Hình thức thanh toán</td><td class="v" style="font-weight:500">${esc(paymentLabel)}</td></tr>
+</tbody></table>
+
+<div class="notice">
+  ⚠ Vui lòng mang phiếu này đến quầy lễ tân/phòng kỹ thuật khi được gọi.
+  Phiếu thu chính thức sẽ được xuất tại quầy sau khi hoàn tất thanh toán.
+</div>
+
+<div class="signs">
+  <div>
+    <div class="role">Bệnh nhân / Người nhà</div>
+    <div><strong>${esc(patient.name || '')}</strong></div>
+    <div class="hint">(ký, ghi rõ họ tên)</div>
+  </div>
+  <div>
+    <div class="role">Lễ tân</div>
+    <div>&nbsp;</div>
+    <div class="hint">(ký, ghi rõ họ tên)</div>
+  </div>
+</div>
+
+<div class="footer">LinkRad · ${esc(dateStr)} · Phiếu số ${esc(invoice.invoiceNumber || '')}</div>
+
+<script>
+  window.onload = () => {
+    window.focus()
+    window.print()
+    setTimeout(() => window.close(), 400)
+  }
+</script>
+
+</body></html>`
+
+  w.document.write(html)
+  w.document.close()
+}
+
 // Highlight matched substring with yellow background
 function Highlighted({ text, query }) {
   if (!query) return <>{text}</>
@@ -288,27 +457,31 @@ function SearchBar({ query, onQueryChange, results, loading, onPick, onCreateNew
 function SearchView({ query, onQueryChange, results, loading, onPick, onCreateNew }) {
   const [focused, setFocused] = useState(true)
   return (
-    <div className="p-6">
-      <div className="mb-4">
-        <h2 className="text-xl font-semibold text-gray-800">Tìm hoặc tạo bệnh nhân</h2>
-        <p className="text-xs text-gray-500">Gõ ≥ 1 ký tự để bắt đầu · ưu tiên SĐT, fallback tên · Esc để huỷ</p>
+    <div className="flex flex-col">
+      {/* Header band — mirrors TodayRail's padding + line rhythm exactly so
+          the bottom border lines up with the rail's and there's no kink. */}
+      <div className="px-6 py-2 border-b border-gray-200 bg-white">
+        <div className="text-base font-semibold text-gray-800 mb-1">Tìm hoặc tạo bệnh nhân</div>
+        <div className="text-xs text-gray-500">Gõ ≥ 1 ký tự để bắt đầu · ưu tiên SĐT, fallback tên · Esc để huỷ</div>
       </div>
-      <SearchBar
-        query={query}
-        onQueryChange={onQueryChange}
-        results={results}
-        loading={loading}
-        onPick={onPick}
-        onCreateNew={onCreateNew}
-        focused={focused}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-      />
-      {!query && (
-        <div className="mt-12 text-center text-sm text-gray-400">
-          ↑ bắt đầu bằng cách gõ SĐT hoặc tên bệnh nhân
-        </div>
-      )}
+      <div className="px-6 pt-2 pb-6">
+        <SearchBar
+          query={query}
+          onQueryChange={onQueryChange}
+          results={results}
+          loading={loading}
+          onPick={onPick}
+          onCreateNew={onCreateNew}
+          focused={focused}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+        />
+        {!query && (
+          <div className="mt-12 text-center text-sm text-gray-400">
+            ↑ bắt đầu bằng cách gõ SĐT hoặc tên bệnh nhân
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -900,7 +1073,7 @@ export default function Registration() {
       // Atomic server-side: creates 1 Invoice (draft, lands on Phiếu thu) +
       // N Appointments + N Studies (scheduled, lands on Ca chụp) for each
       // imaging service. Non-imaging services appear on Phiếu thu only.
-      await api.post('/registration/check-in', {
+      const r = await api.post('/registration/check-in', {
         patientId: selectedPatient._id,
         services: cart.map(it => ({
           code: it.code,
@@ -911,7 +1084,11 @@ export default function Registration() {
         })),
         paymentMethod: payment === 'bhyt' ? 'mixed' : payment,
       })
-      window.print()
+      const invoice = r.data?.invoice
+      if (invoice) {
+        // A4 Phiếu chỉ định in a separate window (auto-print + close).
+        printOrderSlip(selectedPatient, invoice)
+      }
       goSearch()
     } catch (e) {
       alert(e.response?.data?.error || 'Không lưu được phiếu chỉ định')
