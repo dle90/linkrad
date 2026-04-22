@@ -131,3 +131,22 @@ The infrastructure from Phase 2 (snapshotted `effectiveSalespersonId` per invoic
 - **Template categories / tags** — `ReportTemplate` model has no `tag` field. The wireframes showed category chips ("Bình thường", "Thoái hóa", "Thoát vị", etc.). Would need a schema addition to group templates. Not implemented; templates are shown as a flat search-filtered grid.
 - **Lot-number display per consumable row** on the Kết thúc chụp modal — the wireframe hinted at `OMN-2611 · HSD 03/2027` per row, but FIFO lot is only determined at deduction time. A pre-display would require either (a) a "peek FIFO" endpoint or (b) separate UI showing which lots *will* be used. Not shipped.
 - **Wireframe HTML files** at repo root now include `LinkRad Ca Doc Reading Workspace.standalone.html` alongside the earlier two. None committed. `scripts/decode-ca-doc.mjs` + `scripts/ca-doc-out/` local-only.
+
+## Ca đọc soft-lock / claim enforcement (2026-04-22, same-day)
+
+**Shipped:**
+
+- **Action toolbar trimmed** from 8 buttons to 2: `👁 Xem ảnh` (primary) + `🖨️ In kết quả`. Removed `Xem ảnh V1` (dead — backend ignored the v1 flag), `Tải Video` + `Tải tệp đính kèm` (not implemented), `In nhanh` (folded into In kết quả — user hits browser print themselves), `In Tra cứu Portal` (niche for bacsi workflow). `Nhận ca` moved out of the toolbar entirely.
+- **ClaimBanner** — new three-state banner that sits between the patient summary card and the report editor. One of: blue "Ca này chưa có BS đọc" with a prominent 🛎️ Nhận ca button (unclaimed), green "Bạn đang đọc ca này" with Trả lại ca link (claimed by me), amber "Ca đang được đọc bởi BS X" with an admin-only "Lấy quyền" button (claimed by other). Directly reflects `study.radiologist` vs `auth.username`.
+- **Editing lock** — when the study isn't claimed-by-me (and user isn't admin/giamdoc), all five ReportField textareas become `readOnly` + visually dimmed, the critical-finding checkbox is disabled, the templates panel is hidden entirely, and both `Lưu tạm` and the primary save button are disabled. The footer label tells you why ("Đang khoá bởi BS …" / "Bấm Nhận ca để có thể lưu").
+- **Trả lại ca** — new `DELETE /ris/studies/:id/pick` endpoint. Only the current claimer or admin can release. Refuses if a final report already exists (`report.status === 'final'`). Clears `radiologist/radiologistName/assignedAt` and flips `status: reading → pending_read`. Frontend has a confirm dialog + busy state via the existing `claiming` flag.
+- **Admin override** (`Lấy quyền (admin)` button) uses the existing `POST /ris/studies/:id/assign` (admin-only) rather than `/pick` (which would race-reject on `status != pending_read`). Stamps the admin as the new radiologist.
+- **Backend write-guard** on `POST /ris/reports`: non-admin/non-truongphong must own the claim (`study.radiologist === req.user.username`), else 409 with the blocking reason. Prevents the "doctor B clobbers doctor A's report" scenario even if doctor B bypasses the UI lock (e.g. opens a tab while their session state is stale). Admin + truongphong keep the ability to save for supervisor corrections.
+- **Race-safety on `/pick`** was already in place (atomic `findOneAndUpdate({ status: 'pending_read', radiologist: {$in: [null, '']} })`) — verified and not changed.
+
+**Deferred / known gaps:**
+
+- **No auto-release on idle/tab-close** — if a bacsi claims a case then walks away or closes their laptop, the case stays locked until they come back or an admin reassigns. Acceptable for a small team; for scale, add a heartbeat + server-side TTL (e.g. release after 20 min idle) or a `beforeunload` release beacon.
+- **Queue rail doesn't live-refresh** when another bacsi claims in a different session — the rail shows a polled snapshot. Manual ⟳ fixes it, but a 15-30s polling interval or websocket push would be cleaner.
+- **Truongphong can bypass the lock server-side** (deliberate for supervisor corrections) but there's no UI for them to do it explicitly — they'd need to use the Lấy quyền flow (admin) or `POST /assign` directly. Fine for now.
+- **No "claim expired" notification** — if an admin uses Lấy quyền on your case while you were writing, you'll next see the 409 when you try to save. Not ideal UX; a soft "your claim was overridden" toast would help but requires polling the study state.

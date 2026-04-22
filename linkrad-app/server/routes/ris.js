@@ -486,6 +486,38 @@ router.post('/studies/:id/pick', requireAuth, async (req, res) => {
   }
 })
 
+// DELETE /studies/:id/pick — release a claim back to the pool.
+// Only the current claimer or admin can release. Only works if no final
+// report has been saved yet (report.status !== 'final').
+router.delete('/studies/:id/pick', requireAuth, async (req, res) => {
+  try {
+    const study = await Study.findById(req.params.id)
+    if (!study) return res.status(404).json({ error: 'Không tìm thấy ca chụp' })
+    const mine = study.radiologist && study.radiologist === req.user.username
+    const isAdmin = req.user.role === 'admin'
+    if (!mine && !isAdmin) {
+      return res.status(403).json({ error: 'Chỉ người đang đọc ca hoặc admin mới có thể trả lại ca' })
+    }
+    // Refuse to release if the report has been finalised — the case is already done.
+    const report = await Report.findOne({ studyId: study._id }).lean()
+    if (report?.status === 'final') {
+      return res.status(400).json({ error: 'Ca đã có kết quả cuối cùng — không thể trả lại' })
+    }
+    const now = new Date().toISOString()
+    study.radiologist = ''
+    study.radiologistName = ''
+    study.assignedAt = ''
+    // Only flip status back if it was 'reading' — preserve pending_read if somehow already there
+    if (study.status === 'reading') study.status = 'pending_read'
+    study.updatedAt = now
+    await study.save()
+    res.json(study)
+  } catch (err) {
+    console.error('DELETE /studies/:id/pick error:', err)
+    res.status(500).json({ error: 'Lỗi server' })
+  }
+})
+
 // POST /studies/:id/assign — admin override (reassign ca cho bác sĩ khác)
 router.post('/studies/:id/assign', requireAuth, async (req, res) => {
   try {
@@ -534,6 +566,21 @@ router.post('/reports', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Không có quyền viết kết quả' })
     }
     const { studyId, studyUID, technique, clinicalInfo, findings, impression, recommendation, status, criticalFinding, criticalNote, templateUsedId } = req.body
+
+    // Soft-lock enforcement: only the claiming radiologist can write. Admin /
+    // truongphong can override for supervisor corrections. Prevents two bacsi
+    // from clobbering each other's drafts.
+    const studyForLock = await Study.findById(studyId).lean()
+    if (!studyForLock) return res.status(404).json({ error: 'Không tìm thấy ca chụp' })
+    const isOwner = studyForLock.radiologist && studyForLock.radiologist === req.user.username
+    const canOverride = role === 'admin' || role === 'truongphong'
+    if (!isOwner && !canOverride) {
+      if (studyForLock.radiologist) {
+        return res.status(409).json({ error: `Ca đang được đọc bởi BS ${studyForLock.radiologistName || studyForLock.radiologist}. Bạn không thể lưu kết quả.` })
+      }
+      return res.status(409).json({ error: 'Bạn chưa nhận ca này. Bấm "Nhận ca" trước khi lưu kết quả.' })
+    }
+
     const now = new Date().toISOString()
 
     let report = await Report.findOne({ studyId })

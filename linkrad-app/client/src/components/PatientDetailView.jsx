@@ -29,10 +29,11 @@ function techniqueStarter(study) {
 // textarea on every parent re-render (which was stealing focus after each
 // keystroke).
 const ReportField = React.forwardRef(function ReportField(
-  { label, hint, value, rows = 3, onChange, onFocus, active = false, critical = false, anchorId },
+  { label, hint, value, rows = 3, onChange, onFocus, active = false, critical = false, anchorId, disabled = false },
   ref
 ) {
-  const ringCls = critical ? 'border-rose-400 ring-2 ring-rose-100'
+  const ringCls = disabled ? 'border-gray-200 bg-gray-50 text-gray-600 cursor-not-allowed'
+    : critical ? 'border-rose-400 ring-2 ring-rose-100'
     : active ? 'border-blue-400 ring-2 ring-blue-100'
     : 'border-gray-200'
   return (
@@ -48,6 +49,8 @@ const ReportField = React.forwardRef(function ReportField(
         ref={ref}
         onChange={onChange}
         onFocus={onFocus}
+        disabled={disabled}
+        readOnly={disabled}
         className={`w-full border rounded-lg px-3 py-2 text-sm outline-none resize-y ${ringCls}`} />
     </div>
   )
@@ -165,6 +168,74 @@ function TemplatesPanel({ templates, modality, bodyPart, activeSection, onInsert
   )
 }
 
+// ── Claim banner — soft-lock UX. Three visual states: unclaimed / mine /
+//    claimed-by-other. Disables editing when not claimed-by-me. ──────────────
+
+function ClaimBanner({ study, auth, onClaim, onRelease, onAdminOverride, claiming }) {
+  const mine = study.radiologist && study.radiologist === auth?.username
+  const unclaimed = !study.radiologist
+  const claimedByOther = study.radiologist && !mine
+  const isAdmin = auth?.role === 'admin' || auth?.role === 'giamdoc'
+
+  if (mine) {
+    return (
+      <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center gap-2.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+        <div className="flex-1 min-w-0 text-xs">
+          <span className="font-semibold text-emerald-900">Bạn đang đọc ca này.</span>
+          <span className="text-emerald-700 ml-1.5">Chỉ bạn có thể sửa kết quả cho tới khi lưu hoàn tất hoặc trả lại.</span>
+        </div>
+        <button onClick={onRelease} disabled={claiming}
+          className="text-[11px] text-emerald-700 hover:text-emerald-900 underline whitespace-nowrap flex-shrink-0 disabled:opacity-40">
+          Trả lại ca
+        </button>
+      </div>
+    )
+  }
+
+  if (unclaimed) {
+    return (
+      <div className="bg-blue-50 border border-blue-300 rounded-lg px-3 py-2.5 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0 text-base">🛎️</div>
+        <div className="flex-1 min-w-0 text-sm">
+          <div className="font-semibold text-blue-900">Ca này chưa có BS đọc</div>
+          <div className="text-xs text-blue-700 mt-0.5">
+            Bấm <b>Nhận ca</b> để khoá ca cho bạn và bắt đầu viết kết quả. Các BS khác sẽ không thể sửa khi bạn đã nhận.
+          </div>
+        </div>
+        <button onClick={onClaim} disabled={claiming}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm disabled:opacity-40 flex-shrink-0">
+          {claiming ? 'Đang nhận…' : '🛎️ Nhận ca'}
+        </button>
+      </div>
+    )
+  }
+
+  if (claimedByOther) {
+    return (
+      <div className="bg-amber-50 border border-amber-300 rounded-lg px-3 py-2.5 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center flex-shrink-0">🔒</div>
+        <div className="flex-1 min-w-0 text-sm">
+          <div className="font-semibold text-amber-900 truncate">
+            Ca đang được đọc bởi BS <b>{study.radiologistName || study.radiologist}</b>
+          </div>
+          <div className="text-xs text-amber-700 mt-0.5">
+            Bạn có thể xem ảnh và tham khảo, nhưng không thể sửa kết quả. Dùng Xem ảnh · So sánh phiên cũ · In.
+          </div>
+        </div>
+        {isAdmin && (
+          <button onClick={onAdminOverride} disabled={claiming}
+            className="px-3 py-1.5 text-[11px] font-semibold border border-amber-400 text-amber-800 bg-white rounded-lg hover:bg-amber-100 disabled:opacity-40 flex-shrink-0">
+            Lấy quyền (admin)
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  return null
+}
+
 // ── Critical banner + confirmation modal ─────────────────────────────────────
 
 function CriticalBanner({ onToggleOff }) {
@@ -239,15 +310,13 @@ function Kbd({ children }) {
   )
 }
 
+// Toolbar trimmed to essentials (2026-04-22). Nhận ca is rendered separately
+// in the claim banner when the study is unclaimed — it's not a toolbar action.
+// V1 viewer, video, attachments, portal, fast-print were either dead, unimplemented,
+// or niche; removed to reduce visual noise.
 const ACTION_BUTTONS = [
-  { key: 'receive',   label: 'Nhận ca',          icon: '🛎️',  variant: 'primary' },
-  { key: 'view',      label: 'Xem ảnh',          icon: '👁️',  variant: 'default' },
-  { key: 'view_v1',   label: 'Xem ảnh V1',       icon: '🔍',  variant: 'default' },
-  { key: 'video',     label: 'Tải Video',        icon: '🎥',  variant: 'default' },
-  { key: 'attach',    label: 'Tải tệp đính kèm', icon: '📎',  variant: 'default' },
-  { key: 'print',     label: 'In kết quả',       icon: '🖨️',  variant: 'default' },
-  { key: 'print_fast', label: 'In nhanh',        icon: '⚡',  variant: 'default' },
-  { key: 'portal',    label: 'In Tra cứu Portal', icon: '🌐',  variant: 'default' },
+  { key: 'view',  label: 'Xem ảnh',    icon: '👁️', variant: 'primary' },
+  { key: 'print', label: 'In kết quả', icon: '🖨️', variant: 'default' },
 ]
 
 // Open a print-formatted report in a new window (clinic letterhead, signatures, etc.)
@@ -331,25 +400,15 @@ function openPrintWindow(study, report, autoPrint = false) {
   w.document.close()
 }
 
-function ActionToolbar({ study, report, onReceive, onViewImages }) {
+function ActionToolbar({ study, report, onViewImages }) {
   const variantCls = (v) => v === 'primary'
     ? 'bg-blue-600 hover:bg-blue-700 text-white'
     : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
 
   const handle = (key) => {
     switch (key) {
-      case 'receive': return onReceive()
-      case 'view':    return onViewImages(false)
-      case 'view_v1': return onViewImages(true)
-      case 'print':       return openPrintWindow(study, report, false)
-      case 'print_fast':  return openPrintWindow(study, report, true)
-      case 'portal':
-        window.open(`/patient-portal?lookup=${encodeURIComponent(study.patientId)}`, '_blank')
-        break
-      case 'video':
-      case 'attach':
-        alert('Tính năng đang phát triển — kết nối với storage')
-        break
+      case 'view':  return onViewImages()
+      case 'print': return openPrintWindow(study, report, false)
     }
   }
 
@@ -358,7 +417,7 @@ function ActionToolbar({ study, report, onReceive, onViewImages }) {
       {ACTION_BUTTONS.map(b => (
         <button key={b.key}
           onClick={() => handle(b.key)}
-          className={`px-2.5 py-1.5 rounded text-xs flex items-center gap-1.5 ${variantCls(b.variant)}`}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 ${variantCls(b.variant)}`}
           title={b.label}
         >
           <span>{b.icon}</span>
@@ -792,9 +851,16 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
   const [form, setForm] = useState({ technique: '', clinicalInfo: '', findings: '', impression: '', recommendation: '', criticalFinding: false, criticalNote: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [claiming, setClaiming] = useState(false)
   const [templates, setTemplates] = useState([])
   const [activeSection, setActiveSection] = useState('findings')
   const [showCriticalConfirm, setShowCriticalConfirm] = useState(false)
+
+  // Soft-lock state — editing is disabled unless the current user has claimed.
+  // Admins can edit anything (Phase 3 backend guard permits that too).
+  const isAdmin = auth?.role === 'admin' || auth?.role === 'giamdoc'
+  const claimedByMe = !!study.radiologist && study.radiologist === auth?.username
+  const locked = !(claimedByMe || isAdmin)
 
   // One ref per section — used for scrollIntoView + cursor-position inserts
   const refs = {
@@ -903,12 +969,46 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
   }
 
   const onReceive = async () => {
+    setClaiming(true)
     try {
       await api.post(`/ris/studies/${study._id}/pick`)
-      onRefresh?.()
+      await onRefresh?.()
     } catch (e) {
       alert(e.response?.data?.error || 'Không nhận được ca')
       onRefresh?.()
+    } finally {
+      setClaiming(false)
+    }
+  }
+
+  const onRelease = async () => {
+    if (!confirm('Trả lại ca này về hàng chờ? Các BS khác sẽ có thể nhận và đọc.')) return
+    setClaiming(true)
+    try {
+      await api.delete(`/ris/studies/${study._id}/pick`)
+      await onRefresh?.()
+    } catch (e) {
+      alert(e.response?.data?.error || 'Không trả lại được ca')
+    } finally {
+      setClaiming(false)
+    }
+  }
+
+  // Admin/giamdoc override on a study already claimed by another bacsi. Uses
+  // /assign rather than /pick so it doesn't race-reject on status != pending_read.
+  const onAdminOverride = async () => {
+    if (!confirm(`Lấy quyền đọc ca này từ BS ${study.radiologistName || study.radiologist}?`)) return
+    setClaiming(true)
+    try {
+      await api.post(`/ris/studies/${study._id}/assign`, {
+        radiologistId: auth?.username,
+        radiologistName: auth?.displayName || auth?.username,
+      })
+      await onRefresh?.()
+    } catch (e) {
+      alert(e.response?.data?.error || 'Không lấy được quyền')
+    } finally {
+      setClaiming(false)
     }
   }
 
@@ -953,12 +1053,16 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
   return (
     <div className="flex flex-1 overflow-hidden bg-gray-50">
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <ActionToolbar study={study} report={report} onReceive={onReceive} onViewImages={onViewImages} />
+        <ActionToolbar study={study} report={report} onViewImages={onViewImages} />
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 space-y-3">
             <PatientSummaryCard study={study} />
 
-            {form.criticalFinding && (
+            <ClaimBanner study={study} auth={auth}
+              onClaim={onReceive} onRelease={onRelease} onAdminOverride={onAdminOverride}
+              claiming={claiming} />
+
+            {form.criticalFinding && !locked && (
               <CriticalBanner onToggleOff={() => setForm(f => ({ ...f, criticalFinding: false, criticalNote: '' }))} />
             )}
 
@@ -979,13 +1083,15 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
                 <div className="text-center py-8 text-gray-400 text-sm">Đang tải...</div>
               ) : (
                 <div className="px-5 py-4 space-y-3">
-                  <TemplatesPanel
-                    templates={templates}
-                    modality={study.modality}
-                    bodyPart={study.bodyPart}
-                    activeSection={activeSection}
-                    onInsert={insertTemplate}
-                  />
+                  {!locked && (
+                    <TemplatesPanel
+                      templates={templates}
+                      modality={study.modality}
+                      bodyPart={study.bodyPart}
+                      activeSection={activeSection}
+                      onInsert={insertTemplate}
+                    />
+                  )}
 
                   <ReportField
                     ref={refs.technique}
@@ -996,6 +1102,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
                     onFocus={() => setActiveSection('technique')}
                     active={activeSection === 'technique'}
                     critical={form.criticalFinding && activeSection === 'technique'}
+                    disabled={locked}
                     rows={2}
                   />
                   <ReportField
@@ -1006,6 +1113,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
                     onChange={onField('clinicalInfo')}
                     onFocus={() => setActiveSection('clinicalInfo')}
                     active={activeSection === 'clinicalInfo'}
+                    disabled={locked}
                     rows={2}
                   />
                   <ReportField
@@ -1018,6 +1126,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
                     onFocus={() => setActiveSection('findings')}
                     active={activeSection === 'findings'}
                     critical={form.criticalFinding}
+                    disabled={locked}
                     rows={7}
                   />
                   <ReportField
@@ -1030,6 +1139,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
                     onFocus={() => setActiveSection('impression')}
                     active={activeSection === 'impression'}
                     critical={form.criticalFinding}
+                    disabled={locked}
                     rows={4}
                   />
                   <ReportField
@@ -1041,14 +1151,18 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
                     onFocus={() => setActiveSection('recommendation')}
                     active={activeSection === 'recommendation'}
                     critical={form.criticalFinding && activeSection === 'recommendation'}
+                    disabled={locked}
                     rows={2}
                   />
 
                   {/* Critical toggle (the banner appears above when flagged) */}
-                  <label className={`flex items-start gap-2 p-2.5 rounded-lg border cursor-pointer
-                    ${form.criticalFinding ? 'bg-rose-50 border-rose-300' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
+                  <label className={`flex items-start gap-2 p-2.5 rounded-lg border
+                    ${locked ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
+                      : form.criticalFinding ? 'bg-rose-50 border-rose-300 cursor-pointer'
+                      : 'bg-gray-50 border-gray-200 hover:bg-gray-100 cursor-pointer'}`}>
                     <input type="checkbox"
                       className="mt-0.5 w-4 h-4 accent-rose-600"
+                      disabled={locked}
                       checked={!!form.criticalFinding}
                       onChange={e => setForm(f => ({ ...f, criticalFinding: e.target.checked, criticalNote: e.target.checked ? f.criticalNote : '' }))} />
                     <div className="flex-1 min-w-0">
@@ -1076,22 +1190,28 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, onSave
 
         {/* Pinned footer — save actions always reachable */}
         <div className="border-t border-gray-200 bg-white px-4 py-3 flex items-center gap-3 flex-shrink-0">
-          <button onClick={() => save('preliminary')} disabled={saving}
-            className="px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-40">
+          <button onClick={() => save('preliminary')} disabled={saving || locked}
+            className="px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent">
             Lưu tạm
           </button>
           <div className="flex-1" />
-          {!canFinalize && (
+          {locked ? (
+            <span className="text-[11px] text-amber-700 italic">
+              {study.radiologist ? `Đang khoá bởi BS ${study.radiologistName || study.radiologist}` : 'Bấm Nhận ca để có thể lưu'}
+            </span>
+          ) : !canFinalize ? (
             <span className="text-[11px] text-gray-400">
               {!completion.findings && 'Thiếu Findings'}
               {!completion.findings && !completion.impression && ' · '}
               {!completion.impression && 'Thiếu Impression'}
             </span>
+          ) : null}
+          {!locked && (
+            <div className="flex items-center gap-1 text-[10px] text-gray-500">
+              <Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd>
+            </div>
           )}
-          <div className="flex items-center gap-1 text-[10px] text-gray-500">
-            <Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd>
-          </div>
-          <button onClick={saveAndNext} disabled={!canFinalize}
+          <button onClick={saveAndNext} disabled={!canFinalize || locked}
             className={`px-4 py-2 text-xs font-semibold rounded-lg shadow-sm disabled:opacity-40
               ${form.criticalFinding
                 ? 'bg-rose-600 hover:bg-rose-700 text-white'
