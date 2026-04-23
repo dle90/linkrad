@@ -1,84 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api'
 import { EmployeeSection, DepartmentSection, PermissionMatrix } from './HRManagement'
+import ReportTemplates from './ReportTemplates'
+import { CATALOG_TO_GROUP, DEFAULT_CATALOG_KEY } from '../config/catalogGroups'
+
+const LAST_CATALOG_KEY = 'linkrad_last_catalog'
 
 const fmtMoney = (v) => v == null ? '0' : Number(v).toLocaleString('vi-VN')
 
-// ── Group config ─────────────────────────────────────────
-// Four top-level groups shown as pills under the PageHeader. Each group owns
-// its own color (teal / blue / purple / amber) used in active pill bg and
-// in the landing page tile accent dots. Per Claude Design sketches 2026-04-23:
-// flat sidebar is replaced by group pills + sub-catalog tab strip in-page.
-const GROUPS = [
-  {
-    key: 'partners',
-    label: 'Đối tác',
-    color: 'blue', // bg-blue-100 text-blue-700 · dot #185FA5
-    items: [
-      { key: 'customer-sources',  label: 'Nguồn khách hàng',   icon: '📥' },
-      { key: 'referral-doctors',  label: 'Bác sĩ giới thiệu',  icon: '👨‍⚕️' },
-      { key: 'partner-facilities',label: 'Cơ sở y tế đối tác', icon: '🏥' },
-      { key: 'commission-groups', label: 'Nhóm hoa hồng',      icon: '📋' },
-      { key: 'commission-rules',  label: 'Hoa hồng',           icon: '💰' },
-    ],
-  },
-  {
-    key: 'services',
-    label: 'Dịch vụ & Chuyên khoa',
-    color: 'teal', // bg-teal-100 text-teal-700 · dot #1D9E75
-    items: [
-      { key: 'services',       label: 'Dịch vụ',             icon: '📄' },
-      { key: 'service-types',  label: 'Loại dịch vụ',        icon: '📂' },
-      { key: 'tax-groups',     label: 'Nhóm thuế dịch vụ',   icon: '📊' },
-      { key: 'specialties',    label: 'Chuyên khoa',         icon: '🩺' },
-    ],
-  },
-  {
-    key: 'marketing',
-    label: 'Marketing',
-    color: 'rose', // bg-rose-100 text-rose-700 · dot #E11D48
-    items: [
-      { key: 'promotions',  label: 'Chương trình khuyến mãi', icon: '🎁' },
-      { key: 'promo-codes', label: 'Mã khuyến mãi',           icon: '🏷️' },
-    ],
-  },
-  {
-    key: 'references',
-    label: 'Hồ sơ & Tham chiếu',
-    color: 'purple', // bg-purple-100 text-purple-700 · dot #7F77DD
-    items: [
-      { key: 'hr-employees',   label: 'Nhân viên',        icon: '👤' },
-      { key: 'hr-departments', label: 'Phòng ban / Chi nhánh', icon: '🏢' },
-      { key: 'hr-permissions', label: 'Ma trận quyền',    icon: '🔐' },
-      { key: 'patients',       label: 'Bệnh nhân',        icon: '🧑' },
-    ],
-  },
-  {
-    key: 'inventory',
-    label: 'Kho',
-    color: 'amber', // bg-amber-100 text-amber-700 · dot #EF9F27
-    items: [
-      { key: 'supplies',               label: 'Vật tư',                  icon: '📦' },
-      { key: 'supply-categories',      label: 'Nhóm vật tư',             icon: '🗂️' },
-      { key: 'suppliers',              label: 'Nhà cung cấp',            icon: '🏭' },
-      { key: 'supply-service-mapping', label: 'Liên kết vật tư – dịch vụ', icon: '📏' },
-    ],
-  },
-]
-
-// Tailwind class map per group color — used by GroupPills + landing tiles
-const GROUP_PILL_CLS = {
-  blue:   { active: 'bg-blue-600 text-white',     dot: 'bg-blue-600' },
-  teal:   { active: 'bg-teal-600 text-white',     dot: 'bg-teal-600' },
-  rose:   { active: 'bg-rose-600 text-white',     dot: 'bg-rose-600' },
-  purple: { active: 'bg-purple-600 text-white',   dot: 'bg-purple-600' },
-  amber:  { active: 'bg-amber-600 text-white',    dot: 'bg-amber-600' },
-}
-
-// Legacy alias — some sibling references still iterate MENU
-const MENU = GROUPS.map(g => ({ group: g.label, items: g.items }))
+// Group structure (CATALOG_GROUPS) is imported from the shared config so the
+// main sidebar's collapsible Danh mục tree and this page agree on layout.
+// Navigation moved to the sidebar tree on 2026-04-23 — the in-page GroupPills
+// + SubcatalogTabs + Tổng quan landing were removed in that pass.
 
 // ── Field definitions per catalog ────────────────────────
 const CATALOG_FIELDS = {
@@ -786,172 +721,29 @@ function PageHeader({ breadcrumb, userName }) {
   )
 }
 
-// Group pills — the primary nav element (replaces flat sidebar). Only the
-// active pill is shaped (filled in its group color); idle pills are plain
-// text so the active pill visually "contains" the sub-catalog tabs below it.
-// User feedback 2026-04-23: border/bg on idle pills made the 2-level nesting
-// read as two parallel rows instead of parent/child.
-function GroupPills({ activeGroupKey, onPick }) {
-  return (
-    <div className="flex items-center gap-1 mb-1 flex-wrap">
-      {GROUPS.map(g => {
-        const active = g.key === activeGroupKey
-        const cls = active
-          ? `${GROUP_PILL_CLS[g.color].active} px-3.5 py-1.5 rounded-full shadow-sm`
-          : 'px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-full'
-        return (
-          <button key={g.key} onClick={() => onPick(g)} className={`text-sm font-semibold transition-colors ${cls}`}>
-            {g.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-// Sub-catalog tab strip — the active group's catalogs as a horizontal row.
-// Active tab has an underline bar in the group's color (connects visually
-// to the filled active group pill above). Counts loaded from /catalogs/summary.
-function SubcatalogTabs({ group, activeKey, counts, onPick }) {
-  const activeColor = group ? GROUP_PILL_CLS[group.color]?.dot : 'bg-gray-900'
-  return (
-    <div className="flex items-baseline gap-4 border-b border-gray-200 mb-4 pt-1 overflow-x-auto">
-      {group.items.map(it => {
-        const active = it.key === activeKey
-        const c = counts?.[it.key]
-        return (
-          <button key={it.key} onClick={() => onPick(it.key)}
-            className={`flex items-baseline gap-1.5 pb-2 -mb-px border-b-2 text-sm whitespace-nowrap transition-colors ${active ? `${activeColor.replace('bg-', 'border-')} text-gray-900 font-semibold` : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-            <span>{it.label}</span>
-            {c != null && <span className={`text-xs ${active ? 'text-gray-500' : 'text-gray-400'}`}>{c}</span>}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-// Landing view — 4 group tiles with counts + recent-edits feed.
-// Loads /catalogs/summary once; clicking anywhere navigates to the detail view.
-function CatalogsLanding() {
-  const nav = useNavigate()
-  const [data, setData] = useState(null)
-  const [error, setError] = useState('')
-  useEffect(() => {
-    api.get('/catalogs/summary').then(r => setData(r.data)).catch(e => setError(e.response?.data?.error || 'Không tải được tổng hợp'))
-  }, [])
-
-  if (error) return <div className="p-6 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg">{error}</div>
-  if (!data) return <div className="p-6 text-sm text-gray-400">Đang tải...</div>
-
-  const counts = data.counts || {}
-  const recent = data.recentEdits || []
-
-  // Derive per-group "last edited" from the recent-edits feed (first entry whose
-  // path matches any catalog in the group).
-  const lastEditForGroup = (group) => {
-    const keys = new Set(group.items.map(i => i.key))
-    for (const e of recent) {
-      for (const k of keys) {
-        if ((e.path || '').includes(`/catalogs/${k}`) || (k === 'promotions' && (e.path || '').includes('/promotions')) || (k === 'promo-codes' && (e.path || '').includes('/promotions/'))) {
-          return e
-        }
-      }
-    }
-    return null
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {GROUPS.map(g => {
-          const total = g.items.reduce((s, i) => s + (counts[i.key] || 0), 0)
-          const last = lastEditForGroup(g)
-          const dotCls = GROUP_PILL_CLS[g.color].dot
-          return (
-            <div key={g.key} className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-block w-2 h-2 rounded-full ${dotCls}`} />
-                  <span className="font-semibold text-gray-900">{g.label}</span>
-                </div>
-                <span className="text-xs text-gray-500">{total.toLocaleString('vi-VN')} mục</span>
-              </div>
-              <div className="space-y-1.5 mb-3">
-                {g.items.map(it => (
-                  <button key={it.key} onClick={() => nav(`/catalogs/${it.key}`)}
-                    className="w-full flex items-center justify-between text-sm py-1 px-1 rounded hover:bg-gray-50">
-                    <span className="text-gray-700">{it.label}</span>
-                    <span className="text-gray-500 tabular-nums">{(counts[it.key] ?? 0).toLocaleString('vi-VN')}</span>
-                  </button>
-                ))}
-              </div>
-              {last && (
-                <div className="pt-3 border-t border-dashed border-gray-200 text-xs text-gray-400">
-                  Cập nhật: <b className="text-gray-600">{last.username || 'Hệ thống'}</b> · {relTime(last.ts)}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-baseline justify-between mb-3">
-          <div className="font-semibold text-gray-900">Lần sửa gần đây</div>
-          <div className="text-xs text-gray-400">{recent.length} bản ghi gần nhất</div>
-        </div>
-        {recent.length === 0 ? (
-          <div className="text-sm text-gray-400 py-6 text-center">Chưa có thay đổi nào được ghi nhận.</div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {recent.map(e => <RecentEditRow key={e._id} e={e} />)}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function RecentEditRow({ e }) {
-  const verb = e.method === 'POST' ? 'tạo' : e.method === 'PUT' ? 'sửa' : e.method === 'DELETE' ? 'xóa' : e.method
-  // Resource label — best-effort derive from URL path, e.g. /api/catalogs/services/SVC-1 → Dịch vụ
-  const m = (e.path || '').match(/\/catalogs\/([^/?]+)/) || (e.path || '').match(/\/(promotions)\//)
-  const catKey = m?.[1]
-  const catItem = GROUPS.flatMap(g => g.items).find(i => i.key === catKey)
-  const catLabel = catItem?.label || catKey || 'bản ghi'
-  const name = e.payload?.name || e.payload?.displayName || e.payload?.code || e.resourceId || ''
-  const initial = (e.username || '?').slice(0, 1).toUpperCase()
-  return (
-    <div className="flex items-center gap-3 py-3">
-      <div className="w-7 h-7 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-xs font-semibold text-blue-700 shrink-0">{initial}</div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm text-gray-900 truncate">
-          <b>{e.username || 'Hệ thống'}</b> · {verb} {catLabel.toLowerCase()}{name ? ` "${name}"` : ''}
-        </div>
-      </div>
-      <div className="text-xs text-gray-400 shrink-0">{relTime(e.ts)}</div>
-    </div>
-  )
-}
-
 export default function Catalogs() {
   const { hasPerm, auth } = useAuth()
   const { catalogKey } = useParams()
-  const nav = useNavigate()
   const activeKey = catalogKey || ''
-  const isLanding = !activeKey
 
-  const activeItem = GROUPS.flatMap(g => g.items.map(i => ({ ...i, groupKey: g.key, groupLabel: g.label, groupColor: g.color }))).find(i => i.key === activeKey)
-  const activeGroup = activeItem ? GROUPS.find(g => g.key === activeItem.groupKey) : null
-  const activeLabel = activeItem?.label || ''
-
-  const [summaryCounts, setSummaryCounts] = useState({})
+  // Remember the last catalog the user visited so opening /catalogs after that
+  // lands them where they left off instead of re-picking the default.
   useEffect(() => {
-    // Cheap one-shot so sub-tab counts render on the detail view without a
-    // separate fetch. Ignore failures — absence just hides the tiny numbers.
-    api.get('/catalogs/summary').then(r => setSummaryCounts(r.data?.counts || {})).catch(() => {})
-  }, [catalogKey])
+    if (activeKey) try { localStorage.setItem(LAST_CATALOG_KEY, activeKey) } catch {}
+  }, [activeKey])
+
+  // /catalogs with no param — redirect to the last visited catalog, or the
+  // first catalog of the first group on a fresh browser.
+  if (!activeKey) {
+    let remembered = null
+    try { remembered = localStorage.getItem(LAST_CATALOG_KEY) } catch {}
+    const destination = (remembered && CATALOG_TO_GROUP[remembered]) ? remembered : DEFAULT_CATALOG_KEY
+    return <Navigate to={`/catalogs/${destination}`} replace />
+  }
+
+  const activeGroup = CATALOG_TO_GROUP[activeKey] || null
+  const activeItem = activeGroup?.items.find(i => i.key === activeKey)
+  const activeLabel = activeItem?.label || ''
 
   const PARTNER_KEYS = new Set(['referral-doctors', 'partner-facilities', 'commission-groups', 'commission-rules', 'customer-sources'])
   const INVENTORY_KEYS = new Set(['supplies', 'supply-categories', 'suppliers', 'supply-service-mapping'])
@@ -961,35 +753,26 @@ export default function Catalogs() {
       ? 'inventory.manage'
       : 'catalogs.manage'
 
-  const goToGroup = (g) => nav(`/catalogs/${g.items[0].key}`)
-
-  const breadcrumb = isLanding
-    ? 'Tổng quan'
-    : <>{activeItem?.groupLabel} · <b className="text-gray-700">{activeLabel}</b></>
+  const breadcrumb = activeGroup
+    ? <>{activeGroup.label} · <b className="text-gray-700">{activeLabel}</b></>
+    : 'Không tìm thấy'
 
   const renderContent = () => {
-    if (activeKey === 'hr-employees')   return <EmployeeSection />
-    if (activeKey === 'hr-departments') return <DepartmentSection />
-    if (activeKey === 'hr-permissions') return <PermissionMatrix />
-    if (activeKey === 'patients') return <PatientsTable />
-    if (activeKey === 'promotions') return <PromotionsTable canEdit={hasPerm('catalogs.manage')} />
-    if (activeKey === 'promo-codes') return <PromoCodesTable />
-    if (CATALOG_FIELDS[activeKey]) return <CatalogTable catalogKey={activeKey} catalogLabel={activeLabel} canEdit={hasPerm(catalogEditPerm)} />
-    return <div className="text-gray-400 text-sm p-4">Danh mục không tồn tại. <button onClick={() => nav('/catalogs')} className="text-blue-600 hover:underline">Về trang chủ →</button></div>
+    if (activeKey === 'hr-employees')    return <EmployeeSection />
+    if (activeKey === 'hr-departments')  return <DepartmentSection />
+    if (activeKey === 'hr-permissions')  return <PermissionMatrix />
+    if (activeKey === 'report-templates') return <ReportTemplates />
+    if (activeKey === 'patients')        return <PatientsTable />
+    if (activeKey === 'promotions')      return <PromotionsTable canEdit={hasPerm('catalogs.manage')} />
+    if (activeKey === 'promo-codes')     return <PromoCodesTable />
+    if (CATALOG_FIELDS[activeKey])       return <CatalogTable catalogKey={activeKey} catalogLabel={activeLabel} canEdit={hasPerm(catalogEditPerm)} />
+    return <div className="text-gray-400 text-sm p-4">Danh mục không tồn tại.</div>
   }
 
   return (
     <div>
       <PageHeader breadcrumb={breadcrumb} userName={auth?.displayName || auth?.username} />
-      {isLanding ? (
-        <CatalogsLanding />
-      ) : (
-        <>
-          <GroupPills activeGroupKey={activeGroup?.key} onPick={goToGroup} />
-          {activeGroup && <SubcatalogTabs group={activeGroup} activeKey={activeKey} counts={summaryCounts} onPick={(k) => nav(`/catalogs/${k}`)} />}
-          {renderContent()}
-        </>
-      )}
+      {renderContent()}
     </div>
   )
 }

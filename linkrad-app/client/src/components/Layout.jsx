@@ -1,9 +1,10 @@
 import React from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { logoutUser } from '../api'
+import api, { logoutUser } from '../api'
 import GlobalSearch from './GlobalSearch'
 import NotificationBell from './NotificationBell'
+import { CATALOG_GROUPS, CATALOG_TO_GROUP, GROUP_DOT_CLS } from '../config/catalogGroups'
 
 const NAV = [
   {
@@ -35,11 +36,11 @@ const NAV = [
     ]
   },
   {
+    // Rendered by <CatalogTree> below — the whole Danh mục navigation is a
+    // collapsible tree driven by the shared CATALOG_GROUPS config, with each
+    // group and its catalogs expandable per Notion/Linear-style admin IA.
+    catalogTree: true,
     group: 'Danh mục',
-    items: [
-      { path: '/catalogs',         label: 'Danh mục',    icon: '📚', workflowOnly: true },
-      { path: '/report-templates', label: 'Mẫu kết quả', icon: '📋', workflowOnly: true },
-    ]
   },
   {
     group: 'Báo cáo',
@@ -123,6 +124,128 @@ const ROLE_LABELS = {
   bacsi:       { label: 'Bác sĩ',       cls: 'bg-teal-800 text-teal-200' },
 }
 
+// ── Collapsible Danh mục tree ───────────────────────────────────────────────
+// The catalog surface is wide (5 groups × 3-5 catalogs each). Keeping every
+// catalog as a permanent sidebar row made the menu feel dense on every page
+// where the admin wasn't even managing catalogs. Notion-style collapsible tree
+// hides the detail by default while keeping it one click away. Group-level
+// expansion state persists in localStorage so each admin's preferred layout
+// survives refreshes, and the group containing the active catalog auto-expands
+// so a deep-link arrival always shows its own node highlighted in context.
+
+const CATALOG_TREE_LS_KEY = 'linkrad_catalog_tree_expanded'
+const CATALOG_COUNTS_TTL_MS = 60_000
+
+// Counts source is the /api/catalogs/summary endpoint. We wrap it in a module-
+// level promise so the first sidebar render kicks off a single fetch and all
+// consumers share the result.
+function useCatalogCounts() {
+  const [counts, setCounts] = React.useState(() => loadCachedCounts())
+  React.useEffect(() => {
+    let cancelled = false
+    api.get('/catalogs/summary').then(r => {
+      if (cancelled) return
+      const c = r.data?.counts || {}
+      setCounts(c)
+      try { localStorage.setItem('linkrad_catalog_counts', JSON.stringify({ t: Date.now(), c })) } catch {}
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+  return counts
+}
+function loadCachedCounts() {
+  try {
+    const raw = localStorage.getItem('linkrad_catalog_counts')
+    if (!raw) return {}
+    const { t, c } = JSON.parse(raw)
+    if (Date.now() - t > CATALOG_COUNTS_TTL_MS) return c || {}
+    return c || {}
+  } catch { return {} }
+}
+
+function CatalogTree({ hasPerm }) {
+  const location = useLocation()
+  const counts = useCatalogCounts()
+
+  const activeKey = (() => {
+    const m = location.pathname.match(/^\/catalogs\/([^/?#]+)/)
+    return m ? m[1] : null
+  })()
+  const activeGroupKey = activeKey ? CATALOG_TO_GROUP[activeKey]?.key : null
+
+  const [expanded, setExpanded] = React.useState(() => {
+    try {
+      const raw = localStorage.getItem(CATALOG_TREE_LS_KEY)
+      if (raw) return new Set(JSON.parse(raw))
+    } catch {}
+    // Default: open only the group containing the active catalog (if any)
+    return new Set(activeGroupKey ? [activeGroupKey] : [])
+  })
+
+  // When the active catalog changes (e.g. user clicks elsewhere, then uses
+  // browser back), ensure its group is expanded so the highlighted row is
+  // visible without an extra click. We don't auto-collapse other groups.
+  React.useEffect(() => {
+    if (!activeGroupKey) return
+    setExpanded(prev => {
+      if (prev.has(activeGroupKey)) return prev
+      const next = new Set(prev); next.add(activeGroupKey); return next
+    })
+  }, [activeGroupKey])
+
+  React.useEffect(() => {
+    try { localStorage.setItem(CATALOG_TREE_LS_KEY, JSON.stringify([...expanded])) } catch {}
+  }, [expanded])
+
+  const canSeeCatalogs = hasPerm ? hasPerm('catalogs.view') || hasPerm('catalogs.manage') || hasPerm('partners.manage') || hasPerm('inventory.manage') || hasPerm('hr.view') || hasPerm('hr.manage') : true
+  if (!canSeeCatalogs) return null
+
+  const toggleGroup = (key) => setExpanded(prev => {
+    const next = new Set(prev)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    return next
+  })
+
+  return (
+    <div>
+      {CATALOG_GROUPS.map(g => {
+        const isOpen = expanded.has(g.key)
+        const isActiveGroup = g.key === activeGroupKey
+        const groupTotal = g.items.reduce((s, i) => s + (counts[i.key] || 0), 0)
+        return (
+          <div key={g.key}>
+            <button
+              type="button"
+              onClick={() => toggleGroup(g.key)}
+              className={`w-full flex items-center px-4 py-1.5 text-sm transition-colors ${isActiveGroup ? 'text-white' : 'text-blue-200 hover:text-white hover:bg-blue-800'}`}
+            >
+              <span className="mr-1.5 text-[10px] w-3 inline-block opacity-70">{isOpen ? '▾' : '▸'}</span>
+              <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${GROUP_DOT_CLS[g.color] || 'bg-blue-300'}`} />
+              <span className="flex-1 text-left font-medium">{g.label}</span>
+              {groupTotal > 0 && <span className="text-[10px] text-blue-400/70 tabular-nums">{groupTotal}</span>}
+            </button>
+            {isOpen && g.items.map(it => {
+              const isActive = it.key === activeKey
+              const c = counts[it.key]
+              return (
+                <NavLink
+                  key={it.key}
+                  to={`/catalogs/${it.key}`}
+                  className={`flex items-center pl-9 pr-4 py-1.5 text-sm transition-colors ${isActive ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300' : 'text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+                >
+                  <span className="mr-2 text-xs">{it.icon}</span>
+                  <span className="flex-1 truncate">{it.label}</span>
+                  {c != null && <span className={`text-[10px] tabular-nums ${isActive ? 'text-blue-200' : 'text-blue-400/70'}`}>{c}</span>}
+                </NavLink>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Layout({ children }) {
   const { auth, logout, hasPerm } = useAuth()
   const isAdmin = auth?.role === 'admin'
@@ -176,6 +299,18 @@ export default function Layout({ children }) {
           {NAV.map((section) => {
             if (section.financialsOnly && !isFinancialsUser) return null
             if (section.perm && !hasPerm(section.perm)) return null
+
+            if (section.catalogTree) {
+              if (!isWorkflowUser) return null
+              return (
+                <div key={section.group} className="mb-2">
+                  <div className="px-4 py-1 text-blue-400 text-xs font-semibold uppercase tracking-wider">
+                    {section.group}
+                  </div>
+                  <CatalogTree hasPerm={hasPerm} />
+                </div>
+              )
+            }
 
             if (section.subgroups) {
               const visibleSubs = section.subgroups
