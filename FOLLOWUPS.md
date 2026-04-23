@@ -246,6 +246,37 @@ Unified the reporting surface end-to-end, matching the Danh mục sidebar-tree p
 - Proper unified Kho report (tiêu thụ vật tư / sổ kho / tồn theo chi nhánh) with group-by — R1 stubs to the /inventory workspace
 - Server-side consolidation: merge the 7 `/rad-reports/*` and 7 `/reports/*` endpoints into two group-by-aware endpoints (low priority; the client dispatch hides the split today)
 
+## Báo cáo R2a/b/c done 2026-04-24
+
+Claude Design sketches received at [linkrad-bao-cao-design-sketches.html](linkrad-bao-cao-design-sketches.html) — 4 mockups (Tổng Quan / Ca chụp-Ca đọc / Doanh thu / Sổ kho) + commentary on shared mechanics.
+
+**R2a — Tổng Quan executive dashboard** — new `TongQuan` component in [Reports.jsx](linkrad-app/client/src/pages/Reports.jsx) with:
+- Triage alert strip at top (renders only when issues exist; aggregates critical findings + low-stock supplies + expiring lots)
+- 3 persona rows (Lâm sàng / Vận Hành / Tài Chính) each with 3-4 KPI tiles
+- Each tile: label + value + delta chip (color on delta only, not value, per design's "alert fatigue" note) + sparkline where data available
+- Every tile click deep-links to its detail report or transactional workspace
+- "Tổng quan X →" deep-link at each persona row's right edge
+- Stale-data timestamp in the corner
+- Data from existing `/api/dashboard/today` + `/api/dashboard/extras` — zero new server endpoints. MTD/MoM/LNST tiles deferred until `/api/reports/overview-kpis` lands.
+
+**R2b — Shared chrome for unified reports** — 3 new components:
+- `ReportFilterBar` with date preset pills (Hôm nay / Tháng này / Quý này / Tùy chỉnh) + site filter (from `/hr/departments?type=branch`) + extra slot for contextual filter (modality / status)
+- `DimensionBar` — `Xem theo` primary dim pills + disabled `× chia theo` chip (cross-tab activates in R2d)
+- `ModeToggle` for Chế độ (Xem tổng hợp / Xem từng dòng)
+- `CaChupReport` rewired to use ReportFilterBar + DimensionBar above existing per-dim renderer
+- `DoanhThuReport` rewired with ModeToggle — Xem tổng hợp shows DimensionBar + active grouped renderer; Xem từng dòng always shows the raw revenue-detail ledger
+
+**R2c — Kho reports** — two real reports replacing the placeholder:
+- `SoKhoReport` (Vận Hành → Sổ kho): transaction ledger reading `/api/inventory/transactions`, with transaction-type filter chips (counts per type), 4-number summary strip (Tổng giao dịch / Tổng nhập / Tổng xuất / Tổng giá trị), color-coded type pills, signed +/− delta on each row
+- `TieuThuVatTuReport` (Vận Hành → Tiêu thụ vật tư): client-side aggregates outgoing transactions by supply / warehouse / transaction-type dimension with progress-bar percentage column
+
+**Still deferred to R2d** (polish, not blocking):
+- `× chia theo` cross-tab — stacked bar chart + matrix table; needs top-N truncation for wide cross-tabs
+- Keyboard shortcuts: `/` focus filter · `g` cycle dimension · `e` export CSV · `j/k/Enter` for table row cursor
+- Horizontal bar chart with summary strip on Ca chụp/Doanh thu (current dispatch renders per-dim tables without the shared chart/summary)
+- Row-click drill-down wiring from report rows into /ris and /billing with filters pre-applied
+- Server endpoint `/api/reports/overview-kpis` returning MTD/MoM for the Tài chính row on Tổng Quan
+
 ## Next session queue (set 2026-04-22, updated 2026-04-24)
 
 - **UIUX pass on Danh mục Pass A done 2026-04-23** — PageHeader strip, killed dark-navy `#1e3a5f` headers in UsersTable+PatientsTable, unified toolbar (search + status filter + count + ＋ Thêm), client-side pagination 50/page with Tải thêm, column sort, empty-state CTA, house-style buttons throughout.

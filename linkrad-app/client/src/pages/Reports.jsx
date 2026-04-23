@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Navigate } from 'react-router-dom'
-import api from '../api'
+import { LineChart, Line, ResponsiveContainer } from 'recharts'
+import api, { getDashboardToday, getDashboardExtras } from '../api'
 import { useAuth } from '../context/AuthContext'
 import DashboardClinical from './DashboardClinical'
 import DashboardOps from './DashboardOps'
@@ -8,7 +9,7 @@ import DashboardFinance from './DashboardFinance'
 import {
   CasesByMachineReport, CasesByMachineGroupReport, CasesByRadiologistReport,
   CasesByRadiologistModalityReport, CasesByTimeReport, ServicesDetailReport,
-  PatientListReport, FilterBar as CaChupFilterBar,
+  PatientListReport,
 } from './RadiologyReports'
 import {
   REPORT_GROUPS, REPORT_TO_GROUP, TOP_LEVEL,
@@ -1089,21 +1090,132 @@ function ReportPageHeader({ breadcrumb, userName }) {
   )
 }
 
-// Group-by picker shared by the two unified detail reports. Horizontal pill
-// row — active pill filled, idle is plain text (matches the Danh mục pattern
-// user landed on after 2026-04-23 feedback).
-function GroupByPicker({ dimensions, active, onChange }) {
+// ── Shared report chrome (R2b 2026-04-24, per Claude Design) ───────────────
+// Two distinct rows under the PageHeader:
+//   1. FilterBar — scope (Kỳ/date + Chi nhánh + contextual filter)
+//   2. Dimension bar — organization (Xem theo primary pills + × chia theo chip)
+// Keeping them separate lets the user scan scope and grouping as two thoughts.
+
+// Date presets: design calls for Hôm nay / Tháng này / Quý này / Tùy chỉnh.
+const DATE_PRESETS = [
+  { key: 'today',   label: 'Hôm nay' },
+  { key: 'month',   label: 'Tháng này' },
+  { key: 'quarter', label: 'Quý này' },
+  { key: 'custom',  label: 'Tùy chỉnh' },
+]
+function presetRange(key) {
+  const now = new Date()
+  const iso = d => d.toISOString().slice(0, 10)
+  if (key === 'today')   { const d = iso(now); return { from: d, to: d } }
+  if (key === 'month')   { const d = new Date(now.getFullYear(), now.getMonth(), 1); return { from: iso(d), to: iso(now) } }
+  if (key === 'quarter') { const q = Math.floor(now.getMonth() / 3) * 3; const d = new Date(now.getFullYear(), q, 1); return { from: iso(d), to: iso(now) } }
+  return null
+}
+function fmtDMY(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}` }
+
+function useBranchOptions() {
+  const [branches, setBranches] = useState([])
+  useEffect(() => {
+    api.get('/hr/departments?type=branch').then(r => setBranches(r.data || [])).catch(() => {})
+  }, [])
+  return branches
+}
+
+// ReportFilterBar — the top scope row. Date preset pills + custom range
+// (when "Tùy chỉnh" is selected) + site + contextual extras rendered in the
+// `extra` slot by the report using it.
+function ReportFilterBar({ filters, setFilters, extra }) {
+  const branches = useBranchOptions()
+  const preset = filters.preset || 'month'
+  const setPreset = (key) => {
+    const range = presetRange(key)
+    setFilters(f => ({ ...f, preset: key, ...(range ? { dateFrom: range.from, dateTo: range.to } : {}) }))
+  }
+  return (
+    <div className="flex items-center gap-2 mb-2 flex-wrap bg-white rounded-lg border border-gray-200 px-3 py-2">
+      <span className="text-xs text-gray-500">Kỳ:</span>
+      {DATE_PRESETS.map(p => {
+        const active = p.key === preset
+        return (
+          <button key={p.key} onClick={() => setPreset(p.key)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${active ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50 border border-gray-200'}`}>
+            {p.label}
+          </button>
+        )
+      })}
+      {preset === 'custom' && (
+        <>
+          <input type="date" className="border border-gray-200 rounded-lg px-2 py-1 text-xs" value={filters.dateFrom || ''} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))} />
+          <span className="text-gray-400 text-xs">→</span>
+          <input type="date" className="border border-gray-200 rounded-lg px-2 py-1 text-xs" value={filters.dateTo || ''} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))} />
+        </>
+      )}
+      {preset !== 'custom' && filters.dateFrom && (
+        <span className="text-xs text-gray-400">{fmtDMY(filters.dateFrom)} – {fmtDMY(filters.dateTo)}</span>
+      )}
+      <span className="text-gray-300 mx-1">|</span>
+      <span className="text-xs text-gray-500">Chi nhánh:</span>
+      <select
+        className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white"
+        value={filters.site || ''}
+        onChange={e => setFilters(f => ({ ...f, site: e.target.value }))}
+      >
+        <option value="">Tất cả ({branches.length})</option>
+        {branches.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
+      </select>
+      {extra && <><span className="text-gray-300 mx-1">|</span>{extra}</>}
+    </div>
+  )
+}
+
+// DimensionBar — "Xem theo" primary dimension picker + optional × chia theo
+// cross-tab chip. `× chia theo` is disabled in R2b (stacked chart + matrix
+// table land in R2d polish). Matches Claude Design Fig. 2/3/4 layout.
+function DimensionBar({ dimensions, primary, onPrimary, secondary, onSecondary, disabled }) {
   return (
     <div className="flex items-center gap-1 mb-3 flex-wrap">
-      <span className="text-xs text-gray-500 mr-2">Nhóm theo:</span>
+      <span className="text-xs text-gray-500 mr-1">Xem theo</span>
       {dimensions.map(d => {
-        const isActive = d.key === active
+        const isActive = d.key === primary
         const cls = isActive
-          ? 'px-3 py-1.5 rounded-full bg-blue-600 text-white shadow-sm'
-          : 'px-3 py-1.5 rounded-full text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+          ? 'px-3 py-1.5 rounded-full bg-blue-600 text-white'
+          : 'px-3 py-1.5 rounded-full text-gray-600 hover:text-gray-900 hover:bg-gray-50 border border-gray-200'
         return (
-          <button key={d.key} onClick={() => onChange(d.key)} className={`text-xs font-semibold transition-colors ${cls}`}>
+          <button key={d.key} onClick={() => !disabled && onPrimary(d.key)} disabled={disabled}
+            className={`text-xs font-semibold transition-colors ${cls} ${disabled ? 'opacity-50' : ''}`}>
             {d.label}
+          </button>
+        )
+      })}
+      <span className="text-gray-300 ml-1">·</span>
+      <button
+        disabled
+        title="Tính năng cross-tab sẽ thêm ở R2d"
+        className="px-3 py-1.5 rounded-full text-xs font-semibold text-gray-400 border border-dashed border-gray-300 cursor-not-allowed"
+      >
+        × chia theo
+      </button>
+    </div>
+  )
+}
+
+// Chế độ toggle (Doanh thu + Sổ kho only) — Xem tổng hợp (grouped/charted)
+// vs Xem từng dòng (raw paginated rows, no chart, dimension bar hidden).
+function ModeToggle({ mode, onChange }) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-xs text-gray-500 mr-1">Chế độ</span>
+      {[
+        { key: 'agg', label: 'Xem tổng hợp' },
+        { key: 'raw', label: 'Xem từng dòng' },
+      ].map(m => {
+        const active = m.key === mode
+        const cls = active
+          ? 'px-3 py-1.5 rounded-full bg-blue-600 text-white'
+          : 'px-3 py-1.5 rounded-full text-gray-600 hover:text-gray-900 hover:bg-gray-50 border border-gray-200'
+        return (
+          <button key={m.key} onClick={() => onChange(m.key)} className={`text-xs font-semibold transition-colors ${cls}`}>
+            {m.label}
           </button>
         )
       })}
@@ -1126,14 +1238,32 @@ const CA_CHUP_RENDERERS = {
 function monthAgo() { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10) }
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
+// Unified Ca chụp / Ca đọc — shared FilterBar + DimensionBar, then dispatch
+// to the existing per-dim renderer (still fetches & renders its own table).
+// Summary strip + horizontal bar chart derived-from-rows come in a later
+// polish pass; focus of R2b is the chrome unification.
 function CaChupReport() {
+  const initial = presetRange('month')
   const [dim, setDim] = useState('cases-by-time')
-  const [filters, setFilters] = useState({ dateFrom: monthAgo(), dateTo: todayStr(), modality: '', site: '', granularity: 'day' })
+  const [filters, setFilters] = useState({ preset: 'month', dateFrom: initial.from, dateTo: initial.to, modality: '', site: '', granularity: 'day' })
   const Renderer = CA_CHUP_RENDERERS[dim]
+  const modalityExtra = (
+    <>
+      <span className="text-xs text-gray-500">Modality:</span>
+      <select
+        className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white"
+        value={filters.modality || ''}
+        onChange={e => setFilters(f => ({ ...f, modality: e.target.value }))}
+      >
+        <option value="">Tất cả</option>
+        {['CT','MRI','XR','US'].map(m => <option key={m} value={m}>{m}</option>)}
+      </select>
+    </>
+  )
   return (
     <>
-      <CaChupFilterBar filters={filters} setFilters={setFilters} granularityToggle={dim === 'cases-by-time'} />
-      <GroupByPicker dimensions={CA_CHUP_DIMENSIONS} active={dim} onChange={setDim} />
+      <ReportFilterBar filters={filters} setFilters={setFilters} extra={modalityExtra} />
+      <DimensionBar dimensions={CA_CHUP_DIMENSIONS} primary={dim} onPrimary={setDim} />
       {Renderer ? <Renderer filters={filters} /> : <div className="text-sm text-gray-400 p-4">Không có bộ hiển thị phù hợp.</div>}
     </>
   )
@@ -1152,64 +1282,527 @@ const DOANH_THU_RENDERERS = {
   'refund-exchange':   RefundExchangeReport,
   'e-invoice':         EInvoiceReport,
 }
+// Unified Doanh thu — FilterBar + Chế độ toggle + DimensionBar (hidden in raw
+// mode) + per-dim renderer. Chế độ maps agg-mode to the dim-specific grouped
+// renderer, raw-mode to the plain revenue-detail ledger.
+const DOANH_THU_STATUSES = [
+  { key: '',           label: 'Tất cả' },
+  { key: 'paid',       label: 'Đã thanh toán' },
+  { key: 'refunded',   label: 'Hoàn trả' },
+  { key: 'e_invoiced', label: 'Đã xuất HĐĐT' },
+]
 function DoanhThuReport() {
-  const [dim, setDim] = useState('revenue-detail')
-  const Renderer = DOANH_THU_RENDERERS[dim]
+  const initial = presetRange('month')
+  const [mode, setMode] = useState('agg')
+  const [dim, setDim] = useState('clinic-revenue')
+  const [filters, setFilters] = useState({ preset: 'month', dateFrom: initial.from, dateTo: initial.to, site: '', status: '' })
+  // Raw mode always renders the detail ledger; agg mode renders the
+  // currently-selected dimension's grouped renderer.
+  const Renderer = mode === 'raw' ? DOANH_THU_RENDERERS['revenue-detail'] : DOANH_THU_RENDERERS[dim]
+  const statusExtra = (
+    <>
+      <span className="text-xs text-gray-500">Trạng thái:</span>
+      <select
+        className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white"
+        value={filters.status || ''}
+        onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
+      >
+        {DOANH_THU_STATUSES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+      </select>
+    </>
+  )
   return (
     <>
-      <GroupByPicker dimensions={DOANH_THU_DIMENSIONS} active={dim} onChange={setDim} />
+      <ReportFilterBar filters={filters} setFilters={setFilters} extra={statusExtra} />
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <ModeToggle mode={mode} onChange={setMode} />
+        {mode === 'agg' && (
+          <>
+            <span className="text-gray-300 mx-1">·</span>
+            <DimensionBar dimensions={DOANH_THU_DIMENSIONS.filter(d => d.key !== 'revenue-detail')} primary={dim} onPrimary={setDim} />
+          </>
+        )}
+      </div>
       {Renderer ? <Renderer /> : <div className="text-sm text-gray-400 p-4">Không có bộ hiển thị phù hợp.</div>}
     </>
   )
 }
 
-// Tổng Quan executive dashboard — R1 placeholder. R2 will replace with real
-// KPI tiles (this-month revenue, MoM delta, cases today, TAT, unpaid).
-function TongQuanPlaceholder() {
-  const nav = useNavigate()
-  const tiles = [
-    { key: 'lam-sang-overview',  label: 'Lâm sàng',   desc: 'Ca chụp, BS đọc, TAT hôm nay', emoji: '🩺' },
-    { key: 'van-hanh-overview',  label: 'Vận Hành',   desc: 'Doanh thu hôm nay, ca, chi nhánh', emoji: '⚙️' },
-    { key: 'tai-chinh-overview', label: 'Tài Chính',  desc: 'Doanh thu tháng, EBITDA, LNST',    emoji: '💼' },
-  ]
+// ── Tổng Quan executive dashboard (R2a 2026-04-24) ────────────────────────
+// The morning read. Triage alert strip at top (renders only when alerts
+// exist), then 3 persona rows (Lâm sàng / Vận Hành / Tài Chính) of KPI tiles
+// with delta chips + sparklines where available. Tile-click deep-links into
+// the corresponding detail report. Semantic color lives on the delta chip
+// only — the KPI value itself stays neutral regardless of health (alert
+// fatigue avoidance per Claude Design 2026-04-23).
+//
+// Data source: reuses existing /api/dashboard/today + /dashboard/extras
+// endpoints that already power the 3 persona dashboards. No new server code
+// for R2a; a proper /api/reports/overview-kpis with date-range + MoM data
+// comes in a later pass.
+
+const fmtCount = (n) => (n == null ? '—' : Number(n).toLocaleString('vi-VN'))
+const fmtVND = (n) => {
+  if (n == null) return '—'
+  if (Math.abs(n) >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + ' tỷ'
+  if (Math.abs(n) >= 1_000_000)     return (n / 1_000_000).toFixed(1) + ' tr'
+  return Number(n).toLocaleString('vi-VN')
+}
+const fmtTATMin = (m) => {
+  if (m == null) return '—'
+  if (m < 60) return `${m} phút`
+  const h = Math.floor(m / 60)
+  const r = m % 60
+  return `${h}h${r ? ' ' + r + 'p' : ''}`
+}
+const deltaPct = (cur, prev) => {
+  if (prev == null || prev === 0) return null
+  return Math.round(((cur - prev) / prev) * 100)
+}
+
+function DeltaChip({ pct, invertColor }) {
+  if (pct == null) return null
+  const up = pct > 0
+  const positive = invertColor ? !up : up
+  const bg = pct === 0 ? 'bg-gray-100 text-gray-500' : positive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+  const arrow = pct === 0 ? '·' : up ? '↑' : '↓'
   return (
-    <div className="space-y-4">
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
-        <b>Đang phát triển</b> — trang Tổng Quan sẽ hiển thị các chỉ số then chốt (doanh thu tháng, MoM, ca hôm nay, TAT, công nợ chưa thu). Hiện tại, chọn một mảng để xem.
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${bg}`}>
+      {arrow}{Math.abs(pct)}%
+    </span>
+  )
+}
+
+function Sparkline({ data, color = '#3b82f6', height = 28 }) {
+  if (!Array.isArray(data) || data.length < 2) return <div className="h-7" />
+  return (
+    <div style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data.map(v => ({ v }))}>
+          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function KpiTile({ label, value, sub, deltaPct: dp, invertDelta, sparkline, sparkColor, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`text-left bg-white rounded-xl border border-gray-200 p-4 flex flex-col justify-between h-full ${onClick ? 'hover:shadow-md hover:border-blue-200 transition-all cursor-pointer' : ''}`}
+      disabled={!onClick}
+    >
+      <div>
+        <div className="text-xs text-gray-500">{label}</div>
+        <div className="mt-1 flex items-baseline gap-2">
+          <div className="text-2xl font-semibold text-gray-900">{value}</div>
+          <DeltaChip pct={dp} invertColor={invertDelta} />
+        </div>
+        {sub && <div className="text-xs text-gray-500 mt-0.5">{sub}</div>}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {tiles.map(t => (
-          <button
-            key={t.key}
-            onClick={() => nav(`/reports/${t.key}`)}
-            className="text-left bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md hover:border-blue-200 transition-all"
-          >
-            <div className="text-3xl mb-2">{t.emoji}</div>
-            <div className="font-semibold text-gray-900 mb-1">{t.label}</div>
-            <div className="text-xs text-gray-500">{t.desc}</div>
-            <div className="mt-3 text-xs text-blue-600">Mở →</div>
-          </button>
-        ))}
+      {sparkline && <div className="mt-2"><Sparkline data={sparkline} color={sparkColor} /></div>}
+    </button>
+  )
+}
+
+function PersonaRow({ label, detailKey, detailLabel, children }) {
+  const nav = useNavigate()
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-2">
+        <div className="text-xs uppercase tracking-wider text-gray-500 font-semibold">{label}</div>
+        <button onClick={() => nav(`/reports/${detailKey}`)} className="text-xs text-blue-600 hover:underline">
+          Tổng quan {detailLabel} →
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        {children}
       </div>
     </div>
   )
 }
 
-// Kho report — R1 links to the operational Inventory workspace; R2 will
-// ship a proper Báo cáo Kho with group-by (vật tư / kho / thời gian / lý do).
-function KhoReportPlaceholder() {
-  const nav = useNavigate()
+function TriageStrip({ items }) {
+  if (!items?.length) return null
+  const total = items.reduce((s, i) => s + (i.count || 0), 0)
   return (
-    <div className="space-y-4">
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
-        <b>Đang phát triển</b> — báo cáo Kho (tiêu thụ vật tư, sổ kho, tồn theo chi nhánh) sẽ được xây dựng trong R2.
-        Hiện tại, tab Giao dịch ở trang Quản lý kho cung cấp đầy đủ chức năng lọc/xuất.
+    <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 flex items-start gap-3">
+      <div className="text-rose-600 text-lg leading-none mt-0.5">⚠</div>
+      <div className="flex-1">
+        <div className="text-sm font-semibold text-rose-800">
+          {total === 1 ? '1 vấn đề cần xử lý hôm nay' : `${total} vấn đề cần xử lý hôm nay`}
+        </div>
+        <div className="text-xs text-rose-700 mt-0.5">
+          {items.map(i => `${i.count} ${i.label}`).join(' · ')}
+        </div>
       </div>
-      <button onClick={() => nav('/inventory')}
-        className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-        Mở Quản lý kho →
-      </button>
     </div>
+  )
+}
+
+function TongQuan() {
+  const nav = useNavigate()
+  const [today, setToday] = useState(null)
+  const [extras, setExtras] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let alive = true
+    Promise.all([getDashboardToday(), getDashboardExtras()])
+      .then(([t, e]) => { if (!alive) return; setToday(t); setExtras(e); setLoading(false) })
+      .catch(() => alive && setLoading(false))
+    return () => { alive = false }
+  }, [])
+
+  if (loading) return <div className="p-6 text-sm text-gray-400">Đang tải Tổng Quan...</div>
+  if (!today || !extras) return <div className="p-6 text-sm text-rose-600">Không tải được dữ liệu tổng quan.</div>
+
+  const s = today.summary || {}
+  const casesSpark = (extras.casesLast7Days || []).map(d => d.count)
+  const todayDelta = deltaPct(s.todayCount, s.yesterdayCount)
+  const triageItems = [
+    s.criticalCount > 0 && { count: s.criticalCount, label: 'cảnh báo quan trọng chưa xử lý' },
+    s.lowStockCount > 0 && { count: s.lowStockCount, label: 'vật tư dưới định mức' },
+    (extras.expiringLots?.count || 0) > 0 && { count: extras.expiringLots.count, label: 'lô sắp hết hạn' },
+  ].filter(Boolean)
+
+  return (
+    <div className="space-y-5">
+      <TriageStrip items={triageItems} />
+
+      {/* LÂM SÀNG */}
+      <PersonaRow label="Lâm sàng" detailKey="lam-sang-overview" detailLabel="Lâm sàng">
+        <KpiTile
+          label="Ca chụp hôm nay"
+          value={fmtCount(s.todayCount)}
+          sub={`${fmtCount(s.yesterdayCount)} hôm qua`}
+          deltaPct={todayDelta}
+          sparkline={casesSpark}
+          sparkColor="#3b82f6"
+          onClick={() => nav('/reports/ca-chup-doc')}
+        />
+        <KpiTile
+          label="Ca đọc hôm nay"
+          value={fmtCount(extras.reportedTodayCount)}
+          sub={`${fmtCount(s.pendingCount)} đang chờ đọc`}
+          onClick={() => nav('/reports/ca-chup-doc')}
+        />
+        <KpiTile
+          label="TAT trung bình"
+          value={fmtTATMin(extras.avgTATMinutes)}
+          sub="studyDate → reportedAt (hôm nay)"
+          onClick={() => nav('/reports/ca-chup-doc')}
+        />
+        <KpiTile
+          label="Cảnh báo quan trọng"
+          value={fmtCount(s.criticalCount)}
+          sub="chưa xử lý"
+          deltaPct={null}
+          onClick={() => nav('/ris?view=critical')}
+        />
+      </PersonaRow>
+
+      {/* VẬN HÀNH */}
+      <PersonaRow label="Vận Hành" detailKey="van-hanh-overview" detailLabel="Vận Hành">
+        <KpiTile
+          label="Doanh thu hôm nay"
+          value={fmtVND(s.revenueToday)}
+          sub={`${fmtCount(s.invoiceCountToday)} phiếu thu`}
+          sparkColor="#10b981"
+          onClick={() => nav('/reports/doanh-thu')}
+        />
+        <KpiTile
+          label="Ca đang chờ xử lý"
+          value={fmtCount(s.pendingCount)}
+          sub="scheduled · in_progress · pending_read · reading"
+          onClick={() => nav('/ris')}
+        />
+        <KpiTile
+          label="Vật tư dưới định mức"
+          value={fmtCount(s.lowStockCount)}
+          sub="cần nhập thêm"
+          invertDelta
+          onClick={() => nav('/inventory')}
+        />
+        <KpiTile
+          label="Lô sắp hết hạn"
+          value={fmtCount(extras.expiringLots?.count)}
+          sub="trong 30 ngày"
+          invertDelta
+          onClick={() => nav('/inventory')}
+        />
+      </PersonaRow>
+
+      {/* TÀI CHÍNH — R2a stays honest with today-level data; MTD / MoM / LNST
+          tiles will join once /api/reports/overview-kpis lands in a later pass. */}
+      <PersonaRow label="Tài Chính" detailKey="tai-chinh-overview" detailLabel="Tài Chính">
+        <KpiTile
+          label="Phiếu thu hôm nay"
+          value={fmtCount(s.invoiceCountToday)}
+          sub={fmtVND(s.revenueToday) + ' doanh thu'}
+          onClick={() => nav('/reports/doanh-thu')}
+        />
+        <KpiTile
+          label="Phiếu chưa thanh toán"
+          value={fmtCount(extras.unpaidInvoices?.count)}
+          sub={extras.unpaidInvoices?.amount ? fmtVND(extras.unpaidInvoices.amount) + ' chưa thu' : 'Không có công nợ'}
+          invertDelta
+          onClick={() => nav('/billing')}
+        />
+        <KpiTile
+          label="MTD · YTD · EBITDA"
+          value="→"
+          sub="Xem Tổng quan Tài chính"
+          onClick={() => nav('/reports/tai-chinh-overview')}
+        />
+      </PersonaRow>
+
+      <div className="text-xs text-gray-400 text-right">
+        Dữ liệu cập nhật {new Date(today.ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+      </div>
+    </div>
+  )
+}
+
+// ── Kho reports (R2c 2026-04-24) ──────────────────────────────────────────
+// Two reports share the inventory data layer — Tiêu thụ vật tư (aggregated
+// consumption view) and Sổ kho (raw transaction ledger). Both read from
+// /api/inventory/transactions; only the chrome differs.
+
+const TX_TYPE_LABELS = {
+  import: 'Nhập kho', export: 'Xuất kho', adjustment: 'Điều chỉnh',
+  auto_deduct: 'Trừ tự động', transfer_out: 'Chuyển đi', transfer_in: 'Chuyển đến',
+}
+const TX_TYPE_CLS = {
+  import: 'bg-teal-50 text-teal-700 border-teal-200',
+  export: 'bg-orange-50 text-orange-700 border-orange-200',
+  adjustment: 'bg-slate-50 text-slate-700 border-slate-200',
+  auto_deduct: 'bg-purple-50 text-purple-700 border-purple-200',
+  transfer_out: 'bg-amber-50 text-amber-700 border-amber-200',
+  transfer_in: 'bg-blue-50 text-blue-700 border-blue-200',
+}
+// Types that increase on-hand stock vs decrease — used for the +/- delta sign
+// on each ledger row.
+const TX_INCOMING = new Set(['import', 'transfer_in'])
+
+function useInventoryTransactions(filters) {
+  const [txs, setTxs] = useState([])
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    setLoading(true)
+    const params = { limit: 500 }
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom
+    if (filters.dateTo) params.dateTo = filters.dateTo
+    if (filters.type) params.type = filters.type
+    if (filters.supplyId) params.supplyId = filters.supplyId
+    api.get('/inventory/transactions', { params })
+      .then(r => setTxs(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setTxs([]))
+      .finally(() => setLoading(false))
+  }, [filters.dateFrom, filters.dateTo, filters.type, filters.supplyId, filters.site])
+  return { txs, loading }
+}
+
+// Sổ kho — the transaction ledger. Filter chips per transaction type (with
+// counts), four-number summary, row-per-transaction table with color-coded
+// type bullet, signed quantity delta, phiếu number. Row-click drills into
+// /inventory with the transaction pre-selected (future polish).
+function SoKhoReport() {
+  const initial = presetRange('month')
+  const [filters, setFilters] = useState({ preset: 'month', dateFrom: initial.from, dateTo: initial.to, site: '', type: '', supplyId: '' })
+  const { txs, loading } = useInventoryTransactions(filters)
+
+  const counts = {}
+  let totalIn = 0, totalOut = 0, totalValue = 0
+  for (const t of txs) {
+    counts[t.type] = (counts[t.type] || 0) + 1
+    const qty = (t.items || []).reduce((s, i) => s + (i.quantity || 0), 0)
+    if (TX_INCOMING.has(t.type)) totalIn += qty; else totalOut += qty
+    totalValue += t.totalAmount || 0
+  }
+
+  return (
+    <>
+      <ReportFilterBar filters={filters} setFilters={setFilters} />
+
+      {/* Transaction-type filter chips (counts reflect the current date + site filter) */}
+      <div className="flex items-center gap-1 mb-3 flex-wrap">
+        <span className="text-xs text-gray-500 mr-1">Loại GD:</span>
+        {[{ key: '', label: 'Tất cả', n: txs.length }].concat(
+          Object.entries(TX_TYPE_LABELS).map(([k, label]) => ({ key: k, label, n: counts[k] || 0 }))
+        ).map(chip => {
+          const active = chip.key === filters.type
+          const cls = active
+            ? 'px-3 py-1 rounded-full bg-blue-600 text-white'
+            : 'px-3 py-1 rounded-full text-gray-600 hover:text-gray-900 hover:bg-gray-50 border border-gray-200'
+          return (
+            <button key={chip.key} onClick={() => setFilters(f => ({ ...f, type: chip.key }))}
+              className={`text-xs font-semibold transition-colors ${cls}`}>
+              {chip.label} <span className="opacity-70">({chip.n})</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Summary strip — 4 numbers */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+        {[
+          { label: 'Tổng giao dịch', value: fmtCount(txs.length) },
+          { label: 'Tổng nhập',      value: fmtCount(totalIn) },
+          { label: 'Tổng xuất',      value: fmtCount(totalOut) },
+          { label: 'Tổng giá trị',   value: fmtVND(totalValue) + ' đ' },
+        ].map(s => (
+          <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="text-xs text-gray-500">{s.label}</div>
+            <div className="text-xl font-semibold text-gray-900 mt-1">{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Ledger table */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-auto">
+        <table className="w-full text-sm whitespace-nowrap">
+          <thead>
+            <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide text-left">
+              <th className="px-4 py-3">Ngày</th>
+              <th className="px-4 py-3">Loại</th>
+              <th className="px-4 py-3">Phiếu</th>
+              <th className="px-4 py-3">Kho</th>
+              <th className="px-4 py-3">Lý do / ghi chú</th>
+              <th className="px-4 py-3 text-right">Dòng VT</th>
+              <th className="px-4 py-3 text-right">Biến động</th>
+              <th className="px-4 py-3 text-right">Giá trị</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
+            : txs.length === 0 ? <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">Không có giao dịch trong kỳ.</td></tr>
+            : txs.map(t => {
+              const qty = (t.items || []).reduce((s, i) => s + (i.quantity || 0), 0)
+              const incoming = TX_INCOMING.has(t.type)
+              const sign = incoming ? '+' : '−'
+              const signCls = incoming ? 'text-emerald-700' : 'text-rose-600'
+              return (
+                <tr key={t._id} className="border-t border-gray-100 hover:bg-blue-50/50">
+                  <td className="px-4 py-2.5 text-xs text-gray-500">{t.createdAt?.slice(0, 10)}</td>
+                  <td className="px-4 py-2.5">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${TX_TYPE_CLS[t.type] || 'bg-gray-50 border-gray-200'}`}>
+                      {TX_TYPE_LABELS[t.type] || t.type}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{t.transactionNumber}</td>
+                  <td className="px-4 py-2.5 text-gray-700">{t.warehouseName || t.warehouseId || '—'}</td>
+                  <td className="px-4 py-2.5 text-gray-600 truncate max-w-xs">{t.reason || t.supplierName || t.counterpartyWarehouseName || '—'}</td>
+                  <td className="px-4 py-2.5 text-right text-gray-600 tabular-nums">{(t.items || []).length}</td>
+                  <td className={`px-4 py-2.5 text-right tabular-nums font-semibold ${signCls}`}>{sign}{qty}</td>
+                  <td className="px-4 py-2.5 text-right text-gray-900 tabular-nums">{fmtVND(t.totalAmount || 0)} đ</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="text-xs text-gray-400 mt-2 text-right">
+        {txs.length > 0 && `Hiển thị ${txs.length} giao dịch gần nhất`}
+      </div>
+    </>
+  )
+}
+
+// Tiêu thụ vật tư — consumption aggregated by supply (or by warehouse / time
+// depending on dimension). R2c ships with group-by supply as the default;
+// group-by warehouse / time derive from the same transaction stream.
+const TIEU_THU_DIMENSIONS = [
+  { key: 'supply',    label: 'Vật tư' },
+  { key: 'warehouse', label: 'Kho' },
+  { key: 'type',      label: 'Loại giao dịch' },
+]
+function TieuThuVatTuReport() {
+  const initial = presetRange('month')
+  const [dim, setDim] = useState('supply')
+  const [filters, setFilters] = useState({ preset: 'month', dateFrom: initial.from, dateTo: initial.to, site: '' })
+  // For consumption we pre-filter to outgoing types (export + auto_deduct).
+  const { txs, loading } = useInventoryTransactions({ ...filters, type: '' })
+  const outgoing = txs.filter(t => !TX_INCOMING.has(t.type) && t.type !== 'adjustment')
+
+  // Aggregate by the selected dimension.
+  const agg = new Map()
+  for (const t of outgoing) {
+    for (const it of t.items || []) {
+      let k, label
+      if (dim === 'supply')    { k = it.supplyId || it.supplyCode;  label = it.supplyName || it.supplyCode || '?' }
+      else if (dim === 'warehouse') { k = t.warehouseId;            label = t.warehouseName || t.warehouseId || '?' }
+      else                     { k = t.type;                        label = TX_TYPE_LABELS[t.type] || t.type }
+      if (!agg.has(k)) agg.set(k, { key: k, label, qty: 0, value: 0, txCount: 0 })
+      const row = agg.get(k)
+      row.qty += it.quantity || 0
+      row.value += (it.quantity || 0) * (it.unitPrice || 0)
+      row.txCount += 1
+    }
+  }
+  const rows = [...agg.values()].sort((a, b) => b.qty - a.qty)
+  const totalQty = rows.reduce((s, r) => s + r.qty, 0)
+  const totalValue = rows.reduce((s, r) => s + r.value, 0)
+
+  return (
+    <>
+      <ReportFilterBar filters={filters} setFilters={setFilters} />
+      <DimensionBar dimensions={TIEU_THU_DIMENSIONS} primary={dim} onPrimary={setDim} />
+
+      {/* Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+        {[
+          { label: 'Tổng dòng', value: fmtCount(rows.length) },
+          { label: 'Tổng lượng tiêu thụ', value: fmtCount(totalQty) },
+          { label: 'Tổng giá trị', value: fmtVND(totalValue) + ' đ' },
+          { label: 'Số giao dịch', value: fmtCount(outgoing.length) },
+        ].map(s => (
+          <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="text-xs text-gray-500">{s.label}</div>
+            <div className="text-xl font-semibold text-gray-900 mt-1">{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-auto">
+        <table className="w-full text-sm whitespace-nowrap">
+          <thead>
+            <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide text-left">
+              <th className="px-4 py-3">{TIEU_THU_DIMENSIONS.find(d => d.key === dim)?.label || 'Nhóm'}</th>
+              <th className="px-4 py-3 text-right">Số giao dịch</th>
+              <th className="px-4 py-3 text-right">Lượng tiêu thụ</th>
+              <th className="px-4 py-3 text-right">Tổng giá trị</th>
+              <th className="px-4 py-3">Tỉ trọng</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
+            : rows.length === 0 ? <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400">Không có tiêu thụ trong kỳ.</td></tr>
+            : rows.map(r => {
+              const pct = totalQty > 0 ? Math.round((r.qty / totalQty) * 100) : 0
+              return (
+                <tr key={r.key} className="border-t border-gray-100 hover:bg-blue-50/50">
+                  <td className="px-4 py-2.5 font-medium text-gray-900">{r.label}</td>
+                  <td className="px-4 py-2.5 text-right text-gray-600 tabular-nums">{r.txCount}</td>
+                  <td className="px-4 py-2.5 text-right text-gray-900 tabular-nums font-semibold">{fmtCount(r.qty)}</td>
+                  <td className="px-4 py-2.5 text-right text-gray-700 tabular-nums">{fmtVND(r.value)} đ</td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 rounded bg-blue-100 flex-1 max-w-[120px]">
+                        <div className="h-1.5 rounded bg-blue-500" style={{ width: `${Math.min(100, pct)}%` }} />
+                      </div>
+                      <span className="text-xs text-gray-500 tabular-nums w-8">{pct}%</span>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   )
 }
 
@@ -1239,13 +1832,14 @@ export default function Reports() {
       : 'Không tìm thấy'
 
   const renderContent = () => {
-    if (activeKey === TOP_LEVEL.key)        return <TongQuanPlaceholder />
+    if (activeKey === TOP_LEVEL.key)        return <TongQuan />
     if (activeKey === 'lam-sang-overview')  return <DashboardClinical />
     if (activeKey === 'van-hanh-overview')  return <DashboardOps />
     if (activeKey === 'tai-chinh-overview') return <DashboardFinance />
     if (activeKey === 'ca-chup-doc')        return <CaChupReport />
     if (activeKey === 'doanh-thu')          return <DoanhThuReport />
-    if (activeKey === 'kho')                return <KhoReportPlaceholder />
+    if (activeKey === 'so-kho')             return <SoKhoReport />
+    if (activeKey === 'tieu-thu-vat-tu')    return <TieuThuVatTuReport />
     return <div className="text-gray-400 text-sm p-4">Báo cáo không tồn tại.</div>
   }
 

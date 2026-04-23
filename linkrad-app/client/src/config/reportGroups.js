@@ -24,8 +24,9 @@ export const REPORT_GROUPS = [
     key: 'van-hanh',
     label: 'Vận Hành',
     items: [
-      { key: 'van-hanh-overview', label: 'Tổng quan', icon: '⚙️' },
-      { key: 'kho',               label: 'Kho', icon: '📦' },
+      { key: 'van-hanh-overview', label: 'Tổng quan',      icon: '⚙️' },
+      { key: 'tieu-thu-vat-tu',   label: 'Tiêu thụ vật tư', icon: '📦' },
+      { key: 'so-kho',            label: 'Sổ kho',         icon: '📘' },
     ],
   },
   {
