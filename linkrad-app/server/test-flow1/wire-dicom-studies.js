@@ -78,6 +78,7 @@ async function main() {
   console.log('Connecting to Mongo...')
   await mongoose.connect(uri)
   const Study = require('../models/Study')
+  const Patient = require('../models/Patient')
 
   for (const s of STUDIES) {
     const existing = await Study.findOne({ studyUID: s.studyUID }).lean()
@@ -88,12 +89,33 @@ async function main() {
     const doc = { ...s, createdAt: existing?.createdAt || now, updatedAt: now }
     await Study.findByIdAndUpdate(s._id, { $set: doc }, { upsert: true })
     console.log(`OK    ${s._id} → ${s.patientName} (${s.modality} @ ${s.site}), uid=${s.studyUID}`)
+
+    // Also upsert a Patient doc so the patient appears in Danh mục → Bệnh nhân.
+    // Study carries a flat patientName snapshot, but the Patient collection is
+    // the master queried by /api/catalogs/patients and the registration picker.
+    const patientDoc = {
+      _id: s.patientId,
+      patientId: s.patientId,
+      name: s.patientName,
+      dob: s.dob,
+      gender: s.gender,
+      registeredSite: s.site,
+      notes: 'Seed DICOM sample patient (wire-dicom-studies.js)',
+      updatedAt: now,
+    }
+    await Patient.findByIdAndUpdate(
+      s.patientId,
+      { $set: patientDoc, $setOnInsert: { createdAt: now } },
+      { upsert: true, setDefaultsOnInsert: true }
+    )
+    console.log(`      patient upsert: ${s.patientId} · ${s.patientName}`)
   }
 
   console.log('\n--- Verify ---')
   for (const s of STUDIES) {
     const saved = await Study.findById(s._id).lean()
-    console.log(`${s._id}: status=${saved?.status}, imageStatus=${saved?.imageStatus}, imageCount=${saved?.imageCount}`)
+    const pat = await Patient.findById(s.patientId).lean()
+    console.log(`${s._id}: status=${saved?.status}, imageCount=${saved?.imageCount}, patient=${pat ? '✓ ' + pat.name : '✗ MISSING'}`)
   }
 
   await mongoose.disconnect()

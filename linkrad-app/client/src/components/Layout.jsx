@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import api, { logoutUser } from '../api'
 import GlobalSearch from './GlobalSearch'
 import NotificationBell from './NotificationBell'
-import { CATALOG_GROUPS, CATALOG_TO_GROUP, GROUP_DOT_CLS } from '../config/catalogGroups'
+import { CATALOG_GROUPS, CATALOG_TO_GROUP } from '../config/catalogGroups'
 
 const NAV = [
   {
@@ -220,7 +220,6 @@ function CatalogTree({ hasPerm }) {
               className={`w-full flex items-center px-4 py-1.5 text-sm transition-colors ${isActiveGroup ? 'text-white' : 'text-blue-200 hover:text-white hover:bg-blue-800'}`}
             >
               <span className="mr-1.5 text-[10px] w-3 inline-block opacity-70">{isOpen ? '▾' : '▸'}</span>
-              <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 ${GROUP_DOT_CLS[g.color] || 'bg-blue-300'}`} />
               <span className="flex-1 text-left font-medium">{g.label}</span>
               {groupTotal > 0 && <span className="text-[10px] text-blue-400/70 tabular-nums">{groupTotal}</span>}
             </button>
