@@ -1,40 +1,84 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api'
+import { EmployeeSection, DepartmentSection, PermissionMatrix } from './HRManagement'
 
 const fmtMoney = (v) => v == null ? '0' : Number(v).toLocaleString('vi-VN')
 
-// ── Sidebar menu config ──────────────────────────────────
-const MENU = [
+// ── Group config ─────────────────────────────────────────
+// Four top-level groups shown as pills under the PageHeader. Each group owns
+// its own color (teal / blue / purple / amber) used in active pill bg and
+// in the landing page tile accent dots. Per Claude Design sketches 2026-04-23:
+// flat sidebar is replaced by group pills + sub-catalog tab strip in-page.
+const GROUPS = [
   {
-    group: 'Danh mục đối tác',
+    key: 'partners',
+    label: 'Đối tác',
+    color: 'blue', // bg-blue-100 text-blue-700 · dot #185FA5
     items: [
-      { key: 'customer-sources', label: 'Nguồn khách hàng', icon: '📥' },
-      { key: 'referral-doctors', label: 'Bác sĩ giới thiệu', icon: '👨‍⚕️' },
-      { key: 'partner-facilities', label: 'Cơ sở y tế đối tác', icon: '🏥' },
-      { key: 'commission-groups', label: 'Nhóm hoa hồng', icon: '📋' },
-      { key: 'commission-rules', label: 'Hoa hồng', icon: '💰' },
+      { key: 'customer-sources',  label: 'Nguồn khách hàng',   icon: '📥' },
+      { key: 'referral-doctors',  label: 'Bác sĩ giới thiệu',  icon: '👨‍⚕️' },
+      { key: 'partner-facilities',label: 'Cơ sở y tế đối tác', icon: '🏥' },
+      { key: 'commission-groups', label: 'Nhóm hoa hồng',      icon: '📋' },
+      { key: 'commission-rules',  label: 'Hoa hồng',           icon: '💰' },
     ],
   },
   {
-    group: 'Danh mục chung',
+    key: 'services',
+    label: 'Dịch vụ & Chuyên khoa',
+    color: 'teal', // bg-teal-100 text-teal-700 · dot #1D9E75
     items: [
-      { key: 'users', label: 'Nhân sự', icon: '👤' },
-      { key: 'patients', label: 'Bệnh nhân', icon: '🧑' },
-      { key: 'specialties', label: 'Chuyên khoa', icon: '🩺' },
-      { key: 'registration-reasons', label: 'Lý do phiếu đăng ký', icon: '📝' },
-      { key: 'billing-cancel-reasons', label: 'Lý do huỷ phiếu thu', icon: '❌' },
-      { key: 'medical-facilities', label: 'Cơ sở y tế', icon: '🏨' },
-      { key: 'promotions', label: 'Chương trình khuyến mãi', icon: '🎁' },
-      { key: 'promo-codes', label: 'Mã khuyến mãi', icon: '🏷️' },
-      { key: 'services', label: 'Dịch vụ', icon: '📄' },
-      { key: 'service-types', label: 'Loại dịch vụ', icon: '📂' },
-      { key: 'tax-groups', label: 'Nhóm thuế dịch vụ', icon: '📊' },
-      { key: 'admin-units', label: 'Địa chỉ hành chính', icon: '📍' },
+      { key: 'services',       label: 'Dịch vụ',             icon: '📄' },
+      { key: 'service-types',  label: 'Loại dịch vụ',        icon: '📂' },
+      { key: 'tax-groups',     label: 'Nhóm thuế dịch vụ',   icon: '📊' },
+      { key: 'specialties',    label: 'Chuyên khoa',         icon: '🩺' },
+    ],
+  },
+  {
+    key: 'marketing',
+    label: 'Marketing',
+    color: 'rose', // bg-rose-100 text-rose-700 · dot #E11D48
+    items: [
+      { key: 'promotions',  label: 'Chương trình khuyến mãi', icon: '🎁' },
+      { key: 'promo-codes', label: 'Mã khuyến mãi',           icon: '🏷️' },
+    ],
+  },
+  {
+    key: 'references',
+    label: 'Hồ sơ & Tham chiếu',
+    color: 'purple', // bg-purple-100 text-purple-700 · dot #7F77DD
+    items: [
+      { key: 'hr-employees',   label: 'Nhân viên',        icon: '👤' },
+      { key: 'hr-departments', label: 'Phòng ban / Chi nhánh', icon: '🏢' },
+      { key: 'hr-permissions', label: 'Ma trận quyền',    icon: '🔐' },
+      { key: 'patients',       label: 'Bệnh nhân',        icon: '🧑' },
+    ],
+  },
+  {
+    key: 'inventory',
+    label: 'Kho',
+    color: 'amber', // bg-amber-100 text-amber-700 · dot #EF9F27
+    items: [
+      { key: 'supplies',               label: 'Vật tư',                  icon: '📦' },
+      { key: 'supply-categories',      label: 'Nhóm vật tư',             icon: '🗂️' },
+      { key: 'suppliers',              label: 'Nhà cung cấp',            icon: '🏭' },
+      { key: 'supply-service-mapping', label: 'Liên kết vật tư – dịch vụ', icon: '📏' },
     ],
   },
 ]
+
+// Tailwind class map per group color — used by GroupPills + landing tiles
+const GROUP_PILL_CLS = {
+  blue:   { active: 'bg-blue-600 text-white',     dot: 'bg-blue-600' },
+  teal:   { active: 'bg-teal-600 text-white',     dot: 'bg-teal-600' },
+  rose:   { active: 'bg-rose-600 text-white',     dot: 'bg-rose-600' },
+  purple: { active: 'bg-purple-600 text-white',   dot: 'bg-purple-600' },
+  amber:  { active: 'bg-amber-600 text-white',    dot: 'bg-amber-600' },
+}
+
+// Legacy alias — some sibling references still iterate MENU
+const MENU = GROUPS.map(g => ({ group: g.label, items: g.items }))
 
 // ── Field definitions per catalog ────────────────────────
 const CATALOG_FIELDS = {
@@ -114,27 +158,6 @@ const CATALOG_FIELDS = {
       { key: 'description', label: 'Mô tả', wide: true },
     ],
   },
-  'registration-reasons': {
-    columns: ['code', 'name', 'status'],
-    columnLabels: { code: 'Mã', name: 'Lý do', status: 'TT' },
-    editFields: [{ key: 'code', label: 'Mã' }, { key: 'name', label: 'Lý do', required: true }],
-  },
-  'billing-cancel-reasons': {
-    columns: ['code', 'name', 'status'],
-    columnLabels: { code: 'Mã', name: 'Lý do', status: 'TT' },
-    editFields: [{ key: 'code', label: 'Mã' }, { key: 'name', label: 'Lý do', required: true }],
-  },
-  'medical-facilities': {
-    columns: ['code', 'name', 'level', 'phone', 'address', 'description'],
-    columnLabels: { code: 'Mã', name: 'Tên', level: 'Loại hình', phone: 'Số điện thoại', address: 'Địa chỉ', description: 'Mô tả' },
-    editFields: [
-      { key: 'code', label: 'Mã' }, { key: 'name', label: 'Tên', required: true },
-      { key: 'level', label: 'Loại hình', type: 'select', options: [{ value: 'trung_uong', label: 'Trung ương' }, { value: 'tinh', label: 'Tỉnh' }, { value: 'huyen', label: 'Huyện' }, { value: 'xa', label: 'Xã' }, { value: 'phong_kham', label: 'Phòng khám' }, { value: 'other', label: 'Khác' }] },
-      { key: 'phone', label: 'Số điện thoại' }, { key: 'address', label: 'Địa chỉ', wide: true },
-      { key: 'description', label: 'Mô tả', wide: true },
-    ],
-    formatCell: { level: v => ({ trung_uong: 'Trung ương', tinh: 'Tỉnh', huyen: 'Huyện', xa: 'Xã', phong_kham: 'Phòng khám', other: 'Khác' }[v] || v || '') },
-  },
   'services': {
     columns: ['code', 'technicalInfo', 'name', 'serviceTypeCode', 'basePrice'],
     columnLabels: { code: 'Mã', technicalInfo: 'Thông tin kỹ thuật', name: 'Tên', serviceTypeCode: 'Nhóm dịch vụ', basePrice: 'Đơn giá' },
@@ -172,23 +195,62 @@ const CATALOG_FIELDS = {
     formatCell: { vatType: v => v === 'exempt' ? 'Không chịu thuế' : v === 'percentage' ? 'Theo %' : v || '' },
     rightAlign: ['rate'],
   },
-  'admin-units': {
-    columns: ['code', 'name', 'level', 'parentCode'],
-    columnLabels: { code: 'Mã', name: 'Tên', level: 'Cấp', parentCode: 'Thuộc' },
+  'supplies': {
+    columns: ['code', 'name', 'unit', 'packagingSpec', 'minimumStock', 'status'],
+    columnLabels: { code: 'Mã', name: 'Tên vật tư', unit: 'Đơn vị', packagingSpec: 'Quy cách', minimumStock: 'Định mức', status: 'TT' },
     editFields: [
-      { key: 'code', label: 'Mã', required: true }, { key: 'name', label: 'Tên', required: true },
-      { key: 'level', label: 'Cấp', type: 'select', options: [{ value: 'province', label: 'Tỉnh/TP' }, { value: 'district', label: 'Quận/Huyện' }, { value: 'ward', label: 'Phường/Xã' }] },
-      { key: 'parentCode', label: 'Mã cấp trên' }, { key: 'fullName', label: 'Tên đầy đủ', wide: true },
+      { key: 'code', label: 'Mã', required: true }, { key: 'name', label: 'Tên vật tư', required: true },
+      { key: 'unit', label: 'Đơn vị' }, { key: 'packagingSpec', label: 'Quy cách đóng gói' },
+      { key: 'categoryId', label: 'Mã nhóm VT' }, { key: 'supplierId', label: 'Mã nhà cung cấp' },
+      { key: 'minimumStock', label: 'Định mức tối thiểu', type: 'number' },
+      { key: 'conversionRate', label: 'Tỷ lệ quy đổi', type: 'number' },
     ],
-    formatCell: { level: v => ({ province: 'Tỉnh/TP', district: 'Quận/Huyện', ward: 'Phường/Xã' }[v] || v) },
+    rightAlign: ['minimumStock'],
+  },
+  'supply-categories': {
+    columns: ['code', 'name', 'parentId', 'status'],
+    columnLabels: { code: 'Mã', name: 'Tên nhóm', parentId: 'Nhóm cha', status: 'TT' },
+    editFields: [
+      { key: 'code', label: 'Mã' }, { key: 'name', label: 'Tên nhóm', required: true },
+      { key: 'parentId', label: 'Mã nhóm cha' },
+    ],
+  },
+  'suppliers': {
+    columns: ['code', 'name', 'contactPerson', 'phone', 'email', 'taxCode', 'status'],
+    columnLabels: { code: 'Mã', name: 'Tên nhà cung cấp', contactPerson: 'Người liên hệ', phone: 'SĐT', email: 'Email', taxCode: 'MST', status: 'TT' },
+    editFields: [
+      { key: 'code', label: 'Mã' }, { key: 'name', label: 'Tên nhà cung cấp', required: true },
+      { key: 'contactPerson', label: 'Người liên hệ' }, { key: 'phone', label: 'Số điện thoại' },
+      { key: 'email', label: 'Email' }, { key: 'taxCode', label: 'MST' },
+      { key: 'address', label: 'Địa chỉ', wide: true },
+    ],
+  },
+  'supply-service-mapping': {
+    columns: ['serviceCode', 'serviceName', 'supplyCode', 'supplyName', 'quantity', 'unit'],
+    columnLabels: { serviceCode: 'Mã DV', serviceName: 'Dịch vụ', supplyCode: 'Mã VT', supplyName: 'Vật tư', quantity: 'SL', unit: 'ĐV' },
+    editFields: [
+      { key: 'serviceId', label: 'Mã dịch vụ (_id)' }, { key: 'serviceCode', label: 'Mã DV' },
+      { key: 'serviceName', label: 'Tên dịch vụ', required: true },
+      { key: 'supplyId', label: 'Mã vật tư (_id)' }, { key: 'supplyCode', label: 'Mã VT' },
+      { key: 'supplyName', label: 'Tên vật tư', required: true },
+      { key: 'quantity', label: 'Số lượng định mức', type: 'number' },
+      { key: 'unit', label: 'Đơn vị' },
+    ],
+    rightAlign: ['quantity'],
   },
 }
 
-// ── Edit Modal ───────────────────────────────────────────
-function EditModal({ title, fields, record, onClose, onSave }) {
+// ── Row Drawer (edit form + history + usage) ─────────────
+// Replaces the old modal — right-docked so admin can keep the table visible
+// for cross-reference while editing. Three tabs: Thông tin (edit form) ·
+// Lịch sử (audit log for this row) · Điểm sử dụng (stub until Pass B2).
+function RowDrawer({ catalogKey, catalogLabel, fields, record, onClose, onSave, canEdit }) {
+  const isNew = !record?._id
+  const [tab, setTab] = useState('info')
   const [form, setForm] = useState(record || {})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
   // Async-loaded option lists keyed by role for userSelect fields
   const [userOptions, setUserOptions] = useState({})
   const userRoles = [...new Set(fields.filter(f => f.type === 'userSelect').map(f => f.userRole || 'nhanvien'))]
@@ -200,67 +262,188 @@ function EditModal({ title, fields, record, onClose, onSave }) {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userRoles.join(',')])
+
   const handleSave = async () => {
     for (const f of fields) { if (f.required && !form[f.key]?.toString().trim()) return setError(`${f.label} là bắt buộc`) }
     setSaving(true); setError('')
     try { await onSave(form) } catch (err) { setError(err.response?.data?.error || 'Lỗi'); setSaving(false) }
   }
+
+  const title = isNew ? 'Thêm mới' : (record.name || record.displayName || record.code || record._id)
+  const subtitle = isNew ? catalogLabel : (record.code || record._id)
+
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b flex justify-between"><h3 className="font-semibold text-gray-800">{title}</h3><button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button></div>
-        <div className="p-6 space-y-3">
-          {error && <div className="text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
-          <div className="grid grid-cols-2 gap-3">
-            {fields.map(f => (
-              <div key={f.key} className={f.wide ? 'col-span-2' : ''}>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}{f.required ? ' *' : ''}</label>
-                {f.type === 'select' ? (
-                  <select className="w-full border rounded px-2 py-1.5 text-sm" value={form[f.key] || ''} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}>
-                    <option value="">-- Chọn --</option>{f.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                ) : f.type === 'boolean' ? (
-                  <select className="w-full border rounded px-2 py-1.5 text-sm"
-                    value={form[f.key] === true ? '1' : form[f.key] === false ? '0' : ''}
-                    onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value === '1' }))}>
-                    <option value="">-- Chọn --</option>
-                    <option value="1">Có</option>
-                    <option value="0">Không</option>
-                  </select>
-                ) : f.type === 'userSelect' ? (
-                  <select className="w-full border rounded px-2 py-1.5 text-sm" value={form[f.key] || ''} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}>
-                    <option value="">-- Chọn --</option>
-                    {(userOptions[f.userRole || 'nhanvien'] || []).map(u => (
-                      <option key={u._id} value={u._id}>{(u.displayName || u._id)}{u.department ? ` — ${u.department}` : ''}</option>
-                    ))}
-                  </select>
-                ) : f.type === 'number' ? (
-                  <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={form[f.key] || 0} onChange={e => setForm(p => ({ ...p, [f.key]: +e.target.value }))} />
-                ) : f.type === 'date' ? (
-                  <input type="date" className="w-full border rounded px-2 py-1.5 text-sm" value={form[f.key] || ''} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} />
-                ) : (
-                  <input className="w-full border rounded px-2 py-1.5 text-sm" value={form[f.key] || ''} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} />
-                )}
-              </div>
-            ))}
+    <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
+      <div className="w-full max-w-md bg-white h-full flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between">
+          <div>
+            <div className="text-base font-semibold text-gray-900 truncate max-w-[260px]">{title}</div>
+            <div className="text-xs text-gray-400 font-mono mt-0.5">{subtitle}</div>
           </div>
+          <button onClick={onClose} aria-label="Đóng" className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
         </div>
-        <div className="px-6 py-3 border-t flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">Hủy</button>
-          <button onClick={handleSave} disabled={saving} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{saving ? 'Đang lưu...' : 'Lưu'}</button>
+
+        {/* Tabs — only show history + usage for existing rows */}
+        {!isNew && (
+          <div className="px-5 pt-3 border-b border-gray-100 flex gap-5 text-sm">
+            <TabLink active={tab === 'info'} onClick={() => setTab('info')}>Thông tin</TabLink>
+            <TabLink active={tab === 'history'} onClick={() => setTab('history')}>Lịch sử</TabLink>
+            <TabLink active={tab === 'usage'} onClick={() => setTab('usage')}>Điểm sử dụng</TabLink>
+          </div>
+        )}
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {tab === 'info' && (
+            <div className="p-5 space-y-3">
+              {error && <div className="text-sm text-rose-600 bg-rose-50 border border-rose-200 p-2 rounded-lg">{error}</div>}
+              <div className="grid grid-cols-2 gap-3">
+                {fields.map(f => (
+                  <div key={f.key} className={f.wide ? 'col-span-2' : ''}>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">{f.label}{f.required ? <span className="text-rose-500"> *</span> : null}</label>
+                    <FormField f={f} form={form} setForm={setForm} userOptions={userOptions} disabled={!canEdit} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {tab === 'history' && !isNew && (
+            <HistoryTab catalogKey={catalogKey} resourceId={record._id} />
+          )}
+          {tab === 'usage' && !isNew && (
+            <UsageTab catalogKey={catalogKey} record={record} />
+          )}
         </div>
+
+        {/* Footer — save only on info tab */}
+        {tab === 'info' && canEdit && (
+          <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Hủy</button>
+            <button onClick={handleSave} disabled={saving} className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">{saving ? 'Đang lưu...' : 'Lưu'}</button>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
+function TabLink({ active, children, onClick }) {
+  return (
+    <button onClick={onClick}
+      className={`pb-2 -mb-px border-b-2 text-sm transition-colors ${active ? 'border-gray-900 text-gray-900 font-semibold' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+      {children}
+    </button>
+  )
+}
+
+function FormField({ f, form, setForm, userOptions, disabled }) {
+  const inputCls = `w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 disabled:bg-gray-50`
+  const set = (v) => setForm(p => ({ ...p, [f.key]: v }))
+  if (f.type === 'select') return (
+    <select className={inputCls} value={form[f.key] || ''} onChange={e => set(e.target.value)} disabled={disabled}>
+      <option value="">-- Chọn --</option>{f.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  )
+  if (f.type === 'boolean') return (
+    <select className={inputCls}
+      value={form[f.key] === true ? '1' : form[f.key] === false ? '0' : ''}
+      onChange={e => set(e.target.value === '1')} disabled={disabled}>
+      <option value="">-- Chọn --</option><option value="1">Có</option><option value="0">Không</option>
+    </select>
+  )
+  if (f.type === 'userSelect') return (
+    <select className={inputCls} value={form[f.key] || ''} onChange={e => set(e.target.value)} disabled={disabled}>
+      <option value="">-- Chọn --</option>
+      {(userOptions[f.userRole || 'nhanvien'] || []).map(u => (
+        <option key={u._id} value={u._id}>{(u.displayName || u._id)}{u.department ? ` — ${u.department}` : ''}</option>
+      ))}
+    </select>
+  )
+  if (f.type === 'number') return <input type="number" className={inputCls} value={form[f.key] ?? 0} onChange={e => set(+e.target.value)} disabled={disabled} />
+  if (f.type === 'date') return <input type="date" className={inputCls} value={form[f.key] || ''} onChange={e => set(e.target.value)} disabled={disabled} />
+  return <input className={inputCls} value={form[f.key] || ''} onChange={e => set(e.target.value)} disabled={disabled} />
+}
+
+// Lịch sử tab — pulls audit entries for this catalog row. Requires audit.view
+// permission on the server; non-privileged roles get a gentle notice.
+function HistoryTab({ catalogKey, resourceId }) {
+  const [entries, setEntries] = useState(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    setEntries(null); setError('')
+    api.get('/audit-log', { params: { resource: 'catalogs', resourceId, path: `/catalogs/${catalogKey}/`, limit: 50 } })
+      .then(r => setEntries(r.data || []))
+      .catch(e => setError(e.response?.status === 403 ? 'Bạn không có quyền xem nhật ký.' : 'Không tải được lịch sử.'))
+  }, [catalogKey, resourceId])
+  if (error) return <div className="p-5 text-sm text-gray-400">{error}</div>
+  if (entries == null) return <div className="p-5 text-sm text-gray-400">Đang tải...</div>
+  if (entries.length === 0) return <div className="p-5 text-sm text-gray-400">Chưa có thay đổi nào được ghi nhận.</div>
+  const verb = (m) => m === 'POST' ? 'tạo' : m === 'PUT' ? 'sửa' : m === 'DELETE' ? 'xóa' : m
+  return (
+    <div className="p-5 space-y-3">
+      {entries.map(e => (
+        <div key={e._id} className="text-sm">
+          <div className="text-gray-900">
+            <b>{e.username || 'Hệ thống'}</b> {verb(e.method)} bản ghi
+          </div>
+          {e.payload && Object.keys(e.payload).length > 0 && (
+            <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+              {Object.entries(e.payload).filter(([k]) => !['_id', 'createdAt', 'updatedAt'].includes(k)).slice(0, 4).map(([k, v]) => `${k}: ${String(v).slice(0, 50)}`).join(' · ')}
+            </div>
+          )}
+          <div className="text-xs text-gray-400 mt-0.5">{relTime(e.ts)}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Điểm sử dụng tab — Pass B2 stub. Shows a placeholder with intent, will be
+// filled in when per-catalog reference-count endpoints land.
+function UsageTab({ catalogKey, record }) {
+  return (
+    <div className="p-5">
+      <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-sm text-gray-600">
+        <div className="font-semibold text-gray-800 mb-1">Điểm sử dụng</div>
+        <p className="text-gray-500">Tính năng này sẽ hiển thị các phiếu đăng ký, phiếu thu, và quy tắc hoa hồng đang tham chiếu đến <b className="text-gray-700">{record.name || record.displayName || record._id}</b>, giúp bạn quyết định có thể ngưng hoạt động an toàn hay không.</p>
+        <p className="text-xs text-gray-400 mt-2">Đang phát triển — Pass B2.</p>
+      </div>
+    </div>
+  )
+}
+
+function relTime(iso) {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  if (!Number.isFinite(diff) || diff < 0) return iso.slice(0, 10)
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'vừa xong'
+  if (m < 60) return `${m} phút trước`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} giờ trước`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d} ngày trước`
+  return iso.slice(0, 10)
+}
+
 // ── Generic Catalog Table ────────────────────────────────
-function CatalogTable({ catalogKey, canEdit }) {
+const PAGE_SIZE = 50
+
+function CatalogTable({ catalogKey, catalogLabel, canEdit }) {
   const config = CATALOG_FIELDS[catalogKey]
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
   const [searchQ, setSearchQ] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all') // all | active | inactive
+  const [sortBy, setSortBy] = useState('')
+  const [sortDir, setSortDir] = useState('asc')
+  const [page, setPage] = useState(1)
+
+  // Reset pagination when the catalog or any filter changes so we don't end up
+  // on page 3 of a catalog that only has 10 rows after a filter switch.
+  useEffect(() => { setPage(1) }, [catalogKey, searchQ, statusFilter, sortBy, sortDir])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -300,49 +483,112 @@ function CatalogTable({ catalogKey, canEdit }) {
     } catch (err) { alert(err.response?.data?.error || 'Lỗi xóa') }
   }
 
+  const activeCount = items.filter(i => i.status !== 'inactive').length
+  const filtered = items.filter(it => {
+    if (statusFilter === 'active' && it.status === 'inactive') return false
+    if (statusFilter === 'inactive' && it.status !== 'inactive') return false
+    return true
+  })
+  const sorted = sortBy ? [...filtered].sort((a, b) => {
+    const av = a[sortBy], bv = b[sortBy]
+    const cmp = (av ?? '') < (bv ?? '') ? -1 : (av ?? '') > (bv ?? '') ? 1 : 0
+    return sortDir === 'asc' ? cmp : -cmp
+  }) : filtered
+  const paged = sorted.slice(0, page * PAGE_SIZE)
+  const hasMore = paged.length < sorted.length
+
+  const toggleSort = (col) => {
+    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortBy(col); setSortDir('asc') }
+  }
+
   return (
     <>
-      {config.note && <div className="mb-3 px-3 py-2 bg-orange-50 border border-orange-200 rounded text-sm text-orange-700">⚠ {config.note}</div>}
-      <div className="flex items-center justify-between mb-3">
-        <input className="border rounded px-3 py-1.5 text-sm w-64" placeholder="Tìm kiếm..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+      {config.note && <div className="mb-3 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-700">⚠ {config.note}</div>}
+
+      {/* Unified toolbar: search + status filter + counts + + Thêm */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <input
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50"
+          placeholder="Tìm kiếm..." value={searchQ} onChange={e => setSearchQ(e.target.value)}
+        />
+        <select
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+          value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+        >
+          <option value="all">Tất cả trạng thái</option>
+          <option value="active">Đang hoạt động</option>
+          <option value="inactive">Đã ngưng</option>
+        </select>
+        <div className="flex-1 text-xs text-gray-500">
+          <b className="text-gray-700">{items.length}</b> mục
+          {items.length > 0 && <span> · <b className="text-gray-700">{activeCount}</b> đang hoạt động</span>}
+          {filtered.length !== items.length && <span> · <b className="text-gray-700">{filtered.length}</b> hiển thị</span>}
+        </div>
         {canEdit && config.editFields && (
-          <button onClick={() => setEditing({})} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm mới</button>
+          <button onClick={() => setEditing({})} className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">＋ Thêm mới</button>
         )}
       </div>
-      <div className="bg-white rounded-lg border overflow-auto">
+
+      <div className="bg-white rounded-xl border border-gray-200 overflow-auto">
         <table className="w-full text-sm whitespace-nowrap">
-          <thead><tr className="bg-gray-50 text-gray-600 text-left">
-            {config.columns.map(col => (
-              <th key={col} className={`px-4 py-3 ${config.rightAlign?.includes(col) ? 'text-right' : ''}`}>{config.columnLabels[col] || col}</th>
-            ))}
-            {canEdit && config.editFields && <th className="px-4 py-3 w-36 text-center">Thao tác</th>}
-          </tr></thead>
+          <thead>
+            <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide text-left">
+              {config.columns.map(col => {
+                const label = config.columnLabels[col] || col
+                const sortable = !config.rightAlign?.includes(col) || col === 'basePrice' || col === 'rate'
+                const isActive = sortBy === col
+                return (
+                  <th key={col} className={`px-4 py-3 ${config.rightAlign?.includes(col) ? 'text-right' : ''} ${sortable ? 'cursor-pointer hover:text-gray-700' : ''}`}
+                    onClick={sortable ? () => toggleSort(col) : undefined}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {label}
+                      {sortable && <span className={`text-[10px] ${isActive ? 'text-blue-600' : 'text-gray-300'}`}>{isActive ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}</span>}
+                    </span>
+                  </th>
+                )
+              })}
+              {canEdit && config.editFields && <th className="px-4 py-3 w-32 text-center">Thao tác</th>}
+            </tr>
+          </thead>
           <tbody>
             {loading ? <tr><td colSpan={config.columns.length + 1} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
-            : items.length === 0 ? <tr><td colSpan={config.columns.length + 1} className="px-4 py-8 text-center text-gray-400">Chưa có dữ liệu</td></tr>
-            : items.map((item, i) => (
-              <tr key={item._id || i} className="border-t hover:bg-blue-50/50">
+            : paged.length === 0 ? (
+              <tr><td colSpan={config.columns.length + 1} className="px-4 py-10 text-center text-gray-400">
+                {items.length === 0
+                  ? <div className="space-y-2">
+                      <div>Chưa có dữ liệu.</div>
+                      {canEdit && config.editFields && (
+                        <button onClick={() => setEditing({})} className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">＋ Thêm bản ghi đầu tiên</button>
+                      )}
+                    </div>
+                  : 'Không khớp bộ lọc.'}
+              </td></tr>
+            )
+            : paged.map((item, i) => (
+              <tr key={item._id || i} className="border-t border-gray-100 hover:bg-blue-50/50">
                 {config.columns.map(col => {
                   let val = item[col]
                   if (config.formatCell?.[col]) val = config.formatCell[col](val, item)
                   if (col === 'status') {
-                    return <td key={col} className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${val === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{val === 'active' ? 'HĐ' : val === 'inactive' ? 'Ngưng' : val || '-'}</span></td>
+                    return <td key={col} className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${val === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{val === 'active' ? 'HĐ' : val === 'inactive' ? 'Ngưng' : val || '-'}</span></td>
                   }
                   if (col === 'code') return <td key={col} className="px-4 py-2.5 font-mono text-xs text-gray-500">{val || '-'}</td>
-                  if (col === 'name' || col === 'serviceName' || col === 'commissionGroupName') return <td key={col} className="px-4 py-2.5 font-medium">{val || '-'}</td>
+                  if (col === 'name' || col === 'serviceName' || col === 'commissionGroupName') return <td key={col} className="px-4 py-2.5 font-medium text-gray-900">{val || '-'}</td>
                   return <td key={col} className={`px-4 py-2.5 text-gray-600 ${config.rightAlign?.includes(col) ? 'text-right font-medium' : ''}`}>{val ?? '-'}</td>
                 })}
                 {canEdit && config.editFields && (
                   <td className="px-4 py-2.5">
                     <div className="flex items-center justify-center gap-2 text-xs">
                       <button onClick={() => setEditing(item)} className="text-blue-600 hover:text-blue-800">Sửa</button>
-                      <span className="text-gray-300">|</span>
+                      <span className="text-gray-300">·</span>
                       <button onClick={() => handleToggle(item)}
                         className={item.status === 'inactive' ? 'text-emerald-600 hover:text-emerald-800' : 'text-orange-600 hover:text-orange-800'}>
                         {item.status === 'inactive' ? 'Mở' : 'Khóa'}
                       </button>
-                      <span className="text-gray-300">|</span>
-                      <button onClick={() => handleDelete(item)} className="text-red-600 hover:text-red-800">Xóa</button>
+                      <span className="text-gray-300">·</span>
+                      <button onClick={() => handleDelete(item)} className="text-rose-600 hover:text-rose-800">Xóa</button>
                     </div>
                   </td>
                 )}
@@ -350,177 +596,40 @@ function CatalogTable({ catalogKey, canEdit }) {
             ))}
           </tbody>
         </table>
+        {hasMore && (
+          <div className="border-t border-gray-100 px-4 py-3 flex items-center justify-between text-xs text-gray-500">
+            <span>Hiển thị {paged.length} / {sorted.length} mục</span>
+            <button onClick={() => setPage(p => p + 1)} className="px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">Tải thêm ↓</button>
+          </div>
+        )}
       </div>
-      {editing !== null && <EditModal title={editing._id ? 'Sửa' : 'Thêm mới'} fields={config.editFields} record={editing} onClose={() => setEditing(null)} onSave={handleSave} />}
+      {editing !== null && (
+        <RowDrawer
+          catalogKey={catalogKey}
+          catalogLabel={catalogLabel}
+          fields={config.editFields}
+          record={editing}
+          canEdit={canEdit}
+          onClose={() => setEditing(null)}
+          onSave={handleSave}
+        />
+      )}
     </>
   )
 }
 
-// ── Staff master-detail ─────────────────────────────────
-const ROLE_OPTIONS = [
-  { value: 'admin', label: 'Admin' }, { value: 'giamdoc', label: 'Giám đốc' },
-  { value: 'truongphong', label: 'Trưởng phòng' }, { value: 'bacsi', label: 'Bác sĩ' },
-  { value: 'nhanvien', label: 'Nhân viên' }, { value: 'sale', label: 'Sale' }, { value: 'guest', label: 'Guest' },
-]
-const ROLE_LABELS = Object.fromEntries(ROLE_OPTIONS.map(o => [o.value, o.label]))
-const EMP_TYPE_OPTIONS = [
-  { value: 'full_time', label: 'Toàn thời gian' }, { value: 'part_time', label: 'Bán thời gian' },
-  { value: 'contract', label: 'Hợp đồng' }, { value: 'intern', label: 'Thực tập' },
-]
-const GENDER_OPTIONS = [{ value: 'M', label: 'Nam' }, { value: 'F', label: 'Nữ' }]
-
-function UsersTable({ canEdit }) {
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [searchQ, setSearchQ] = useState('')
-  const [selected, setSelected] = useState(null)
-  const [form, setForm] = useState({})
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState('')
-  const [roleFilter, setRoleFilter] = useState('')
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try { const r = await api.get('/catalogs/users', { params: searchQ ? { q: searchQ } : {} }); setItems(r.data) } catch {}
-    setLoading(false)
-  }, [searchQ])
-  useEffect(() => { load() }, [load])
-
-  const selectUser = (u) => { setSelected(u._id); setForm({ ...u }); setMsg('') }
-  const startNew = () => { setSelected('__new__'); setForm({ _id: '', role: 'nhanvien', employeeType: 'full_time', gender: 'M' }); setMsg('') }
-  const setF = (k, v) => setForm(p => ({ ...p, [k]: v }))
-
-  const handleSave = async () => {
-    if (!form.displayName?.trim()) return setMsg('Họ tên là bắt buộc')
-    setSaving(true); setMsg('')
-    try {
-      if (selected === '__new__') {
-        if (!form._id?.trim()) { setSaving(false); return setMsg('Mã nhân viên là bắt buộc') }
-        await api.post('/catalogs/users', form)
-      } else {
-        await api.put(`/catalogs/users/${selected}`, form)
-      }
-      await load()
-      setMsg('Đã lưu thành công')
-      if (selected === '__new__') setSelected(form._id)
-    } catch (err) { setMsg(err.response?.data?.error || 'Lỗi lưu') }
-    setSaving(false)
-  }
-
-  const filtered = items.filter(u => !roleFilter || u.role === roleFilter)
-
-  const Field = ({ label, k, required, type, options, wide }) => (
-    <div className={wide ? 'col-span-2 sm:col-span-1' : ''}>
-      <label className="block text-xs font-medium text-gray-500 mb-1">{label}{required ? ' *' : ''}</label>
-      {type === 'select' ? (
-        <select className="w-full border rounded px-2 py-1.5 text-sm" value={form[k] || ''} onChange={e => setF(k, e.target.value)} disabled={!canEdit}>
-          <option value="">-- Chọn --</option>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      ) : type === 'date' ? (
-        <input type="date" className="w-full border rounded px-2 py-1.5 text-sm" value={form[k] || ''} onChange={e => setF(k, e.target.value)} disabled={!canEdit} />
-      ) : (
-        <input className="w-full border rounded px-2 py-1.5 text-sm" value={form[k] || ''} onChange={e => setF(k, e.target.value)} disabled={!canEdit || (k === '_id' && selected !== '__new__')} />
-      )}
-    </div>
-  )
-
-  const ImagePlaceholder = ({ label }) => (
-    <div className="border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center text-gray-400 min-h-[120px]">
-      <svg className="w-8 h-8 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-      <span className="text-xs">{label}</span>
-    </div>
-  )
-
-  return (
-    <div className="flex gap-4 h-[calc(100vh-12rem)]">
-      {/* Left: list */}
-      <div className="w-[420px] flex-shrink-0 flex flex-col border rounded-lg bg-white overflow-hidden">
-        <div className="p-2 border-b flex items-center gap-2">
-          {canEdit && <button onClick={startNew} className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 flex-shrink-0">+ Thêm</button>}
-          <select className="border rounded px-2 py-1 text-xs" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
-            <option value="">Tất cả chức vụ</option>{ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        <div className="overflow-auto flex-1">
-          <table className="w-full text-sm">
-            <thead><tr className="bg-[#1e3a5f] text-white text-left text-xs sticky top-0">
-              <th className="px-2 py-2 w-8">STT</th><th className="px-2 py-2">Mã</th><th className="px-2 py-2">Họ tên</th><th className="px-2 py-2">Chức vụ</th><th className="px-2 py-2">Số điện thoại</th>
-            </tr></thead>
-            <tbody>
-              {loading ? <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
-              : filtered.map((u, i) => (
-                <tr key={u._id} onClick={() => selectUser(u)} className={`border-t cursor-pointer text-xs ${selected === u._id ? 'bg-blue-100' : 'hover:bg-blue-50/50'}`}>
-                  <td className="px-2 py-2 text-gray-400">{i + 1}</td>
-                  <td className="px-2 py-2 font-mono">{u._id}</td>
-                  <td className="px-2 py-2 font-medium">{u.displayName || '-'}</td>
-                  <td className="px-2 py-2">{ROLE_LABELS[u.role] || u.role}</td>
-                  <td className="px-2 py-2">{u.phone || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Right: detail form */}
-      <div className="flex-1 border rounded-lg bg-white overflow-auto">
-        {!selected ? (
-          <div className="flex items-center justify-center h-full text-gray-400 text-sm">Chọn nhân viên từ danh sách bên trái</div>
-        ) : (
-          <div className="p-4">
-            {canEdit && (
-              <div className="flex items-center gap-2 mb-4">
-                <button onClick={handleSave} disabled={saving} className="px-4 py-1.5 text-sm bg-[#1e3a5f] text-white rounded hover:bg-[#2a4f7a] disabled:opacity-50 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
-                  {saving ? 'Đang lưu...' : 'Lưu'}
-                </button>
-                <Link to="/hr/employees" className="px-3 py-1.5 text-sm border border-[#1e3a5f] text-[#1e3a5f] rounded hover:bg-blue-50 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                  Phân quyền tại HR
-                </Link>
-                {msg && <span className={`text-xs ${msg.includes('thành công') ? 'text-green-600' : 'text-red-600'}`}>{msg}</span>}
-              </div>
-            )}
-            <div className="grid grid-cols-5 gap-3 mb-4">
-              <Field label="Mã nhân viên" k="_id" required />
-              <Field label="Loại hình HV" k="employeeType" required type="select" options={EMP_TYPE_OPTIONS} />
-              <Field label="Họ tên" k="displayName" required />
-              <Field label="Giới tính" k="gender" type="select" options={GENDER_OPTIONS} />
-            </div>
-            <div className="grid grid-cols-5 gap-3 mb-4">
-              <Field label="CCCD" k="idCard" required />
-              <Field label="Ngày sinh" k="dob" type="date" />
-              <Field label="Số điện thoại" k="phone" />
-              <Field label="Email" k="email" />
-            </div>
-            <div className="grid grid-cols-5 gap-3 mb-4">
-              <Field label="Trình độ" k="education" />
-              <Field label="Địa chỉ" k="address" />
-              <Field label="Ngày vào làm" k="joinDate" type="date" />
-            </div>
-            <div className="grid grid-cols-5 gap-3 mb-6">
-              <Field label="Số BHXH" k="socialInsuranceNo" />
-              <Field label="Ngày tham gia BH" k="insuranceDate" type="date" />
-              <Field label="Mã số thuế" k="taxCode" />
-              <Field label="Nơi cấp mã số thuế" k="taxCodePlace" />
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <ImagePlaceholder label="Hình ảnh đại diện" />
-              <ImagePlaceholder label="Ảnh chữ ký" />
-              <ImagePlaceholder label="Vân tay" />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
+// Nhân sự moved to Danh mục → Hồ sơ & Tham chiếu → Nhân viên on 2026-04-23,
+// now rendered by HR's EmployeeSection. The old UsersTable master-detail
+// that lived here + ROLE_OPTIONS/EMP_TYPE_OPTIONS/GENDER_OPTIONS are removed.
+// The /api/catalogs/users endpoint stays for userSelect picker lookups.
 
 function PatientsTable() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQ, setSearchQ] = useState('')
   const [genderFilter, setGenderFilter] = useState('')
+  const [page, setPage] = useState(1)
+  useEffect(() => { setPage(1) }, [searchQ, genderFilter])
   const load = useCallback(async () => {
     setLoading(true)
     try { const r = await api.get('/catalogs/patients', { params: searchQ ? { q: searchQ } : {} }); setItems(r.data) } catch {}
@@ -528,9 +637,11 @@ function PatientsTable() {
   }, [searchQ])
   useEffect(() => { load() }, [load])
   const filtered = items.filter(p => !genderFilter || p.gender === genderFilter)
+  const paged = filtered.slice(0, page * PAGE_SIZE)
+  const hasMore = paged.length < filtered.length
   const cols = [
     { key: 'patientId', label: 'Mã', cls: 'font-mono text-xs text-blue-600' },
-    { key: 'name', label: 'Tên', cls: 'font-medium' },
+    { key: 'name', label: 'Tên', cls: 'font-medium text-gray-900' },
     { key: 'phone', label: 'SĐT' },
     { key: 'email', label: 'Email' },
     { key: 'dob', label: 'Ngày sinh' },
@@ -543,24 +654,40 @@ function PatientsTable() {
   ]
   return (
     <>
-      <div className="mb-3 flex items-center gap-3">
-        <input className="border rounded px-3 py-1.5 text-sm w-64" placeholder="Tìm bệnh nhân (tên, mã, SĐT)..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-        <select className="border rounded px-2 py-1.5 text-sm" value={genderFilter} onChange={e => setGenderFilter(e.target.value)}>
-          <option value="">Giới tính (All)</option><option value="M">Nam</option><option value="F">Nữ</option>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <input
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50"
+          placeholder="Tìm bệnh nhân (tên, mã, SĐT)..." value={searchQ} onChange={e => setSearchQ(e.target.value)}
+        />
+        <select className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white" value={genderFilter} onChange={e => setGenderFilter(e.target.value)}>
+          <option value="">Tất cả giới tính</option><option value="M">Nam</option><option value="F">Nữ</option>
         </select>
+        <div className="flex-1 text-xs text-gray-500">
+          <b className="text-gray-700">{items.length}</b> bệnh nhân
+          {filtered.length !== items.length && <span> · <b className="text-gray-700">{filtered.length}</b> hiển thị</span>}
+        </div>
       </div>
-      <div className="bg-white rounded-lg border overflow-auto">
-        <table className="w-full text-sm whitespace-nowrap"><thead><tr className="bg-[#1e3a5f] text-white text-left">
-          {cols.map(c => <th key={c.key} className="px-4 py-3">{c.label}</th>)}
-        </tr></thead><tbody>
-          {loading ? <tr><td colSpan={cols.length} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
-          : filtered.length === 0 ? <tr><td colSpan={cols.length} className="px-4 py-8 text-center text-gray-400">Chưa có bệnh nhân</td></tr>
-          : filtered.map(p => (
-            <tr key={p._id} className="border-t hover:bg-blue-50/50">
-              {cols.map(c => <td key={c.key} className={`px-4 py-2.5 text-gray-600 ${c.cls || ''}`}>{c.fmt ? c.fmt(p[c.key]) : (p[c.key] || '-')}</td>)}
-            </tr>
-          ))}
-        </tbody></table>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-auto">
+        <table className="w-full text-sm whitespace-nowrap">
+          <thead><tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide text-left">
+            {cols.map(c => <th key={c.key} className="px-4 py-3">{c.label}</th>)}
+          </tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={cols.length} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
+            : paged.length === 0 ? <tr><td colSpan={cols.length} className="px-4 py-10 text-center text-gray-400">Chưa có bệnh nhân khớp bộ lọc.</td></tr>
+            : paged.map(p => (
+              <tr key={p._id} className="border-t border-gray-100 hover:bg-blue-50/50">
+                {cols.map(c => <td key={c.key} className={`px-4 py-2.5 text-gray-600 ${c.cls || ''}`}>{c.fmt ? c.fmt(p[c.key]) : (p[c.key] || '-')}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {hasMore && (
+          <div className="border-t border-gray-100 px-4 py-3 flex items-center justify-between text-xs text-gray-500">
+            <span>Hiển thị {paged.length} / {filtered.length} mục</span>
+            <button onClick={() => setPage(p => p + 1)} className="px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">Tải thêm ↓</button>
+          </div>
+        )}
       </div>
     </>
   )
@@ -573,23 +700,27 @@ function PromotionsTable({ canEdit }) {
   const load = useCallback(async () => { setLoading(true); try { const r = await api.get('/promotions'); setItems(r.data) } catch {}; setLoading(false) }, [])
   useEffect(() => { load() }, [load])
   return (
-    <div className="bg-white rounded-lg border overflow-hidden">
-      <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
-        <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Tên chương trình</th><th className="px-4 py-3">Loại</th><th className="px-4 py-3 text-right">Giá trị</th><th className="px-4 py-3">Thời gian</th><th className="px-4 py-3 text-center">Đã dùng</th><th className="px-4 py-3">TT</th>
-      </tr></thead><tbody>
-        {loading ? <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
-        : items.map(p => (
-          <tr key={p._id} className="border-t hover:bg-blue-50/50">
-            <td className="px-4 py-2.5 font-mono text-xs">{p.code}</td>
-            <td className="px-4 py-2.5 font-medium">{p.name}</td>
-            <td className="px-4 py-2.5">{p.type === 'percentage' ? '%' : 'VND'}</td>
-            <td className="px-4 py-2.5 text-right font-medium text-blue-600">{p.type === 'percentage' ? `${p.discountValue}%` : fmtMoney(p.discountValue)}</td>
-            <td className="px-4 py-2.5 text-xs text-gray-500">{p.startDate || ''} - {p.endDate || ''}</td>
-            <td className="px-4 py-2.5 text-center">{p.currentUsage}{p.maxUsageTotal ? `/${p.maxUsageTotal}` : ''}</td>
-            <td className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${p.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{p.status === 'active' ? 'HĐ' : p.status}</span></td>
-          </tr>
-        ))}
-      </tbody></table>
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <table className="w-full text-sm">
+        <thead><tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide text-left">
+          <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Tên chương trình</th><th className="px-4 py-3">Loại</th><th className="px-4 py-3 text-right">Giá trị</th><th className="px-4 py-3">Thời gian</th><th className="px-4 py-3 text-center">Đã dùng</th><th className="px-4 py-3">TT</th>
+        </tr></thead>
+        <tbody>
+          {loading ? <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
+          : items.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">Chưa có chương trình khuyến mãi.</td></tr>
+          : items.map(p => (
+            <tr key={p._id} className="border-t border-gray-100 hover:bg-blue-50/50">
+              <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{p.code}</td>
+              <td className="px-4 py-2.5 font-medium text-gray-900">{p.name}</td>
+              <td className="px-4 py-2.5 text-gray-600">{p.type === 'percentage' ? '%' : 'VND'}</td>
+              <td className="px-4 py-2.5 text-right font-medium text-blue-600">{p.type === 'percentage' ? `${p.discountValue}%` : fmtMoney(p.discountValue)}</td>
+              <td className="px-4 py-2.5 text-xs text-gray-500">{p.startDate || ''} - {p.endDate || ''}</td>
+              <td className="px-4 py-2.5 text-center text-gray-600">{p.currentUsage}{p.maxUsageTotal ? `/${p.maxUsageTotal}` : ''}</td>
+              <td className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${p.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{p.status === 'active' ? 'HĐ' : p.status}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -598,29 +729,35 @@ function PromoCodesTable() {
   const [promos, setPromos] = useState([])
   const [codes, setCodes] = useState([])
   const [selectedPromo, setSelectedPromo] = useState('')
-  const [loading, setLoading] = useState(true)
-  useEffect(() => { api.get('/promotions').then(r => { setPromos(r.data); setLoading(false) }).catch(() => setLoading(false)) }, [])
+  useEffect(() => { api.get('/promotions').then(r => setPromos(r.data)).catch(() => {}) }, [])
   useEffect(() => { if (selectedPromo) api.get(`/promotions/${selectedPromo}/codes`).then(r => setCodes(r.data)).catch(() => setCodes([])); else setCodes([]) }, [selectedPromo])
   return (
     <>
       <div className="mb-3">
-        <select className="border rounded px-3 py-1.5 text-sm w-72" value={selectedPromo} onChange={e => setSelectedPromo(e.target.value)}>
+        <select className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-72 bg-white" value={selectedPromo} onChange={e => setSelectedPromo(e.target.value)}>
           <option value="">-- Chọn chương trình để xem mã --</option>
           {promos.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
         </select>
       </div>
       {selectedPromo && (
-        <div className="bg-white rounded-lg border overflow-hidden">
-          <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
-            <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Chương trình</th><th className="px-4 py-3 text-center">Đã dùng</th><th className="px-4 py-3 text-center">Tối đa</th><th className="px-4 py-3">TT</th>
-          </tr></thead><tbody>
-            {codes.length === 0 ? <tr><td colSpan={5} className="px-4 py-4 text-center text-gray-400">Chưa có mã</td></tr>
-            : codes.map(c => (
-              <tr key={c._id} className="border-t"><td className="px-4 py-2 font-mono font-medium">{c.code}</td><td className="px-4 py-2 text-gray-500">{c.promotionName}</td>
-              <td className="px-4 py-2 text-center">{c.usedCount}</td><td className="px-4 py-2 text-center">{c.maxUsage}</td>
-              <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-xs ${c.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{c.status === 'active' ? 'HĐ' : c.status}</span></td></tr>
-            ))}
-          </tbody></table>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead><tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide text-left">
+              <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Chương trình</th><th className="px-4 py-3 text-center">Đã dùng</th><th className="px-4 py-3 text-center">Tối đa</th><th className="px-4 py-3">TT</th>
+            </tr></thead>
+            <tbody>
+              {codes.length === 0 ? <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400">Chưa có mã</td></tr>
+              : codes.map(c => (
+                <tr key={c._id} className="border-t border-gray-100">
+                  <td className="px-4 py-2 font-mono font-medium text-gray-900">{c.code}</td>
+                  <td className="px-4 py-2 text-gray-500">{c.promotionName}</td>
+                  <td className="px-4 py-2 text-center text-gray-600">{c.usedCount}</td>
+                  <td className="px-4 py-2 text-center text-gray-600">{c.maxUsage}</td>
+                  <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${c.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{c.status === 'active' ? 'HĐ' : c.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </>
@@ -630,29 +767,229 @@ function PromoCodesTable() {
 // ══════════════════════════════════════════════════════════
 //  MAIN CATALOGS PAGE
 // ══════════════════════════════════════════════════════════
-export default function Catalogs() {
-  const { hasPerm } = useAuth()
-  const { catalogKey } = useParams()
-  const activeKey = catalogKey || 'referral-doctors'
 
-  const activeLabel = MENU.flatMap(g => g.items).find(i => i.key === activeKey)?.label || ''
+function PageHeader({ breadcrumb, userName }) {
+  const date = new Date()
+  const dateStr = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+  return (
+    <div className="flex items-center gap-6 px-4 py-2 border-b bg-white -mx-4 -mt-4 mb-4">
+      <div className="flex items-baseline gap-2">
+        <div className="text-lg font-semibold text-gray-800">Danh mục</div>
+        <div className="text-xs text-gray-400 font-mono">/quản trị</div>
+      </div>
+      <div className="flex-1 text-xs text-gray-500">{breadcrumb}</div>
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        {userName && <span className="px-2 py-1 bg-gray-100 rounded-md">👤 {userName}</span>}
+        <span className="px-2 py-1 bg-gray-100 rounded-md">{dateStr}</span>
+      </div>
+    </div>
+  )
+}
+
+// Group pills — the primary nav element (replaces flat sidebar). Only the
+// active pill is shaped (filled in its group color); idle pills are plain
+// text so the active pill visually "contains" the sub-catalog tabs below it.
+// User feedback 2026-04-23: border/bg on idle pills made the 2-level nesting
+// read as two parallel rows instead of parent/child.
+function GroupPills({ activeGroupKey, onPick }) {
+  return (
+    <div className="flex items-center gap-1 mb-1 flex-wrap">
+      {GROUPS.map(g => {
+        const active = g.key === activeGroupKey
+        const cls = active
+          ? `${GROUP_PILL_CLS[g.color].active} px-3.5 py-1.5 rounded-full shadow-sm`
+          : 'px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-full'
+        return (
+          <button key={g.key} onClick={() => onPick(g)} className={`text-sm font-semibold transition-colors ${cls}`}>
+            {g.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Sub-catalog tab strip — the active group's catalogs as a horizontal row.
+// Active tab has an underline bar in the group's color (connects visually
+// to the filled active group pill above). Counts loaded from /catalogs/summary.
+function SubcatalogTabs({ group, activeKey, counts, onPick }) {
+  const activeColor = group ? GROUP_PILL_CLS[group.color]?.dot : 'bg-gray-900'
+  return (
+    <div className="flex items-baseline gap-4 border-b border-gray-200 mb-4 pt-1 overflow-x-auto">
+      {group.items.map(it => {
+        const active = it.key === activeKey
+        const c = counts?.[it.key]
+        return (
+          <button key={it.key} onClick={() => onPick(it.key)}
+            className={`flex items-baseline gap-1.5 pb-2 -mb-px border-b-2 text-sm whitespace-nowrap transition-colors ${active ? `${activeColor.replace('bg-', 'border-')} text-gray-900 font-semibold` : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+            <span>{it.label}</span>
+            {c != null && <span className={`text-xs ${active ? 'text-gray-500' : 'text-gray-400'}`}>{c}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Landing view — 4 group tiles with counts + recent-edits feed.
+// Loads /catalogs/summary once; clicking anywhere navigates to the detail view.
+function CatalogsLanding() {
+  const nav = useNavigate()
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    api.get('/catalogs/summary').then(r => setData(r.data)).catch(e => setError(e.response?.data?.error || 'Không tải được tổng hợp'))
+  }, [])
+
+  if (error) return <div className="p-6 text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg">{error}</div>
+  if (!data) return <div className="p-6 text-sm text-gray-400">Đang tải...</div>
+
+  const counts = data.counts || {}
+  const recent = data.recentEdits || []
+
+  // Derive per-group "last edited" from the recent-edits feed (first entry whose
+  // path matches any catalog in the group).
+  const lastEditForGroup = (group) => {
+    const keys = new Set(group.items.map(i => i.key))
+    for (const e of recent) {
+      for (const k of keys) {
+        if ((e.path || '').includes(`/catalogs/${k}`) || (k === 'promotions' && (e.path || '').includes('/promotions')) || (k === 'promo-codes' && (e.path || '').includes('/promotions/'))) {
+          return e
+        }
+      }
+    }
+    return null
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {GROUPS.map(g => {
+          const total = g.items.reduce((s, i) => s + (counts[i.key] || 0), 0)
+          const last = lastEditForGroup(g)
+          const dotCls = GROUP_PILL_CLS[g.color].dot
+          return (
+            <div key={g.key} className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-block w-2 h-2 rounded-full ${dotCls}`} />
+                  <span className="font-semibold text-gray-900">{g.label}</span>
+                </div>
+                <span className="text-xs text-gray-500">{total.toLocaleString('vi-VN')} mục</span>
+              </div>
+              <div className="space-y-1.5 mb-3">
+                {g.items.map(it => (
+                  <button key={it.key} onClick={() => nav(`/catalogs/${it.key}`)}
+                    className="w-full flex items-center justify-between text-sm py-1 px-1 rounded hover:bg-gray-50">
+                    <span className="text-gray-700">{it.label}</span>
+                    <span className="text-gray-500 tabular-nums">{(counts[it.key] ?? 0).toLocaleString('vi-VN')}</span>
+                  </button>
+                ))}
+              </div>
+              {last && (
+                <div className="pt-3 border-t border-dashed border-gray-200 text-xs text-gray-400">
+                  Cập nhật: <b className="text-gray-600">{last.username || 'Hệ thống'}</b> · {relTime(last.ts)}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-baseline justify-between mb-3">
+          <div className="font-semibold text-gray-900">Lần sửa gần đây</div>
+          <div className="text-xs text-gray-400">{recent.length} bản ghi gần nhất</div>
+        </div>
+        {recent.length === 0 ? (
+          <div className="text-sm text-gray-400 py-6 text-center">Chưa có thay đổi nào được ghi nhận.</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {recent.map(e => <RecentEditRow key={e._id} e={e} />)}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function RecentEditRow({ e }) {
+  const verb = e.method === 'POST' ? 'tạo' : e.method === 'PUT' ? 'sửa' : e.method === 'DELETE' ? 'xóa' : e.method
+  // Resource label — best-effort derive from URL path, e.g. /api/catalogs/services/SVC-1 → Dịch vụ
+  const m = (e.path || '').match(/\/catalogs\/([^/?]+)/) || (e.path || '').match(/\/(promotions)\//)
+  const catKey = m?.[1]
+  const catItem = GROUPS.flatMap(g => g.items).find(i => i.key === catKey)
+  const catLabel = catItem?.label || catKey || 'bản ghi'
+  const name = e.payload?.name || e.payload?.displayName || e.payload?.code || e.resourceId || ''
+  const initial = (e.username || '?').slice(0, 1).toUpperCase()
+  return (
+    <div className="flex items-center gap-3 py-3">
+      <div className="w-7 h-7 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-xs font-semibold text-blue-700 shrink-0">{initial}</div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm text-gray-900 truncate">
+          <b>{e.username || 'Hệ thống'}</b> · {verb} {catLabel.toLowerCase()}{name ? ` "${name}"` : ''}
+        </div>
+      </div>
+      <div className="text-xs text-gray-400 shrink-0">{relTime(e.ts)}</div>
+    </div>
+  )
+}
+
+export default function Catalogs() {
+  const { hasPerm, auth } = useAuth()
+  const { catalogKey } = useParams()
+  const nav = useNavigate()
+  const activeKey = catalogKey || ''
+  const isLanding = !activeKey
+
+  const activeItem = GROUPS.flatMap(g => g.items.map(i => ({ ...i, groupKey: g.key, groupLabel: g.label, groupColor: g.color }))).find(i => i.key === activeKey)
+  const activeGroup = activeItem ? GROUPS.find(g => g.key === activeItem.groupKey) : null
+  const activeLabel = activeItem?.label || ''
+
+  const [summaryCounts, setSummaryCounts] = useState({})
+  useEffect(() => {
+    // Cheap one-shot so sub-tab counts render on the detail view without a
+    // separate fetch. Ignore failures — absence just hides the tiny numbers.
+    api.get('/catalogs/summary').then(r => setSummaryCounts(r.data?.counts || {})).catch(() => {})
+  }, [catalogKey])
 
   const PARTNER_KEYS = new Set(['referral-doctors', 'partner-facilities', 'commission-groups', 'commission-rules', 'customer-sources'])
-  const catalogEditPerm = PARTNER_KEYS.has(activeKey) ? 'partners.manage' : 'catalogs.manage'
+  const INVENTORY_KEYS = new Set(['supplies', 'supply-categories', 'suppliers', 'supply-service-mapping'])
+  const catalogEditPerm = PARTNER_KEYS.has(activeKey)
+    ? 'partners.manage'
+    : INVENTORY_KEYS.has(activeKey)
+      ? 'inventory.manage'
+      : 'catalogs.manage'
+
+  const goToGroup = (g) => nav(`/catalogs/${g.items[0].key}`)
+
+  const breadcrumb = isLanding
+    ? 'Tổng quan'
+    : <>{activeItem?.groupLabel} · <b className="text-gray-700">{activeLabel}</b></>
 
   const renderContent = () => {
-    if (activeKey === 'users') return <UsersTable canEdit={hasPerm('hr.manage')} />
+    if (activeKey === 'hr-employees')   return <EmployeeSection />
+    if (activeKey === 'hr-departments') return <DepartmentSection />
+    if (activeKey === 'hr-permissions') return <PermissionMatrix />
     if (activeKey === 'patients') return <PatientsTable />
     if (activeKey === 'promotions') return <PromotionsTable canEdit={hasPerm('catalogs.manage')} />
     if (activeKey === 'promo-codes') return <PromoCodesTable />
-    if (CATALOG_FIELDS[activeKey]) return <CatalogTable catalogKey={activeKey} canEdit={hasPerm(catalogEditPerm)} />
-    return <div className="text-gray-400 text-sm p-4">Chọn danh mục từ menu bên trái</div>
+    if (CATALOG_FIELDS[activeKey]) return <CatalogTable catalogKey={activeKey} catalogLabel={activeLabel} canEdit={hasPerm(catalogEditPerm)} />
+    return <div className="text-gray-400 text-sm p-4">Danh mục không tồn tại. <button onClick={() => nav('/catalogs')} className="text-blue-600 hover:underline">Về trang chủ →</button></div>
   }
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">{activeLabel}</h3>
-      {renderContent()}
+      <PageHeader breadcrumb={breadcrumb} userName={auth?.displayName || auth?.username} />
+      {isLanding ? (
+        <CatalogsLanding />
+      ) : (
+        <>
+          <GroupPills activeGroupKey={activeGroup?.key} onPick={goToGroup} />
+          {activeGroup && <SubcatalogTabs group={activeGroup} activeKey={activeKey} counts={summaryCounts} onPick={(k) => nav(`/catalogs/${k}`)} />}
+          {renderContent()}
+        </>
+      )}
     </div>
   )
 }

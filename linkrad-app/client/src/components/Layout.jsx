@@ -31,50 +31,14 @@ const NAV = [
   {
     group: 'Vận hành',
     items: [
-      { path: '/workflow',  label: 'Công việc',   icon: '✅', workflowOnly: true },
       { path: '/inventory', label: 'Quản lý kho', icon: '📦', workflowOnly: true },
     ]
   },
   {
     group: 'Danh mục',
-    subgroups: [
-      {
-        title: 'Đối tác',
-        items: [
-          { path: '/catalogs/referral-doctors',   label: 'Bác sĩ giới thiệu', icon: '👨‍⚕️', workflowOnly: true },
-          { path: '/catalogs/partner-facilities', label: 'CSYT đối tác',      icon: '🏥', workflowOnly: true },
-          { path: '/catalogs/commission-groups',  label: 'Nhóm hoa hồng',     icon: '📋', workflowOnly: true },
-          { path: '/catalogs/commission-rules',   label: 'Hoa hồng',          icon: '💰', workflowOnly: true },
-        ]
-      },
-      {
-        title: 'Dịch vụ & Chuyên khoa',
-        items: [
-          { path: '/catalogs/specialties',        label: 'Chuyên khoa',   icon: '🩺', workflowOnly: true },
-          { path: '/catalogs/services',           label: 'Dịch vụ',       icon: '📄', workflowOnly: true },
-          { path: '/catalogs/service-types',      label: 'Loại dịch vụ',  icon: '📂', workflowOnly: true },
-          { path: '/catalogs/tax-groups',         label: 'Nhóm thuế DV',  icon: '📊', workflowOnly: true },
-          { path: '/catalogs/medical-facilities', label: 'Cơ sở y tế',    icon: '🏨', workflowOnly: true },
-        ]
-      },
-      {
-        title: 'Khuyến mãi',
-        items: [
-          { path: '/catalogs/promotions', label: 'CT khuyến mãi', icon: '🎁', workflowOnly: true },
-          { path: '/catalogs/promo-codes', label: 'Mã khuyến mãi', icon: '🏷️', workflowOnly: true },
-        ]
-      },
-      {
-        title: 'Hồ sơ & Tham chiếu',
-        items: [
-          { path: '/catalogs/users',                  label: 'Nhân sự',            icon: '👤', workflowOnly: true },
-          { path: '/catalogs/patients',               label: 'Bệnh nhân',          icon: '🧑', workflowOnly: true },
-          { path: '/report-templates',                label: 'Mẫu kết quả',        icon: '📋', workflowOnly: true },
-          { path: '/catalogs/registration-reasons',   label: 'Lý do ĐK',           icon: '📝', workflowOnly: true },
-          { path: '/catalogs/billing-cancel-reasons', label: 'Lý do huỷ PT',       icon: '❌', workflowOnly: true },
-          { path: '/catalogs/admin-units',            label: 'Địa chỉ hành chính', icon: '📍', workflowOnly: true },
-        ]
-      }
+    items: [
+      { path: '/catalogs',         label: 'Danh mục',    icon: '📚', workflowOnly: true },
+      { path: '/report-templates', label: 'Mẫu kết quả', icon: '📋', workflowOnly: true },
     ]
   },
   {
@@ -110,10 +74,7 @@ const NAV = [
   {
     group: 'Quản lý',
     items: [
-      { path: '/hr/employees',   label: 'DS nhân viên',     icon: '👤', perm: 'hr.view' },
-      { path: '/hr/departments', label: 'Phòng ban / CN',   icon: '🏢', perm: 'hr.manage' },
-      { path: '/hr/permissions', label: 'Ma trận quyền',    icon: '🔐', perm: 'system.admin' },
-      { path: '/audit-log',      label: 'Nhật ký hệ thống', icon: '📜', perm: 'audit.view' },
+      { path: '/audit-log', label: 'Nhật ký hệ thống', icon: '📜', perm: 'audit.view' },
     ]
   },
   {
@@ -138,6 +99,7 @@ const NAV = [
   {
     group: 'Inactive',
     items: [
+      { path: '/workflow',        label: 'Công việc',          icon: '✅', workflowOnly: true },
       { path: '/telerad-reading', label: 'Ca đọc — Của tôi',   icon: '🔬', workflowOnly: true },
       { path: '/telerad-admin',   label: 'Ca đọc — Phân công', icon: '📋', adminOnly: true },
     ]
@@ -207,7 +169,6 @@ export default function Layout({ children }) {
         {/* Logo */}
         <div className="px-4 py-4 border-b border-blue-800">
           <div className="text-white font-bold text-lg tracking-wide">LinkRad</div>
-          <div className="text-blue-300 text-xs mt-1">Financial Model</div>
         </div>
 
         {/* Navigation */}

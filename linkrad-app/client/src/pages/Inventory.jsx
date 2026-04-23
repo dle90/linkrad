@@ -63,7 +63,7 @@ const Pill = ({ children, className = '' }) => (
 const TabBtn = ({ active, children, onClick, badge }) => (
   <button
     onClick={onClick}
-    className={`px-4 py-2 rounded-full text-sm font-medium transition ${active ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
+    className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${active ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
   >
     {children}
     {badge != null && badge > 0 && (
@@ -119,22 +119,20 @@ export default function Inventory() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <PageHeader
+        activeWh={activeWh}
+        auth={auth}
+        supervisor={supervisor}
+        warehouses={warehouses}
+        onSwitch={setActiveWhId}
+        activeWhId={activeWhId}
+      />
       <div className="max-w-[1600px] mx-auto p-6">
-        <Header
-          activeWh={activeWh}
-          auth={auth}
-          supervisor={supervisor}
-          warehouses={warehouses}
-          onSwitch={setActiveWhId}
-          activeWhId={activeWhId}
-        />
-
         <div className="flex items-center gap-2 mb-4 flex-wrap">
           <TabBtn active={tab === 'overview'} onClick={() => setTab('overview')}>Tổng quan</TabBtn>
           <TabBtn active={tab === 'stock'} onClick={() => setTab('stock')}>Tồn kho</TabBtn>
           <TabBtn active={tab === 'transactions'} onClick={() => setTab('transactions')}>Giao dịch</TabBtn>
           <TabBtn active={tab === 'stocktake'} onClick={() => setTab('stocktake')}>Kiểm kê</TabBtn>
-          <TabBtn active={tab === 'catalog'} onClick={() => setTab('catalog')}>Danh mục</TabBtn>
           {supervisor && <TabBtn active={tab === 'matrix'} onClick={() => setTab('matrix')}>Tổng hợp chuỗi</TabBtn>}
         </div>
 
@@ -142,29 +140,34 @@ export default function Inventory() {
         {tab === 'stock' && <StockTab whParam={whParam} supervisor={supervisor} activeWh={activeWh} />}
         {tab === 'transactions' && <TransactionsTab whParam={whParam} warehouses={warehouses} activeWh={activeWh} supervisor={supervisor} />}
         {tab === 'stocktake' && <StocktakeTab whParam={whParam} warehouses={warehouses} activeWh={activeWh} supervisor={supervisor} />}
-        {tab === 'catalog' && <CatalogTab />}
         {tab === 'matrix' && supervisor && <MatrixTab warehouses={warehouses} />}
       </div>
     </div>
   )
 }
 
-// ─── Header ────────────────────────────────────────────────────────────────
-function Header({ activeWh, auth, supervisor, warehouses, onSwitch, activeWhId }) {
-  // nv_kho: no switcher at all (scope is implicit). supervisor: "All (N) / warehouse..."
-  const title = activeWh ? `Kho — ${activeWh.name}` : (supervisor ? 'Tổng hợp chuỗi' : 'Kho')
-  const subtitle = `${new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })} · ${auth?.displayName || auth?.username || ''}`
+// ─── PageHeader ────────────────────────────────────────────────────────────
+// Matches the Đăng ký / Billing / Ca đọc header strip: title + breadcrumb +
+// context chip + user/date pills. The warehouse switcher (supervisor only)
+// sits in the right cluster next to those pills.
+function PageHeader({ activeWh, auth, supervisor, warehouses, onSwitch, activeWhId }) {
+  const date = new Date()
+  const dateStr = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+  const scopeLabel = activeWh ? activeWh.name : (supervisor ? `Tất cả kho (${warehouses.length})` : '')
+  const userName = auth?.displayName || auth?.username
   return (
-    <div className="mb-5 flex items-start justify-between gap-4 flex-wrap">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">{title}</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>
+    <div className="flex items-center gap-6 px-4 py-2 border-b bg-white">
+      <div className="flex items-baseline gap-2">
+        <div className="text-lg font-semibold text-gray-800">Quản lý kho</div>
+        <div className="text-xs text-gray-400 font-mono">/vận hành</div>
       </div>
-      {supervisor && (
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-500">Phạm vi</label>
+      <div className="flex-1 text-xs text-gray-500">
+        {scopeLabel && <span>Phạm vi: <b className="text-gray-700">{scopeLabel}</b></span>}
+      </div>
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        {supervisor && (
           <select
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="border border-gray-300 rounded-md px-2 py-1 text-xs bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             value={activeWhId || ''}
             onChange={e => onSwitch(e.target.value || null)}
           >
@@ -173,8 +176,10 @@ function Header({ activeWh, auth, supervisor, warehouses, onSwitch, activeWhId }
               <option key={w._id} value={w._id}>{w.name}</option>
             ))}
           </select>
-        </div>
-      )}
+        )}
+        {userName && <span className="px-2 py-1 bg-gray-100 rounded-md">👤 {userName}</span>}
+        <span className="px-2 py-1 bg-gray-100 rounded-md">{dateStr}</span>
+      </div>
     </div>
   )
 }
@@ -203,35 +208,17 @@ function OverviewTab({ whParam, activeWh, supervisor, onNavigate }) {
   if (loading) return <SkeletonBlock />
   if (!alerts) return null
 
-  const tiles = [
-    { key: 'expiring',  label: 'Sắp hết hạn',   n: alerts.expiringSoon.count30, sub: 'lô ≤ 30 ngày', cls: alerts.expiringSoon.count30 > 0 ? 'text-amber-700' : 'text-gray-300' },
-    { key: 'belowmin',  label: 'Dưới định mức', n: alerts.belowMinimum.count,    sub: 'vật tư',       cls: alerts.belowMinimum.count > 0 ? 'text-amber-700' : 'text-gray-300' },
-    { key: 'transfers', label: 'Cần nhận đến',  n: alerts.pendingTransfers.count, sub: 'lệnh chuyển', cls: alerts.pendingTransfers.count > 0 ? 'text-blue-700' : 'text-gray-300' },
-    { key: 'variance',  label: 'Sai khác định mức', n: alerts.autoDeductVariance.count, sub: 'ca hôm nay', cls: alerts.autoDeductVariance.count > 0 ? 'text-red-700' : 'text-gray-300' },
-  ]
+  const actionCount = alerts.pendingTransfers.count + alerts.autoDeductVariance.count
+  const expiringCount = alerts.expiringSoon.lots.length
+  const belowMinCount = alerts.belowMinimum.supplies.length
 
   return (
     <div className="space-y-4">
-      {/* 4 tiles */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {tiles.map(t => (
-          <Card key={t.key} className="p-4">
-            <div className="text-xs text-gray-500">{t.label}</div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <div className={`text-3xl font-medium ${t.cls}`}>{t.n}</div>
-              <div className="text-xs text-gray-500">{t.sub}</div>
-            </div>
-          </Card>
-        ))}
-      </div>
-
       {/* Cần xử lý */}
       <Card className="p-5">
         <div className="flex items-baseline justify-between mb-3">
           <div className="font-semibold text-gray-900">Cần xử lý</div>
-          <div className="text-xs text-gray-400">
-            {alerts.pendingTransfers.count + alerts.autoDeductVariance.count} mục đang chờ
-          </div>
+          {actionCount > 0 && <div className="text-xs text-gray-400">{actionCount} mục đang chờ</div>}
         </div>
         <div className="divide-y divide-gray-100">
           {alerts.pendingTransfers.transfers.map(t => (
@@ -252,7 +239,7 @@ function OverviewTab({ whParam, activeWh, supervisor, onNavigate }) {
               action="Xác nhận →"
             />
           ))}
-          {alerts.pendingTransfers.count === 0 && alerts.autoDeductVariance.count === 0 && (
+          {actionCount === 0 && (
             <div className="text-sm text-gray-400 py-6 text-center">Không có mục nào cần xử lý. ✨</div>
           )}
         </div>
@@ -263,9 +250,9 @@ function OverviewTab({ whParam, activeWh, supervisor, onNavigate }) {
         <Card className="p-5">
           <div className="flex items-baseline justify-between mb-3">
             <div className="font-semibold text-gray-900">Sắp hết hạn</div>
-            <div className="text-xs text-gray-400">FEFO priority</div>
+            {expiringCount > 0 && <div className="text-xs text-gray-400">{expiringCount} lô</div>}
           </div>
-          {alerts.expiringSoon.lots.length === 0 ? (
+          {expiringCount === 0 ? (
             <div className="text-sm text-gray-400 py-6 text-center">Không có lô sắp hết hạn trong 60 ngày tới.</div>
           ) : (
             <div className="space-y-3">
@@ -289,9 +276,9 @@ function OverviewTab({ whParam, activeWh, supervisor, onNavigate }) {
         <Card className="p-5">
           <div className="flex items-baseline justify-between mb-3">
             <div className="font-semibold text-gray-900">Dưới định mức</div>
-            <div className="text-xs text-gray-400">reorder threshold</div>
+            {belowMinCount > 0 && <div className="text-xs text-gray-400">{belowMinCount} vật tư</div>}
           </div>
-          {alerts.belowMinimum.supplies.length === 0 ? (
+          {belowMinCount === 0 ? (
             <div className="text-sm text-gray-400 py-6 text-center">Không có vật tư dưới định mức.</div>
           ) : (
             <div className="space-y-3">
@@ -348,10 +335,11 @@ function ActionRow({ dot, title, hint, time, action }) {
 
 const SkeletonBlock = () => (
   <div className="space-y-3 animate-pulse">
-    <div className="grid grid-cols-4 gap-3">
-      {[0, 1, 2, 3].map(i => <div key={i} className="h-24 bg-white rounded-xl border border-gray-200" />)}
-    </div>
     <div className="h-40 bg-white rounded-xl border border-gray-200" />
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="h-48 bg-white rounded-xl border border-gray-200" />
+      <div className="h-48 bg-white rounded-xl border border-gray-200" />
+    </div>
   </div>
 )
 
@@ -570,10 +558,10 @@ function TransactionsTab({ whParam, warehouses, activeWh, supervisor }) {
           <button
             onClick={() => setCreateMenuOpen(v => !v)}
             disabled={!activeWh}
-            className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title={!activeWh ? 'Chọn một kho để tạo phiếu' : ''}
           >
-            + Tạo giao dịch ▾
+            ＋ Tạo giao dịch ▾
           </button>
           {createMenuOpen && (
             <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 min-w-[180px]">
@@ -704,8 +692,8 @@ function TransactionDetailDrawer({ id, onClose, onChanged }) {
 
             {tx.status === 'draft' && (
               <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
-                <button onClick={cancel} disabled={busy} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy phiếu</button>
-                <button onClick={confirm} disabled={busy} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Xác nhận</button>
+                <button onClick={cancel} disabled={busy} className="px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Hủy phiếu</button>
+                <button onClick={confirm} disabled={busy} className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Xác nhận</button>
               </div>
             )}
           </div>
@@ -891,8 +879,8 @@ function CreateTransactionModal({ kind, warehouse, warehouses, onClose, onSaved 
         </div>
 
         <div className="px-6 py-3 border-t border-gray-100 flex justify-end gap-2 sticky bottom-0 bg-white">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy</button>
-          <button onClick={save} disabled={!canSave || saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
+          <button onClick={onClose} className="px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Hủy</button>
+          <button onClick={save} disabled={!canSave || saving} className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             {saving ? 'Đang lưu...' : 'Lưu phiếu'}
           </button>
         </div>
@@ -927,8 +915,8 @@ function StocktakeTab({ whParam, warehouses, activeWh }) {
         <button
           onClick={() => setNewOpen(true)}
           disabled={!activeWh}
-          className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-40"
-        >+ Bắt đầu kiểm kê mới</button>
+          className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-40"
+        >＋ Bắt đầu kiểm kê mới</button>
       </div>
 
       <Card>
@@ -1008,8 +996,8 @@ function StocktakeNewModal({ warehouse, onClose, onCreated }) {
           <div className="text-xs text-gray-500">Kho: <span className="font-medium text-gray-900">{warehouse?.name}</span></div>
         </div>
         <div className="flex justify-end gap-2 mt-5">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy</button>
-          <button onClick={start} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Bắt đầu</button>
+          <button onClick={onClose} className="px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Hủy</button>
+          <button onClick={start} disabled={saving} className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Bắt đầu</button>
         </div>
       </div>
     </div>
@@ -1086,12 +1074,12 @@ function StocktakeSession({ id, onClose }) {
         <div className="flex gap-2">
           {session.status === 'open' && (
             <>
-              <button onClick={() => save(false)} disabled={busy} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">Lưu nháp</button>
-              <button onClick={() => save(true)} disabled={busy} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Nộp ({session.items.length - counted} còn lại)</button>
+              <button onClick={() => save(false)} disabled={busy} className="px-3 py-1.5 text-xs font-semibold text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Lưu nháp</button>
+              <button onClick={() => save(true)} disabled={busy} className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Nộp ({session.items.length - counted} còn lại)</button>
             </>
           )}
           {session.status === 'submitted' && (
-            <button onClick={approve} disabled={busy} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Duyệt & áp dụng</button>
+            <button onClick={approve} disabled={busy} className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Duyệt & áp dụng</button>
           )}
         </div>
       </div>
@@ -1167,44 +1155,6 @@ function StocktakeSession({ id, onClose }) {
 // ═══════════════════════════════════════════════════════════════════════════
 //  5. DANH MỤC  (admin-editable, read-only for nv_kho)
 // ═══════════════════════════════════════════════════════════════════════════
-function CatalogTab() {
-  const { hasPerm } = useAuth()
-  const canEdit = hasPerm ? hasPerm('inventory.manage') : true
-  const [sub, setSub] = useState('supplies')
-  return (
-    <div className="space-y-3">
-      <Card className="p-2 flex gap-1 flex-wrap">
-        {[['supplies', 'Vật tư'], ['categories', 'Nhóm VT'], ['suppliers', 'Nhà cung cấp'], ['mapping', 'Định mức dịch vụ']].map(([k, label]) => (
-          <button key={k} onClick={() => setSub(k)} className={`px-3 py-1.5 rounded-full text-sm ${sub === k ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{label}</button>
-        ))}
-      </Card>
-      {sub === 'supplies' && <CatalogList endpoint="supplies" cols={[['code', 'Mã'], ['name', 'Tên'], ['unit', 'Đơn vị'], ['minimumStock', 'Định mức']]} canEdit={canEdit} />}
-      {sub === 'categories' && <CatalogList endpoint="categories" cols={[['code', 'Mã'], ['name', 'Tên']]} canEdit={canEdit} />}
-      {sub === 'suppliers' && <CatalogList endpoint="suppliers" cols={[['code', 'Mã'], ['name', 'Tên'], ['phone', 'SĐT'], ['taxCode', 'MST']]} canEdit={canEdit} />}
-      {sub === 'mapping' && <CatalogList endpoint="his-mapping" cols={[['serviceName', 'Dịch vụ'], ['supplyName', 'Vật tư'], ['quantity', 'SL']]} canEdit={canEdit} />}
-    </div>
-  )
-}
-function CatalogList({ endpoint, cols, canEdit }) {
-  const [rows, setRows] = useState([])
-  useEffect(() => { api.get(`/inventory/${endpoint}`).then(({ data }) => setRows(data || [])) }, [endpoint])
-  return (
-    <Card>
-      <div className="grid gap-2 px-4 py-3 text-xs text-gray-500 border-b border-gray-100" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
-        {cols.map(c => <div key={c[0]}>{c[1]}</div>)}
-      </div>
-      {rows.length === 0 ? (
-        <div className="p-6 text-center text-gray-400 text-sm">Không có dữ liệu.</div>
-      ) : rows.map(r => (
-        <div key={r._id} className="grid gap-2 px-4 py-2 text-sm border-b border-gray-50" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
-          {cols.map(c => <div key={c[0]} className="text-gray-900 truncate">{r[c[0]] ?? '—'}</div>)}
-        </div>
-      ))}
-      {!canEdit && <div className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">Chỉ xem. Chỉnh sửa ở Danh mục → Quản trị.</div>}
-    </Card>
-  )
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 //  6. TỔNG HỢP CHUỖI  (supervisor only)
 // ═══════════════════════════════════════════════════════════════════════════

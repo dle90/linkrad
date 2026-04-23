@@ -14,9 +14,6 @@ const Specialty = require('../models/Specialty')
 const ServiceType = require('../models/ServiceType')
 const TaxGroup = require('../models/TaxGroup')
 const Service = require('../models/Service')
-const MedicalFacility = require('../models/MedicalFacility')
-const RegistrationReason = require('../models/RegistrationReason')
-const BillingCancelReason = require('../models/BillingCancelReason')
 const ReferralDoctor = require('../models/ReferralDoctor')
 const PartnerFacility = require('../models/PartnerFacility')
 const CommissionGroup = require('../models/CommissionGroup')
@@ -28,9 +25,6 @@ const TARGETS = [
   [TaxGroup,             'Nhóm thuế dịch vụ'],
   [ServiceType,          'Loại dịch vụ'],
   [Service,              'Dịch vụ'],
-  [MedicalFacility,      'Cơ sở y tế'],
-  [RegistrationReason,   'Lý do đăng ký'],
-  [BillingCancelReason,  'Lý do huỷ phiếu thu'],
   [ReferralDoctor,       'Bác sĩ giới thiệu'],
   [PartnerFacility,      'Cơ sở y tế đối tác'],
   [CommissionGroup,      'Nhóm hoa hồng'],

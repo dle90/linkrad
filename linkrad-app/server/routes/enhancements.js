@@ -101,13 +101,16 @@ router.get('/audit-log', requireAuth, requirePermission('audit.view'), async (re
     const filter = {}
     if (req.query.username) filter.username = req.query.username
     if (req.query.resource) filter.resource = req.query.resource
+    if (req.query.resourceId) filter.resourceId = req.query.resourceId
     if (req.query.method) filter.method = req.query.method
+    if (req.query.path) filter.path = { $regex: req.query.path }
     if (req.query.dateFrom || req.query.dateTo) {
       filter.ts = {}
       if (req.query.dateFrom) filter.ts.$gte = req.query.dateFrom
       if (req.query.dateTo) filter.ts.$lte = req.query.dateTo + 'T23:59:59.999Z'
     }
-    const logs = await AuditLog.find(filter).sort({ ts: -1 }).limit(500).lean()
+    const limit = Math.min(+(req.query.limit || 500), 1000)
+    const logs = await AuditLog.find(filter).sort({ ts: -1 }).limit(limit).lean()
     res.json(logs)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })

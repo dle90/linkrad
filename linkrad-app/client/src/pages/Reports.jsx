@@ -115,7 +115,7 @@ function RevenueDetailReport() {
   )
 
   useEffect(() => {
-    api.get('/catalogs/medical-facilities').then(r => setBranches(r.data)).catch(() => {})
+    api.get('/hr/departments?type=branch').then(r => setBranches(r.data)).catch(() => {})
   }, [])
 
   const load = useCallback(async () => {
@@ -881,7 +881,7 @@ function ReferralRevenueReport() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => { api.get('/catalogs/medical-facilities').then(r => setBranches(r.data)).catch(() => {}) }, [])
+  useEffect(() => { api.get('/hr/departments?type=branch').then(r => setBranches(r.data)).catch(() => {}) }, [])
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -974,7 +974,7 @@ function SalespersonKpiReport() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => { api.get('/catalogs/medical-facilities').then(r => setBranches(r.data)).catch(() => {}) }, [])
+  useEffect(() => { api.get('/hr/departments?type=branch').then(r => setBranches(r.data)).catch(() => {}) }, [])
   const load = useCallback(async () => {
     setLoading(true)
     try {

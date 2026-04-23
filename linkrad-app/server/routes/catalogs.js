@@ -10,14 +10,17 @@ const ReferralDoctor = require('../models/ReferralDoctor')
 const PartnerFacility = require('../models/PartnerFacility')
 const CommissionGroup = require('../models/CommissionGroup')
 const CommissionRule = require('../models/CommissionRule')
-const RegistrationReason = require('../models/RegistrationReason')
-const BillingCancelReason = require('../models/BillingCancelReason')
-const MedicalFacility = require('../models/MedicalFacility')
 const TaxGroup = require('../models/TaxGroup')
-const AdminUnit = require('../models/AdminUnit')
 const User = require('../models/User')
 const Patient = require('../models/Patient')
 const CustomerSource = require('../models/CustomerSource')
+const Supply = require('../models/Supply')
+const SupplyCategory = require('../models/SupplyCategory')
+const Supplier = require('../models/Supplier')
+const SupplyServiceMapping = require('../models/SupplyServiceMapping')
+const Promotion = require('../models/Promotion')
+const PromoCode = require('../models/PromoCode')
+const AuditLog = require('../models/AuditLog')
 
 const now = () => new Date().toISOString()
 
@@ -85,11 +88,7 @@ catalogCRUD(ReferralDoctor, 'referral-doctors', 'name', 'partners.manage')
 catalogCRUD(PartnerFacility, 'partner-facilities', 'name', 'partners.manage')
 catalogCRUD(CommissionGroup, 'commission-groups', 'name', 'partners.manage')
 catalogCRUD(CommissionRule, 'commission-rules', 'name', 'partners.manage')
-catalogCRUD(RegistrationReason, 'registration-reasons')
-catalogCRUD(BillingCancelReason, 'billing-cancel-reasons')
-catalogCRUD(MedicalFacility, 'medical-facilities')
 catalogCRUD(TaxGroup, 'tax-groups')
-catalogCRUD(AdminUnit, 'admin-units')
 
 // customer-sources: seed 3 defaults on first GET so the Registration dropdown is never empty
 const DEFAULT_CUSTOMER_SOURCES = [
@@ -111,6 +110,112 @@ router.get('/customer-sources', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 catalogCRUD(CustomerSource, 'customer-sources')
+
+// ── Danh mục summary (landing page tiles + recent edits) ─
+// Returns per-catalog item counts + the last 10 catalog-write audit entries,
+// so the landing page can render 4 group tiles + a recent-edits feed without
+// 20 parallel fetches. Counts are cheap (single indexed collection).
+const SUMMARY_CATALOGS = [
+  { key: 'customer-sources',       model: CustomerSource },
+  { key: 'referral-doctors',       model: ReferralDoctor },
+  { key: 'partner-facilities',     model: PartnerFacility },
+  { key: 'commission-groups',      model: CommissionGroup },
+  { key: 'commission-rules',       model: CommissionRule },
+  { key: 'specialties',            model: Specialty },
+  { key: 'services',               model: Service },
+  { key: 'service-types',          model: ServiceType },
+  { key: 'tax-groups',             model: TaxGroup },
+  { key: 'promotions',             model: Promotion },
+  { key: 'promo-codes',            model: PromoCode },
+  { key: 'users',                  model: User },
+  { key: 'patients',               model: Patient },
+  { key: 'supplies',               model: Supply },
+  { key: 'supply-categories',      model: SupplyCategory },
+  { key: 'suppliers',              model: Supplier },
+  { key: 'supply-service-mapping', model: SupplyServiceMapping },
+]
+router.get('/summary', requireAuth, async (req, res) => {
+  try {
+    const counts = Object.fromEntries(await Promise.all(SUMMARY_CATALOGS.map(async ({ key, model }) => {
+      const c = await model.countDocuments({}).catch(() => 0)
+      return [key, c]
+    })))
+    // Recent write activity on catalogs/promotions (both back Danh mục surface)
+    const recentEdits = await AuditLog.find({
+      resource: { $in: ['catalogs', 'promotions'] },
+      method: { $in: ['POST', 'PUT', 'DELETE'] },
+      status: { $gte: 200, $lt: 300 },
+    }).sort({ ts: -1 }).limit(10).lean()
+    res.json({ counts, recentEdits })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Inventory catalogs ───────────────────────────────────
+// Supplies / categories / suppliers: generic CRUD, gated by inventory.manage.
+// The /api/inventory/* endpoints still exist for the Kho workspace's internal
+// reads (e.g. category filter dropdown) — both read from the same collections.
+catalogCRUD(Supply, 'supplies', 'name', 'inventory.manage')
+catalogCRUD(SupplyCategory, 'supply-categories', 'name', 'inventory.manage')
+catalogCRUD(Supplier, 'suppliers', 'name', 'inventory.manage')
+
+// ── Supply-Service mapping (Định mức dịch vụ) ────────────
+// Custom GET so we can backfill an empty serviceName by joining Service on
+// serviceId/serviceCode — seed data leaves the display name blank.
+const manageInventory = requirePermission('inventory.manage')
+router.get('/supply-service-mapping', requireAuth, async (req, res) => {
+  try {
+    const filter = {}
+    if (req.query.q) filter.$or = [
+      { serviceName: { $regex: req.query.q, $options: 'i' } },
+      { serviceCode: { $regex: req.query.q, $options: 'i' } },
+      { supplyName:  { $regex: req.query.q, $options: 'i' } },
+      { supplyCode:  { $regex: req.query.q, $options: 'i' } },
+    ]
+    const mappings = await SupplyServiceMapping.find(filter).sort({ serviceName: 1, supplyName: 1 }).lean()
+
+    // Collect the Service references we need to resolve
+    const needIds   = [...new Set(mappings.filter(m => !m.serviceName && m.serviceId  ).map(m => m.serviceId))]
+    const needCodes = [...new Set(mappings.filter(m => !m.serviceName && !m.serviceId && m.serviceCode).map(m => m.serviceCode))]
+    const byId = new Map()
+    const byCode = new Map()
+    if (needIds.length)   (await Service.find({ _id:  { $in: needIds   } }).lean()).forEach(s => byId.set(s._id, s))
+    if (needCodes.length) (await Service.find({ code: { $in: needCodes } }).lean()).forEach(s => byCode.set(s.code, s))
+
+    const hydrated = mappings.map(m => {
+      if (m.serviceName) return m
+      const s = (m.serviceId && byId.get(m.serviceId)) || (m.serviceCode && byCode.get(m.serviceCode))
+      if (!s) return m
+      return { ...m, serviceName: s.name, serviceId: m.serviceId || s._id, serviceCode: m.serviceCode || s.code }
+    })
+    res.json(hydrated)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+router.post('/supply-service-mapping', manageInventory, async (req, res) => {
+  try {
+    const data = { ...req.body, _id: `SUPPLY-SERVICE-MAPPING-${Date.now()}`, createdAt: now(), updatedAt: now() }
+    const item = new SupplyServiceMapping(data)
+    await item.save()
+    res.status(201).json(item)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+router.put('/supply-service-mapping/:id', manageInventory, async (req, res) => {
+  try {
+    const update = { ...req.body, updatedAt: now() }
+    delete update._id
+    const item = await SupplyServiceMapping.findByIdAndUpdate(req.params.id, update, { new: true }).lean()
+    if (!item) return res.status(404).json({ error: 'Không tìm thấy' })
+    res.json(item)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+router.delete('/supply-service-mapping/:id', manageInventory, async (req, res) => {
+  try {
+    await SupplyServiceMapping.findByIdAndDelete(req.params.id)
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
 
 // ── Public services endpoint (for booking form) ──────────
 router.get('/services/public', async (req, res) => {
@@ -172,22 +277,6 @@ router.get('/patients', requireAuth, async (req, res) => {
     ]
     const patients = await Patient.find(filter).sort({ createdAt: -1 }).limit(+(req.query.limit || 100)).lean()
     res.json(patients)
-  } catch (err) { res.status(500).json({ error: err.message }) }
-})
-
-// ── Bulk import admin units ──────────────────────────────
-router.post('/admin-units/bulk', requireAdmin, async (req, res) => {
-  try {
-    const { items } = req.body
-    if (!items || !Array.isArray(items)) return res.status(400).json({ error: 'Thiếu danh sách' })
-    let count = 0
-    for (const item of items) {
-      await AdminUnit.findByIdAndUpdate(item._id || `AU-${Date.now()}-${count}`, {
-        ...item, _id: item._id || `AU-${Date.now()}-${count}`, status: 'active',
-      }, { upsert: true })
-      count++
-    }
-    res.json({ imported: count })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 

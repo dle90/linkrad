@@ -1,0 +1,1285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkRad — Danh mục design sketches</title>
+  <style>
+    :root {
+      --color-background-page: #fafaf9;
+      --color-background-primary: #ffffff;
+      --color-background-secondary: #f5f5f4;
+      --color-background-warning: #fef3c7;
+      --color-background-danger: #fee2e2;
+      --color-background-info: #dbeafe;
+
+      --color-text-primary: #171717;
+      --color-text-secondary: #525252;
+      --color-text-tertiary: #a3a3a3;
+      --color-text-warning: #b45309;
+      --color-text-danger: #b91c1c;
+      --color-text-info: #1d4ed8;
+
+      --color-border-primary: #e5e5e5;
+      --color-border-tertiary: #e5e5e5;
+      --color-border-warning: #fbbf24;
+      --color-border-danger: #f87171;
+
+      --c-blue-fill: #E6F1FB;
+      --c-blue-stroke: #85B7EB;
+      --c-teal-fill: #E1F5EE;
+      --c-teal-stroke: #5DCAA5;
+      --c-gray-fill: #F1EFE8;
+      --c-gray-stroke: #B4B2A9;
+      --c-amber-fill: #FAEEDA;
+      --c-amber-stroke: #EF9F27;
+      --c-purple-fill: #EEEDFE;
+      --c-purple-stroke: #AFA9EC;
+      --c-red-fill: #FCEBEB;
+      --c-red-stroke: #F09595;
+      --c-pink-fill: #FBEAF0;
+      --c-pink-stroke: #ED93B1;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--color-background-page);
+      color: var(--color-text-primary);
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 72px 32px 120px;
+    }
+
+    .doc-header {
+      margin-bottom: 48px;
+      padding-bottom: 32px;
+      border-bottom: 0.5px solid var(--color-border-primary);
+    }
+
+    .doc-header .eyebrow {
+      font-size: 12px;
+      color: var(--color-text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+    }
+
+    .doc-header h1 {
+      font-size: 32px;
+      font-weight: 500;
+      line-height: 1.25;
+      margin: 0 0 12px 0;
+      letter-spacing: -0.01em;
+    }
+
+    .doc-header .sub {
+      color: var(--color-text-secondary);
+      font-size: 16px;
+      margin: 0;
+    }
+
+    section {
+      margin-bottom: 64px;
+    }
+
+    section h2 {
+      font-size: 22px;
+      font-weight: 500;
+      line-height: 1.3;
+      margin: 0 0 20px 0;
+      letter-spacing: -0.005em;
+    }
+
+    section h3 {
+      font-size: 16px;
+      font-weight: 500;
+      margin: 32px 0 12px 0;
+    }
+
+    p {
+      margin: 0 0 16px 0;
+      color: var(--color-text-primary);
+    }
+
+    strong {
+      font-weight: 500;
+      color: var(--color-text-primary);
+    }
+
+    em {
+      font-style: italic;
+    }
+
+    a {
+      color: var(--color-text-info);
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.88em;
+      background: var(--color-background-secondary);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .framing {
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-primary);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 48px;
+    }
+
+    .framing p:last-child { margin-bottom: 0; }
+
+    .mockup {
+      margin: 32px 0 16px 0;
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-primary);
+      border-radius: 12px;
+      padding: 24px;
+      overflow: hidden;
+    }
+
+    .mockup svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-width: 100%;
+    }
+
+    .mockup .caption {
+      font-size: 12px;
+      color: var(--color-text-tertiary);
+      margin-top: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    svg text {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      fill: var(--color-text-primary);
+    }
+
+    svg .t { font-size: 14px; }
+    svg .ts { font-size: 12px; }
+    svg .th { font-size: 14px; font-weight: 500; }
+
+    svg .box {
+      fill: var(--color-background-primary);
+      stroke: var(--color-border-primary);
+    }
+
+    svg .c-blue   rect { fill: var(--c-blue-fill);   stroke: var(--c-blue-stroke); }
+    svg .c-teal   rect { fill: var(--c-teal-fill);   stroke: var(--c-teal-stroke); }
+    svg .c-gray   rect { fill: var(--c-gray-fill);   stroke: var(--c-gray-stroke); }
+    svg .c-amber  rect { fill: var(--c-amber-fill);  stroke: var(--c-amber-stroke); }
+    svg .c-purple rect { fill: var(--c-purple-fill); stroke: var(--c-purple-stroke); }
+    svg .c-red    rect { fill: var(--c-red-fill);    stroke: var(--c-red-stroke); }
+    svg .c-pink   rect { fill: var(--c-pink-fill);   stroke: var(--c-pink-stroke); }
+
+    svg .node rect {
+      fill: var(--color-background-primary);
+      stroke: var(--color-border-primary);
+    }
+
+    .doc-footer {
+      margin-top: 96px;
+      padding-top: 32px;
+      border-top: 0.5px solid var(--color-border-primary);
+      color: var(--color-text-tertiary);
+      font-size: 13px;
+    }
+
+    @media (max-width: 640px) {
+      .wrap { padding: 48px 20px 80px; }
+      .doc-header h1 { font-size: 26px; }
+      section h2 { font-size: 20px; }
+      .mockup { padding: 16px 12px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc-header">
+    <div class="eyebrow">Design exploration · LinkRad</div>
+    <h1>Danh mục — master data catalogs</h1>
+    <p class="sub">Information architecture, landing, default detail shape, CSV import, consume-point drawer, bulk selection, and the Nhân sự master-detail variant. Working sketches; translate freely into Tailwind.</p>
+  </header>
+
+  <div class="framing">
+    <p><strong>Before sketching: three reframes on the brief.</strong></p>
+    <p><strong>Reframe 1 — a flat sidebar of 20 catalogs is the actual IA problem.</strong> The brief fixes this on the landing with group tiles but leaves the sidebar alone everywhere else. I'd drop the sidebar entirely and replace it with two nav layers under the PageHeader: four group pills (always visible, color-tagged) + a strip of within-group tabs for the catalogs of the current group. An admin editing <em>dịch vụ</em> is mentally inside "Dịch vụ & Chuyên khoa" and probably wants to jump to <em>loại dịch vụ</em> or <em>nhóm thuế</em> next — not to <em>cơ sở đối tác</em>. The flat sidebar makes any-to-any jumps equally cheap, which is exactly the wrong optimization for a group-bound task.</p>
+    <p><strong>Reframe 2 — "Lần sửa gần đây" and "Điểm sử dụng" are temporal halves of the same trust question.</strong> The brief treats them as separate features. But both serve admin confidence: <em>what just changed?</em> and <em>what would break if I change this?</em> I'd thread both onto every row (last-edited cell + usage-count cell) and merge them in one drawer with three tabs: <strong>Thông tin</strong> (edit), <strong>Lịch sử</strong> (row's own audit mini-trail with link out to full log), <strong>Điểm sử dụng</strong>. One drawer, three lenses on the same row. That also means mockups 2 and 4 are the same drawer seen in two tab-states.</p>
+    <p><strong>Reframe 3 — "Điểm sử dụng" has two levels of consequence.</strong> "Used in 42 historical invoices" is safe-to-deprecate (mark inactive, historical records keep their snapshot). "Only tax group referenced by 15 active services" is a hard block — must reassign first. The drawer needs a verdict, not just raw counts: <em>"Có thể ngưng hoạt động an toàn"</em> vs. <em>"Cần gán lại 15 dịch vụ trước khi ngưng."</em> Counts alone don't tell the admin whether they're safe.</p>
+  </div>
+
+  <section>
+    <h2>1. Landing</h2>
+    <p>The tiles are the replacement for the sidebar, not a companion to it. Each tile is group-first with its sub-catalogs as individually clickable rows — the count on the right is half count, half deep-link affordance. The "Cập nhật gần nhất" line does double duty: it tells you who to ask if something looks wrong, and it's a click target into that catalog's audit view. Below the tiles, the recent-edits feed is a chain-wide view that crosses groups — this is where an admin who got a "hey, who disabled the gel supplier?" Slack ping starts their day.</p>
+
+    <div class="mockup">
+      <svg width="100%" viewBox="0 0 680 720" role="img">
+        <title>Danh mục — trang chủ</title>
+        <desc>Landing view for master data catalogs. PageHeader strip, three quick-action pills, four group tiles in a 2x2 grid with sub-catalog counts, and a recent-edits feed below.</desc>
+
+        <text x="40" y="38" font-size="18" font-weight="500" fill="var(--color-text-primary)">Danh mục</text>
+        <text class="ts" x="40" y="56" fill="var(--color-text-secondary)">LinkRad · Quản trị · 23/04/2026</text>
+
+        <g class="c-gray">
+          <rect x="492" y="28" width="64" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="524" y="40" text-anchor="middle" dominant-baseline="central">23/04</text>
+        </g>
+        <g class="c-gray">
+          <rect x="564" y="28" width="76" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="602" y="40" text-anchor="middle" dominant-baseline="central">Minh ▾</text>
+        </g>
+
+        <rect x="40" y="88" width="248" height="32" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="52" y="108" fill="var(--color-text-tertiary)">Tìm kiếm toàn bộ danh mục...</text>
+        <text class="ts" x="276" y="108" fill="var(--color-text-tertiary)">/</text>
+
+        <g class="c-gray">
+          <rect x="300" y="88" width="104" height="32" rx="6" stroke-width="0.5"/>
+          <text class="ts" x="352" y="108" text-anchor="middle" dominant-baseline="central">Nhập CSV</text>
+        </g>
+        <g class="c-gray">
+          <rect x="416" y="88" width="132" height="32" rx="6" stroke-width="0.5"/>
+          <text class="ts" x="482" y="108" text-anchor="middle" dominant-baseline="central">Xem điểm sử dụng</text>
+        </g>
+        <text class="ts" x="640" y="108" text-anchor="end" dominant-baseline="central" fill="var(--color-text-info)">Nhật ký kiểm toán →</text>
+
+        <rect x="40" y="140" width="294" height="204" rx="12" class="box" stroke-width="0.5"/>
+        <circle cx="54" cy="162" r="4" fill="#378ADD"/>
+        <text class="th" x="66" y="166">Đối tác</text>
+        <text class="ts" x="318" y="166" text-anchor="end" fill="var(--color-text-secondary)">357 mục</text>
+        <line x1="56" y1="178" x2="318" y2="178" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="56" y="196">Bác sĩ giới thiệu</text>
+        <text class="ts" x="318" y="196" text-anchor="end">214</text>
+        <text class="ts" x="56" y="214">Cơ sở đối tác</text>
+        <text class="ts" x="318" y="214" text-anchor="end">18</text>
+        <text class="ts" x="56" y="232">Nhóm hoa hồng</text>
+        <text class="ts" x="318" y="232" text-anchor="end">8</text>
+        <text class="ts" x="56" y="250">Quy tắc hoa hồng</text>
+        <text class="ts" x="318" y="250" text-anchor="end">42</text>
+        <text class="ts" x="56" y="268">Cơ sở y tế</text>
+        <text class="ts" x="318" y="268" text-anchor="end">12</text>
+        <text class="ts" x="56" y="286">Đơn vị hành chính</text>
+        <text class="ts" x="318" y="286" text-anchor="end">63</text>
+
+        <line x1="56" y1="306" x2="318" y2="306" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+        <text class="ts" x="56" y="326" fill="var(--color-text-tertiary)">Cập nhật: Minh · 2 giờ trước</text>
+
+        <rect x="346" y="140" width="294" height="204" rx="12" class="box" stroke-width="0.5"/>
+        <circle cx="360" cy="162" r="4" fill="#1D9E75"/>
+        <text class="th" x="372" y="166">Dịch vụ & Chuyên khoa</text>
+        <text class="ts" x="624" y="166" text-anchor="end" fill="var(--color-text-secondary)">437 mục</text>
+        <line x1="362" y1="178" x2="624" y2="178" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="362" y="196">Dịch vụ</text>
+        <text class="ts" x="624" y="196" text-anchor="end">380</text>
+        <text class="ts" x="362" y="214">Loại dịch vụ</text>
+        <text class="ts" x="624" y="214" text-anchor="end">9</text>
+        <text class="ts" x="362" y="232">Nhóm thuế</text>
+        <text class="ts" x="624" y="232" text-anchor="end">4</text>
+        <text class="ts" x="362" y="250">Chuyên khoa</text>
+        <text class="ts" x="624" y="250" text-anchor="end">14</text>
+        <text class="ts" x="362" y="268">Khuyến mãi</text>
+        <text class="ts" x="624" y="268" text-anchor="end">7</text>
+        <text class="ts" x="362" y="286">Mã khuyến mãi</text>
+        <text class="ts" x="624" y="286" text-anchor="end">23</text>
+
+        <line x1="362" y1="306" x2="624" y2="306" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+        <text class="ts" x="362" y="326" fill="var(--color-text-tertiary)">Cập nhật: Hương · 26 phút trước</text>
+
+        <rect x="40" y="356" width="294" height="204" rx="12" class="box" stroke-width="0.5"/>
+        <circle cx="54" cy="378" r="4" fill="#7F77DD"/>
+        <text class="th" x="66" y="382">Hồ sơ & Tham chiếu</text>
+        <text class="ts" x="318" y="382" text-anchor="end" fill="var(--color-text-secondary)">12.901 mục</text>
+        <line x1="56" y1="394" x2="318" y2="394" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="56" y="414">Lý do đăng ký</text>
+        <text class="ts" x="318" y="414" text-anchor="end">12</text>
+        <text class="ts" x="56" y="434">Lý do hủy phiếu thu</text>
+        <text class="ts" x="318" y="434" text-anchor="end">8</text>
+        <text class="ts" x="56" y="454">Nhân sự</text>
+        <text class="ts" x="318" y="454" text-anchor="end">34</text>
+        <text class="ts" x="56" y="474">Bệnh nhân</text>
+        <text class="ts" x="318" y="474" text-anchor="end">12.847</text>
+
+        <line x1="56" y1="522" x2="318" y2="522" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+        <text class="ts" x="56" y="542" fill="var(--color-text-tertiary)">Cập nhật: An · hôm qua</text>
+
+        <rect x="346" y="356" width="294" height="204" rx="12" class="box" stroke-width="0.5"/>
+        <circle cx="360" cy="378" r="4" fill="#EF9F27"/>
+        <text class="th" x="372" y="382">Kho</text>
+        <text class="ts" x="624" y="382" text-anchor="end" fill="var(--color-text-secondary)">640 mục</text>
+        <line x1="362" y1="394" x2="624" y2="394" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="362" y="414">Vật tư</text>
+        <text class="ts" x="624" y="414" text-anchor="end">186</text>
+        <text class="ts" x="362" y="434">Nhóm vật tư</text>
+        <text class="ts" x="624" y="434" text-anchor="end">14</text>
+        <text class="ts" x="362" y="454">Nhà cung cấp</text>
+        <text class="ts" x="624" y="454" text-anchor="end">28</text>
+        <text class="ts" x="362" y="474">Liên kết vật tư – dịch vụ</text>
+        <text class="ts" x="624" y="474" text-anchor="end">412</text>
+
+        <line x1="362" y1="522" x2="624" y2="522" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+        <text class="ts" x="362" y="542" fill="var(--color-text-tertiary)">Cập nhật: Linh · 3 giờ trước</text>
+
+        <text class="th" x="40" y="598">Lần sửa gần đây</text>
+        <g class="c-gray">
+          <rect x="168" y="582" width="140" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="238" y="594" text-anchor="middle" dominant-baseline="central">Tất cả danh mục ▾</text>
+        </g>
+        <g class="c-gray">
+          <rect x="316" y="582" width="108" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="370" y="594" text-anchor="middle" dominant-baseline="central">Tất cả người ▾</text>
+        </g>
+        <text class="ts" x="640" y="598" text-anchor="end" fill="var(--color-text-info)">Xem nhật ký đầy đủ →</text>
+
+        <line x1="40" y1="614" x2="640" y2="614" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <circle cx="52" cy="634" r="9" fill="var(--c-blue-fill)" stroke="var(--c-blue-stroke)" stroke-width="0.5"/>
+        <text class="ts" x="52" y="637" text-anchor="middle" fill="#0C447C">M</text>
+        <text class="ts" x="70" y="632">Minh · sửa dịch vụ "CT bụng có thuốc cản quang"</text>
+        <text class="ts" x="70" y="646" fill="var(--color-text-tertiary)">đơn giá: 1.800.000 → 1.950.000</text>
+        <text class="ts" x="640" y="632" text-anchor="end" fill="var(--color-text-tertiary)">2 giờ trước</text>
+
+        <circle cx="52" cy="666" r="9" fill="var(--c-teal-fill)" stroke="var(--c-teal-stroke)" stroke-width="0.5"/>
+        <text class="ts" x="52" y="669" text-anchor="middle" fill="#085041">H</text>
+        <text class="ts" x="70" y="664">Hương · thêm bác sĩ giới thiệu "BS. Trần Thu Hà"</text>
+        <text class="ts" x="70" y="678" fill="var(--color-text-tertiary)">Phòng khám Tâm An · hoa hồng 10%</text>
+        <text class="ts" x="640" y="664" text-anchor="end" fill="var(--color-text-tertiary)">26 phút trước</text>
+
+        <circle cx="52" cy="698" r="9" fill="var(--c-amber-fill)" stroke="var(--c-amber-stroke)" stroke-width="0.5"/>
+        <text class="ts" x="52" y="701" text-anchor="middle" fill="#633806">L</text>
+        <text class="ts" x="70" y="696">Linh · nhập CSV 42 vật tư vào "Vật tư"</text>
+        <text class="ts" x="70" y="710" fill="var(--color-text-tertiary)">38 thêm mới, 4 cập nhật, 0 lỗi</text>
+        <text class="ts" x="640" y="696" text-anchor="end" fill="var(--color-text-tertiary)">3 giờ trước</text>
+      </svg>
+      <div class="caption">Fig. 1 — catalogs_landing</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Catalog detail — default shape</h2>
+    <p>Four group pills sit directly under the PageHeader; the active group expands into a sub-catalog tab strip immediately below. This is the nav replacement — one cheap jump to any of the other 19 catalogs, but with group structure you can actually feel. The toolbar carries search, a status filter, a count readout that updates as you filter, and the primary CTA. Table rows show <strong>three attention columns</strong> that matter more than the default field dump: <em>lần sửa</em> (who/when), <em>sử dụng</em> (count with semantic coloring — amber means "used a lot, be careful," red means "referenced by active records, hard-block"). The drawer docks right when a row is selected; the brief asks for a drawer-not-modal precisely so the admin can cross-reference other rows while editing — preserved here.</p>
+    <p>Worth naming: the drawer has three tabs — <strong>Thông tin · Lịch sử · Điểm sử dụng</strong> — and this mockup shows Thông tin active. Mockup 4 shows the same drawer with Điểm sử dụng active. Same component, different lens.</p>
+
+    <div class="mockup">
+      <svg width="100%" viewBox="0 0 680 700" role="img">
+        <title>Catalog detail — Dịch vụ with edit drawer open</title>
+        <desc>Catalog detail view. PageHeader, four group pills with Dich vu Chuyen khoa active, six sub-catalog tabs with Dich vu active, toolbar with search and filters, table of services, and a right-side edit drawer with three tabs.</desc>
+
+        <text x="40" y="38" font-size="18" font-weight="500" fill="var(--color-text-primary)">Dịch vụ</text>
+        <text class="ts" x="40" y="56" fill="var(--color-text-secondary)">Danh mục · Dịch vụ & Chuyên khoa · Dịch vụ</text>
+
+        <g class="c-gray">
+          <rect x="492" y="28" width="64" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="524" y="40" text-anchor="middle" dominant-baseline="central">23/04</text>
+        </g>
+        <g class="c-gray">
+          <rect x="564" y="28" width="76" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="602" y="40" text-anchor="middle" dominant-baseline="central">Minh ▾</text>
+        </g>
+
+        <g class="c-gray">
+          <rect x="40" y="80" width="76" height="30" rx="15" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="78" y="98" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Đối tác</text>
+        </g>
+        <g class="c-teal">
+          <rect x="122" y="80" width="170" height="30" rx="15" stroke-width="0.5"/>
+          <text class="ts" x="207" y="98" text-anchor="middle" dominant-baseline="central" fill="#085041">Dịch vụ & Chuyên khoa</text>
+        </g>
+        <g class="c-gray">
+          <rect x="298" y="80" width="152" height="30" rx="15" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="374" y="98" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Hồ sơ & Tham chiếu</text>
+        </g>
+        <g class="c-gray">
+          <rect x="456" y="80" width="60" height="30" rx="15" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="486" y="98" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Kho</text>
+        </g>
+
+        <text class="th" x="40" y="134" fill="var(--color-text-primary)">Dịch vụ</text>
+        <text class="ts" x="88" y="134" fill="var(--color-text-tertiary)">380</text>
+        <text class="ts" x="116" y="134" fill="var(--color-text-tertiary)">|</text>
+        <text class="ts" x="128" y="134" fill="var(--color-text-secondary)">Loại dịch vụ</text>
+        <text class="ts" x="208" y="134" fill="var(--color-text-tertiary)">9</text>
+        <text class="ts" x="224" y="134" fill="var(--color-text-secondary)">Nhóm thuế</text>
+        <text class="ts" x="290" y="134" fill="var(--color-text-tertiary)">4</text>
+        <text class="ts" x="304" y="134" fill="var(--color-text-secondary)">Chuyên khoa</text>
+        <text class="ts" x="380" y="134" fill="var(--color-text-tertiary)">14</text>
+        <text class="ts" x="398" y="134" fill="var(--color-text-secondary)">Khuyến mãi</text>
+        <text class="ts" x="466" y="134" fill="var(--color-text-tertiary)">7</text>
+        <text class="ts" x="482" y="134" fill="var(--color-text-secondary)">Mã khuyến mãi</text>
+        <text class="ts" x="564" y="134" fill="var(--color-text-tertiary)">23</text>
+        <line x1="40" y1="146" x2="80" y2="146" stroke="var(--color-text-primary)" stroke-width="1.5"/>
+
+        <rect x="40" y="166" width="248" height="32" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="52" y="186" fill="var(--color-text-tertiary)">Tìm dịch vụ, mã, chuyên khoa...</text>
+        <text class="ts" x="276" y="186" fill="var(--color-text-tertiary)">/</text>
+
+        <g class="c-gray">
+          <rect x="300" y="166" width="96" height="32" rx="6" stroke-width="0.5"/>
+          <text class="ts" x="348" y="186" text-anchor="middle" dominant-baseline="central">Trạng thái ▾</text>
+        </g>
+        <g class="c-gray">
+          <rect x="408" y="166" width="96" height="32" rx="6" stroke-width="0.5"/>
+          <text class="ts" x="456" y="186" text-anchor="middle" dominant-baseline="central">Chuyên khoa ▾</text>
+        </g>
+
+        <text class="ts" x="516" y="186" fill="var(--color-text-secondary)" dominant-baseline="central">380 mục</text>
+
+        <g class="c-blue">
+          <rect x="576" y="166" width="64" height="32" rx="6" stroke-width="0.5"/>
+        </g>
+        <text class="th" x="608" y="186" text-anchor="middle" dominant-baseline="central">+ Thêm</text>
+
+        <rect x="40" y="218" width="312" height="482" rx="12" class="box" stroke-width="0.5"/>
+
+        <rect x="40" y="218" width="312" height="36" rx="0" fill="var(--color-background-secondary)" stroke="none"/>
+        <text class="ts" x="60" y="240" fill="var(--color-text-tertiary)">Tên dịch vụ</text>
+        <text class="ts" x="232" y="240" fill="var(--color-text-tertiary)">Trạng thái</text>
+        <text class="ts" x="316" y="240" fill="var(--color-text-tertiary)" text-anchor="end">Sử dụng</text>
+
+        <line x1="40" y1="254" x2="352" y2="254" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <rect x="40" y="254" width="14" height="14" rx="3" fill="var(--color-background-primary)" stroke="var(--color-border-tertiary)" stroke-width="0.5" transform="translate(6 12)"/>
+        <text class="t" x="60" y="278">X-quang ngực thẳng</text>
+        <text class="ts" x="60" y="292" fill="var(--color-text-tertiary)">XR-CHEST-001 · Chẩn đoán hình ảnh</text>
+        <g class="c-teal">
+          <rect x="220" y="266" width="68" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="254" y="276" text-anchor="middle" dominant-baseline="central" fill="#085041">Hoạt động</text>
+        </g>
+        <text class="ts" x="316" y="282" text-anchor="end" fill="var(--color-text-secondary)">1.204</text>
+
+        <line x1="40" y1="312" x2="352" y2="312" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <rect x="40" y="312" width="312" height="76" fill="var(--c-blue-fill)" opacity="0.35"/>
+        <rect x="40" y="312" width="3" height="76" fill="#185FA5"/>
+        <rect x="40" y="312" width="14" height="14" rx="3" fill="#185FA5" stroke="#185FA5" stroke-width="0.5" transform="translate(6 12)"/>
+        <path d="M48 332L52 336L60 328" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <text class="t" x="60" y="338">CT bụng có thuốc cản quang</text>
+        <text class="ts" x="60" y="352" fill="var(--color-text-tertiary)">CT-ABD-C-001 · Chẩn đoán hình ảnh</text>
+        <g class="c-teal">
+          <rect x="220" y="326" width="68" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="254" y="336" text-anchor="middle" dominant-baseline="central" fill="#085041">Hoạt động</text>
+        </g>
+        <text class="ts" x="316" y="342" text-anchor="end" fill="var(--color-text-warning)">412</text>
+        <text class="ts" x="60" y="372" fill="var(--color-text-tertiary)">Minh · 2 giờ trước</text>
+
+        <line x1="40" y1="388" x2="352" y2="388" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="60" y="412">MRI gối không thuốc</text>
+        <text class="ts" x="60" y="426" fill="var(--color-text-tertiary)">MR-KNEE-001 · Chẩn đoán hình ảnh</text>
+        <g class="c-teal">
+          <rect x="220" y="400" width="68" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="254" y="410" text-anchor="middle" dominant-baseline="central" fill="#085041">Hoạt động</text>
+        </g>
+        <text class="ts" x="316" y="416" text-anchor="end" fill="var(--color-text-secondary)">287</text>
+
+        <line x1="40" y1="446" x2="352" y2="446" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="60" y="470">Siêu âm ổ bụng tổng quát</text>
+        <text class="ts" x="60" y="484" fill="var(--color-text-tertiary)">US-ABD-001 · Chẩn đoán hình ảnh</text>
+        <g class="c-teal">
+          <rect x="220" y="458" width="68" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="254" y="468" text-anchor="middle" dominant-baseline="central" fill="#085041">Hoạt động</text>
+        </g>
+        <text class="ts" x="316" y="474" text-anchor="end" fill="var(--color-text-secondary)">983</text>
+
+        <line x1="40" y1="504" x2="352" y2="504" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="60" y="528">Đo mật độ xương DEXA</text>
+        <text class="ts" x="60" y="542" fill="var(--color-text-tertiary)">DX-BONE-001 · Chẩn đoán hình ảnh</text>
+        <g class="c-gray">
+          <rect x="216" y="516" width="76" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="254" y="526" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Ngưng</text>
+        </g>
+        <text class="ts" x="316" y="532" text-anchor="end" fill="var(--color-text-tertiary)">12</text>
+
+        <line x1="40" y1="562" x2="352" y2="562" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="60" y="586">Nội soi dạ dày không đau</text>
+        <text class="ts" x="60" y="600" fill="var(--color-text-tertiary)">GI-GAS-001 · Tiêu hóa</text>
+        <g class="c-teal">
+          <rect x="220" y="574" width="68" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="254" y="584" text-anchor="middle" dominant-baseline="central" fill="#085041">Hoạt động</text>
+        </g>
+        <text class="ts" x="316" y="590" text-anchor="end" fill="var(--color-text-secondary)">156</text>
+
+        <text class="ts" x="196" y="684" text-anchor="middle" fill="var(--color-text-info)">Xem thêm 374 dịch vụ ↓</text>
+
+        <rect x="364" y="166" width="276" height="534" rx="12" class="box" stroke-width="0.5"/>
+        <text class="th" x="380" y="192">Sửa dịch vụ</text>
+        <text class="ts" x="380" y="208" fill="var(--color-text-tertiary)">CT-ABD-C-001</text>
+
+        <g>
+          <rect x="612" y="180" width="20" height="20" rx="4" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+          <path d="M618 186L626 194M626 186L618 194" stroke="var(--color-text-secondary)" stroke-width="1" stroke-linecap="round"/>
+        </g>
+
+        <line x1="380" y1="222" x2="624" y2="222" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="th" x="380" y="244" fill="var(--color-text-primary)">Thông tin</text>
+        <text class="ts" x="452" y="244" fill="var(--color-text-tertiary)">Lịch sử</text>
+        <text class="ts" x="512" y="244" fill="var(--color-text-tertiary)">Điểm sử dụng</text>
+        <text class="ts" x="604" y="244" fill="var(--color-text-warning)">412</text>
+        <line x1="380" y1="254" x2="444" y2="254" stroke="var(--color-text-primary)" stroke-width="1.5"/>
+
+        <text class="ts" x="380" y="282" fill="var(--color-text-secondary)">Tên dịch vụ *</text>
+        <rect x="380" y="288" width="244" height="32" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="392" y="308">CT bụng có thuốc cản quang</text>
+
+        <text class="ts" x="380" y="340" fill="var(--color-text-secondary)">Mã dịch vụ</text>
+        <rect x="380" y="346" width="118" height="32" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="392" y="366">CT-ABD-C-001</text>
+
+        <text class="ts" x="506" y="340" fill="var(--color-text-secondary)">Nhóm thuế</text>
+        <rect x="506" y="346" width="118" height="32" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="518" y="366">VAT 5%</text>
+        <text class="ts" x="616" y="366" text-anchor="end" fill="var(--color-text-tertiary)">▾</text>
+
+        <text class="ts" x="380" y="398" fill="var(--color-text-secondary)">Chuyên khoa</text>
+        <rect x="380" y="404" width="244" height="32" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="392" y="424">Chẩn đoán hình ảnh</text>
+        <text class="ts" x="616" y="424" text-anchor="end" fill="var(--color-text-tertiary)">▾</text>
+
+        <text class="ts" x="380" y="456" fill="var(--color-text-secondary)">Đơn giá (VND) *</text>
+        <rect x="380" y="462" width="118" height="32" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="392" y="482">1.950.000</text>
+
+        <text class="ts" x="506" y="456" fill="var(--color-text-secondary)">Thời gian (phút)</text>
+        <rect x="506" y="462" width="118" height="32" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="518" y="482">25</text>
+
+        <text class="ts" x="380" y="514" fill="var(--color-text-secondary)">Trạng thái</text>
+        <g>
+          <rect x="380" y="520" width="40" height="22" rx="11" fill="#1D9E75"/>
+          <circle cx="410" cy="531" r="9" fill="white"/>
+        </g>
+        <text class="ts" x="428" y="536">Hoạt động</text>
+
+        <line x1="380" y1="562" x2="624" y2="562" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="380" y="582" fill="var(--color-text-tertiary)">Lần sửa: Minh · 2 giờ trước</text>
+        <text class="ts" x="380" y="598" fill="var(--color-text-info)">Xem lịch sử đầy đủ →</text>
+
+        <g class="node">
+          <rect x="380" y="652" width="72" height="32" rx="6" class="box" stroke-width="0.5"/>
+          <text class="th" x="416" y="668" text-anchor="middle" dominant-baseline="central">Hủy</text>
+        </g>
+        <g class="c-blue">
+          <rect x="548" y="652" width="76" height="32" rx="6" stroke-width="0.5"/>
+        </g>
+        <text class="th" x="586" y="668" text-anchor="middle" dominant-baseline="central">Lưu</text>
+      </svg>
+      <div class="caption">Fig. 2 — catalog_detail_default</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. CSV import — step 2, the dry-run</h2>
+    <p>The three steps are <em>nhận file → kiểm tra → xác nhận</em>. Step 1 (drop + map) is mechanical; step 3 (confirm) is a one-click; the value and the design attention go to step 2, where the dry-run makes the whole flow trustworthy.</p>
+    <p>Three moves matter here. First, the <strong>three-number summary</strong> at top (N thêm mới / M cập nhật / K lỗi) is the promise: the admin should be able to read those three numbers and decide "commit" or "fix first" without scrolling. Second, errors are <strong>grouped by validation rule, not by row</strong> — 14 rows missing "Tên" is one group, not 14 rows to triage. Clicking the group expands to the row list. Third, errors are <strong>anchored to the source CSV line number</strong> so the admin can fix in their spreadsheet and re-upload without guessing which row is which. The "Tải xuống dòng lỗi" action exports just the error rows back as a CSV — fix → re-upload → done.</p>
+
+    <div class="mockup">
+      <svg width="100%" viewBox="0 0 680 676" role="img">
+        <title>CSV import — dry-run preview</title>
+        <desc>Step two of a three-step CSV import flow. Summary counts at top, grouped validation errors in a list, and a preview table showing which rows will be added, updated, or rejected.</desc>
+
+        <text x="40" y="38" font-size="18" font-weight="500" fill="var(--color-text-primary)">Nhập CSV — Vật tư</text>
+        <text class="ts" x="40" y="56" fill="var(--color-text-secondary)">Danh mục · Kho · Vật tư · Nhập CSV</text>
+
+        <g class="c-gray">
+          <rect x="492" y="28" width="64" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="524" y="40" text-anchor="middle" dominant-baseline="central">23/04</text>
+        </g>
+        <g class="c-gray">
+          <rect x="564" y="28" width="76" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="602" y="40" text-anchor="middle" dominant-baseline="central">Minh ▾</text>
+        </g>
+
+        <circle cx="64" cy="94" r="12" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <path d="M58 94L63 99L71 91" stroke="var(--color-text-secondary)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <text class="ts" x="84" y="98" fill="var(--color-text-secondary)">1. Chọn file & ghép cột</text>
+        <line x1="224" y1="94" x2="276" y2="94" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <circle cx="288" cy="94" r="12" fill="#185FA5" stroke="#185FA5" stroke-width="0.5"/>
+        <text class="ts" x="288" y="94" text-anchor="middle" dominant-baseline="central" fill="white">2</text>
+        <text class="th" x="308" y="98">Kiểm tra dữ liệu</text>
+        <line x1="428" y1="94" x2="480" y2="94" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <circle cx="492" cy="94" r="12" fill="var(--color-background-primary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="492" y="94" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">3</text>
+        <text class="ts" x="512" y="98" fill="var(--color-text-tertiary)">3. Xác nhận & áp dụng</text>
+
+        <rect x="40" y="128" width="186" height="76" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="56" y="150" fill="var(--color-text-secondary)">Thêm mới</text>
+        <text x="56" y="184" font-size="22" font-weight="500" fill="var(--color-text-info)">38</text>
+        <text class="ts" x="84" y="184">dòng</text>
+
+        <rect x="238" y="128" width="186" height="76" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="254" y="150" fill="var(--color-text-secondary)">Cập nhật</text>
+        <text x="254" y="184" font-size="22" font-weight="500" fill="var(--color-text-primary)">6</text>
+        <text class="ts" x="274" y="184">dòng (có thay đổi)</text>
+
+        <rect x="436" y="128" width="204" height="76" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="452" y="150" fill="var(--color-text-secondary)">Lỗi — sẽ bỏ qua</text>
+        <text x="452" y="184" font-size="22" font-weight="500" fill="var(--color-text-danger)">18</text>
+        <text class="ts" x="474" y="184">dòng / 4 loại</text>
+
+        <rect x="40" y="222" width="600" height="160" rx="12" class="box" stroke-width="0.5"/>
+        <text class="th" x="56" y="246">Lỗi cần xử lý</text>
+        <text class="ts" x="160" y="246" fill="var(--color-text-tertiary)">gộp theo quy tắc</text>
+        <text class="ts" x="624" y="246" text-anchor="end" fill="var(--color-text-info)">Tải xuống 18 dòng lỗi →</text>
+        <line x1="56" y1="258" x2="624" y2="258" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <path d="M68 278L74 284L80 278" stroke="var(--color-text-secondary)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M68 276L73 272L80 276" stroke="var(--color-text-warning)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <text class="t" x="96" y="282">Thiếu trường bắt buộc "Tên vật tư"</text>
+        <text class="ts" x="624" y="282" text-anchor="end" fill="var(--color-text-danger)">9 dòng</text>
+        <text class="ts" x="96" y="298" fill="var(--color-text-tertiary)">dòng 12, 14, 27, 31, 33, 44, 48, 51, 52</text>
+
+        <line x1="56" y1="314" x2="624" y2="314" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <path d="M68 334L74 340L80 334" stroke="var(--color-text-secondary)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <text class="t" x="96" y="338">Nhóm vật tư không tồn tại</text>
+        <text class="ts" x="624" y="338" text-anchor="end" fill="var(--color-text-danger)">5 dòng</text>
+        <text class="ts" x="96" y="354" fill="var(--color-text-tertiary)">"Vật tư tiêu hao khác" — có thể tạo mới? tạo nhóm →</text>
+
+        <line x1="56" y1="370" x2="624" y2="370" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="th" x="40" y="416">Xem trước (10/62)</text>
+        <g class="c-gray">
+          <rect x="136" y="400" width="96" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="184" y="412" text-anchor="middle" dominant-baseline="central">Tất cả ▾</text>
+        </g>
+        <g class="c-gray">
+          <rect x="240" y="400" width="76" height="24" rx="12" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="278" y="412" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Chỉ lỗi</text>
+        </g>
+
+        <rect x="40" y="432" width="600" height="170" rx="12" class="box" stroke-width="0.5"/>
+        <rect x="40" y="432" width="600" height="32" fill="var(--color-background-secondary)"/>
+        <text class="ts" x="56" y="452" fill="var(--color-text-tertiary)">#</text>
+        <text class="ts" x="90" y="452" fill="var(--color-text-tertiary)">Trạng thái</text>
+        <text class="ts" x="196" y="452" fill="var(--color-text-tertiary)">Mã</text>
+        <text class="ts" x="268" y="452" fill="var(--color-text-tertiary)">Tên vật tư</text>
+        <text class="ts" x="460" y="452" fill="var(--color-text-tertiary)">Nhóm</text>
+        <text class="ts" x="624" y="452" fill="var(--color-text-tertiary)" text-anchor="end">ĐVT</text>
+
+        <line x1="40" y1="464" x2="640" y2="464" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="56" y="482" fill="var(--color-text-tertiary)">11</text>
+        <g class="c-blue">
+          <rect x="88" y="470" width="72" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="124" y="480" text-anchor="middle" dominant-baseline="central" fill="#0C447C">Thêm mới</text>
+        </g>
+        <text class="ts" x="196" y="482">VT-GA-003</text>
+        <text class="ts" x="268" y="482">Gạc y tế vô trùng 10x10</text>
+        <text class="ts" x="460" y="482">Vật tư tiêu hao</text>
+        <text class="ts" x="624" y="482" text-anchor="end">túi</text>
+
+        <line x1="40" y1="496" x2="640" y2="496" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="ts" x="56" y="514" fill="var(--color-text-danger)">12</text>
+        <g class="c-red">
+          <rect x="88" y="502" width="56" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="116" y="512" text-anchor="middle" dominant-baseline="central" fill="#791F1F">Lỗi</text>
+        </g>
+        <text class="ts" x="152" y="514" fill="var(--color-text-danger)">thiếu "Tên"</text>
+        <text class="ts" x="196" y="514">VT-GA-004</text>
+        <text class="ts" x="268" y="514" fill="var(--color-text-tertiary)">—</text>
+        <text class="ts" x="460" y="514">Vật tư tiêu hao</text>
+        <text class="ts" x="624" y="514" text-anchor="end">túi</text>
+
+        <line x1="40" y1="528" x2="640" y2="528" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="ts" x="56" y="546" fill="var(--color-text-tertiary)">13</text>
+        <g class="c-amber">
+          <rect x="88" y="534" width="72" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="124" y="544" text-anchor="middle" dominant-baseline="central" fill="#633806">Cập nhật</text>
+        </g>
+        <text class="ts" x="196" y="546">VT-KI-020</text>
+        <text class="ts" x="268" y="546">Kim tiêm 20G, 50mm</text>
+        <text class="ts" x="352" y="546" fill="var(--color-text-warning)">· đơn giá: 4.200 → 4.500</text>
+        <text class="ts" x="460" y="546">Kim tiêm</text>
+        <text class="ts" x="624" y="546" text-anchor="end">cây</text>
+
+        <line x1="40" y1="560" x2="640" y2="560" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="ts" x="56" y="578" fill="var(--color-text-tertiary)">14</text>
+        <g class="c-red">
+          <rect x="88" y="566" width="56" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="116" y="576" text-anchor="middle" dominant-baseline="central" fill="#791F1F">Lỗi</text>
+        </g>
+        <text class="ts" x="152" y="578" fill="var(--color-text-danger)">thiếu "Tên"</text>
+        <text class="ts" x="196" y="578">VT-KI-022</text>
+        <text class="ts" x="268" y="578" fill="var(--color-text-tertiary)">—</text>
+        <text class="ts" x="460" y="578">Kim tiêm</text>
+        <text class="ts" x="624" y="578" text-anchor="end">cây</text>
+
+        <text class="ts" x="340" y="596" text-anchor="middle" fill="var(--color-text-info)">Xem tiếp 52 dòng ↓</text>
+
+        <g class="node">
+          <rect x="40" y="624" width="120" height="36" rx="6" class="box" stroke-width="0.5"/>
+          <text class="th" x="100" y="642" text-anchor="middle" dominant-baseline="central">← Quay lại</text>
+        </g>
+
+        <g class="node">
+          <rect x="420" y="624" width="104" height="36" rx="6" class="box" stroke-width="0.5"/>
+          <text class="th" x="472" y="642" text-anchor="middle" dominant-baseline="central">Hủy bỏ</text>
+        </g>
+
+        <g class="c-blue">
+          <rect x="532" y="624" width="108" height="36" rx="6" stroke-width="0.5"/>
+        </g>
+        <text class="th" x="586" y="642" text-anchor="middle" dominant-baseline="central">Áp dụng 44 →</text>
+      </svg>
+      <div class="caption">Fig. 3 — csv_import_dry_run</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. Điểm sử dụng — the same drawer, different tab</h2>
+    <p>This is <strong>the same drawer from mockup 2</strong> with the Điểm sử dụng tab active. That reuse is deliberate: a user who opens the drawer to edit can flip to "can I deprecate this?" without a different surface.</p>
+    <p>The top of the tab carries the <strong>verdict banner</strong> — the thing I mean by "counts alone don't tell the admin whether they're safe." Three verdict states: teal "Có thể ngưng hoạt động an toàn" (all references are historical, snapshots retained), amber "Có N điểm phụ thuộc đang hoạt động" (soft warning, can be fixed in-drawer), red "Cần gán lại trước khi xóa" (hard block, delete button disabled).</p>
+    <p>Below that, consume-points are split into two sections — <strong>Đang hoạt động</strong> (what's actively using this right now, must be reassigned) and <strong>Lịch sử</strong> (what has used it in the past, fine to leave alone). Each row is a deep-link: clicking jumps into that workspace with this row pre-filtered. The brief asks for counts; I'd pair every count with that deep-link, because "42 phiếu đăng ký" is less useful than "42 phiếu đăng ký → xem trong mục Đăng ký."</p>
+
+    <div class="mockup">
+      <svg width="100%" viewBox="0 0 680 720" role="img">
+        <title>Điểm sử dụng — drawer tab</title>
+        <desc>The same row-context drawer with the consume-points tab active. Verdict banner at top, active references that block deprecation, historical references that are safe to leave.</desc>
+
+        <rect x="0" y="0" width="680" height="720" fill="var(--color-background-secondary)" opacity="0.35"/>
+
+        <text x="40" y="38" font-size="18" font-weight="500" fill="var(--color-text-primary)" opacity="0.4">Bác sĩ giới thiệu</text>
+        <text class="ts" x="40" y="56" fill="var(--color-text-secondary)" opacity="0.4">Danh mục · Đối tác · Bác sĩ giới thiệu</text>
+
+        <rect x="40" y="80" width="312" height="600" rx="12" fill="var(--color-background-primary)" stroke="var(--color-border-tertiary)" stroke-width="0.5" opacity="0.5"/>
+        <text class="ts" x="56" y="108" fill="var(--color-text-tertiary)" opacity="0.6">bảng danh sách bác sĩ giới thiệu</text>
+        <line x1="56" y1="124" x2="336" y2="124" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="56" y="148" opacity="0.5">BS. Nguyễn Văn Dũng</text>
+        <line x1="56" y1="164" x2="336" y2="164" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+        <text class="ts" x="56" y="188" fill="var(--color-text-primary)">BS. Lê Thị Minh Tâm</text>
+        <text class="ts" x="56" y="204" fill="var(--color-text-tertiary)">Phòng khám Tâm Đức</text>
+        <line x1="56" y1="220" x2="336" y2="220" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+        <text class="ts" x="56" y="244" opacity="0.5">BS. Trần Thu Hà</text>
+        <line x1="56" y1="260" x2="336" y2="260" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+        <text class="ts" x="56" y="284" opacity="0.5">BS. Phạm Quốc Anh</text>
+
+        <rect x="364" y="80" width="276" height="600" rx="12" fill="var(--color-background-primary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="th" x="380" y="108">BS. Lê Thị Minh Tâm</text>
+        <text class="ts" x="380" y="124" fill="var(--color-text-tertiary)">REF-DOC-087 · Phòng khám Tâm Đức</text>
+
+        <g>
+          <rect x="612" y="96" width="20" height="20" rx="4" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+          <path d="M618 102L626 110M626 102L618 110" stroke="var(--color-text-secondary)" stroke-width="1" stroke-linecap="round"/>
+        </g>
+
+        <line x1="380" y1="138" x2="624" y2="138" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="380" y="160" fill="var(--color-text-tertiary)">Thông tin</text>
+        <text class="ts" x="440" y="160" fill="var(--color-text-tertiary)">Lịch sử</text>
+        <text class="th" x="496" y="160" fill="var(--color-text-primary)">Điểm sử dụng</text>
+        <text class="ts" x="588" y="160" fill="var(--color-text-warning)">318</text>
+        <line x1="492" y1="170" x2="600" y2="170" stroke="var(--color-text-primary)" stroke-width="1.5"/>
+
+        <g class="c-amber">
+          <rect x="380" y="186" width="244" height="60" rx="8" stroke-width="0.5"/>
+        </g>
+        <path d="M392 210L398 220L404 210Z" fill="#BA7517"/>
+        <circle cx="399" cy="214" r="0.5" fill="white"/>
+        <text class="th" x="412" y="210" fill="#633806">Cần gán lại trước khi ngưng</text>
+        <text class="ts" x="412" y="226" fill="#633806">4 quy tắc hoa hồng đang tham chiếu.</text>
+        <text class="ts" x="412" y="240" fill="#633806">Lịch sử giữ nguyên — có thể ngưng sau khi gán lại.</text>
+
+        <text class="ts" x="380" y="276" fill="var(--color-text-secondary)">ĐANG HOẠT ĐỘNG</text>
+        <text class="ts" x="624" y="276" text-anchor="end" fill="var(--color-text-tertiary)">phải xử lý trước</text>
+        <line x1="380" y1="284" x2="624" y2="284" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="t" x="380" y="304">Quy tắc hoa hồng</text>
+        <text class="ts" x="380" y="318" fill="var(--color-text-tertiary)">4 quy tắc dùng bác sĩ này</text>
+        <text class="t" x="624" y="304" text-anchor="end" fill="var(--color-text-warning)">4</text>
+        <text class="ts" x="624" y="318" text-anchor="end" fill="var(--color-text-info)">Xem →</text>
+
+        <line x1="380" y1="334" x2="624" y2="334" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="380" y="354">Phiếu đăng ký đang chờ</text>
+        <text class="ts" x="380" y="368" fill="var(--color-text-tertiary)">2 phiếu chưa khám, chỉ định bác sĩ này</text>
+        <text class="t" x="624" y="354" text-anchor="end" fill="var(--color-text-warning)">2</text>
+        <text class="ts" x="624" y="368" text-anchor="end" fill="var(--color-text-info)">Mở →</text>
+
+        <line x1="380" y1="384" x2="624" y2="384" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="380" y="404">Ca đọc đang xử lý</text>
+        <text class="ts" x="380" y="418" fill="var(--color-text-tertiary)">0 ca</text>
+        <text class="t" x="624" y="404" text-anchor="end" fill="var(--color-text-tertiary)">0</text>
+        <text class="ts" x="624" y="418" text-anchor="end" fill="var(--color-text-tertiary)">—</text>
+
+        <text class="ts" x="380" y="458" fill="var(--color-text-secondary)">LỊCH SỬ</text>
+        <text class="ts" x="624" y="458" text-anchor="end" fill="var(--color-text-tertiary)">snapshot, không ảnh hưởng</text>
+        <line x1="380" y1="466" x2="624" y2="466" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="t" x="380" y="486">Phiếu đăng ký</text>
+        <text class="ts" x="380" y="500" fill="var(--color-text-tertiary)">đã tiếp nhận, từ 01/2024</text>
+        <text class="t" x="624" y="486" text-anchor="end">214</text>
+        <text class="ts" x="624" y="500" text-anchor="end" fill="var(--color-text-info)">Xem →</text>
+
+        <line x1="380" y1="516" x2="624" y2="516" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="380" y="536">Phiếu thu</text>
+        <text class="ts" x="380" y="550" fill="var(--color-text-tertiary)">đã thanh toán</text>
+        <text class="t" x="624" y="536" text-anchor="end">186</text>
+        <text class="ts" x="624" y="550" text-anchor="end" fill="var(--color-text-info)">Xem →</text>
+
+        <line x1="380" y1="566" x2="624" y2="566" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="380" y="586">Hoa hồng đã thanh toán</text>
+        <text class="ts" x="380" y="600" fill="var(--color-text-tertiary)">Q1 2024 đến nay</text>
+        <text class="t" x="624" y="586" text-anchor="end">112</text>
+        <text class="ts" x="624" y="600" text-anchor="end" fill="var(--color-text-info)">Xem →</text>
+
+        <line x1="380" y1="634" x2="624" y2="634" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <g class="node">
+          <rect x="380" y="648" width="120" height="32" rx="6" class="box" stroke-width="0.5"/>
+          <text class="th" x="440" y="664" text-anchor="middle" dominant-baseline="central">Đóng</text>
+        </g>
+        <g class="c-gray" opacity="0.55">
+          <rect x="512" y="648" width="112" height="32" rx="6" stroke-width="0.5"/>
+        </g>
+        <text class="th" x="568" y="664" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Ngưng hoạt động</text>
+      </svg>
+      <div class="caption">Fig. 4 — consume_point_drawer</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. Bulk selection — the sticky action bar</h2>
+    <p>The bulk bar appears only when selection exists; when it does, it <strong>replaces the toolbar's breathing room rather than floating above the table</strong>. Two reasons. First, a truly floating bar at the bottom of the viewport covers content on a laptop screen and the admin loses track of which rows are selected. Second, because the bar anchors to a docked area at the bottom of the table card, it scrolls with the page if the table is long — the admin always sees it and their selection context together.</p>
+    <p>The actions are bucketed by destructiveness: status toggles (Kích hoạt, Ngưng hoạt động) are cheap and reversible; export is neutral; delete is destructive and lives on the right with a color treatment that matches the verdict logic from mockup 4. Clicking <strong>Xóa</strong> on bulk selection triggers the same consume-point check as the drawer — if any selected row has active references, you get a "12 mục bị chặn" readout and the blocked ones stay unchecked after the batch.</p>
+
+    <div class="mockup">
+      <svg width="100%" viewBox="0 0 680 620" role="img">
+        <title>Bulk selection action bar</title>
+        <desc>Catalog table with three rows selected. A sticky action bar sits at the bottom of the table card with activation, deactivation, export, and delete actions plus a selection count.</desc>
+
+        <text x="40" y="38" font-size="18" font-weight="500" fill="var(--color-text-primary)">Vật tư</text>
+        <text class="ts" x="40" y="56" fill="var(--color-text-secondary)">Danh mục · Kho · Vật tư</text>
+
+        <g class="c-gray">
+          <rect x="492" y="28" width="64" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="524" y="40" text-anchor="middle" dominant-baseline="central">23/04</text>
+        </g>
+        <g class="c-gray">
+          <rect x="564" y="28" width="76" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="602" y="40" text-anchor="middle" dominant-baseline="central">Minh ▾</text>
+        </g>
+
+        <g class="c-gray">
+          <rect x="40" y="80" width="76" height="30" rx="15" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="78" y="98" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Đối tác</text>
+        </g>
+        <g class="c-gray">
+          <rect x="122" y="80" width="170" height="30" rx="15" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="207" y="98" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Dịch vụ & Chuyên khoa</text>
+        </g>
+        <g class="c-gray">
+          <rect x="298" y="80" width="152" height="30" rx="15" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="374" y="98" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Hồ sơ & Tham chiếu</text>
+        </g>
+        <g class="c-amber">
+          <rect x="456" y="80" width="60" height="30" rx="15" stroke-width="0.5"/>
+          <text class="ts" x="486" y="98" text-anchor="middle" dominant-baseline="central" fill="#633806">Kho</text>
+        </g>
+
+        <text class="th" x="40" y="134">Vật tư</text>
+        <text class="ts" x="84" y="134" fill="var(--color-text-tertiary)">186</text>
+        <text class="ts" x="108" y="134" fill="var(--color-text-tertiary)">|</text>
+        <text class="ts" x="120" y="134" fill="var(--color-text-secondary)">Nhóm vật tư</text>
+        <text class="ts" x="198" y="134" fill="var(--color-text-tertiary)">14</text>
+        <text class="ts" x="216" y="134" fill="var(--color-text-secondary)">Nhà cung cấp</text>
+        <text class="ts" x="298" y="134" fill="var(--color-text-tertiary)">28</text>
+        <text class="ts" x="316" y="134" fill="var(--color-text-secondary)">Liên kết vật tư – dịch vụ</text>
+        <text class="ts" x="464" y="134" fill="var(--color-text-tertiary)">412</text>
+        <line x1="40" y1="146" x2="80" y2="146" stroke="var(--color-text-primary)" stroke-width="1.5"/>
+
+        <rect x="40" y="166" width="600" height="400" rx="12" class="box" stroke-width="0.5"/>
+        <rect x="40" y="166" width="600" height="36" fill="var(--color-background-secondary)"/>
+
+        <rect x="50" y="178" width="14" height="14" rx="3" fill="var(--color-background-primary)" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <rect x="54" y="184" width="6" height="1.5" fill="var(--color-text-tertiary)"/>
+        <text class="ts" x="74" y="188" fill="var(--color-text-tertiary)">Tên vật tư</text>
+        <text class="ts" x="310" y="188" fill="var(--color-text-tertiary)">Nhóm</text>
+        <text class="ts" x="426" y="188" fill="var(--color-text-tertiary)">Đơn giá</text>
+        <text class="ts" x="510" y="188" fill="var(--color-text-tertiary)">Trạng thái</text>
+        <text class="ts" x="624" y="188" text-anchor="end" fill="var(--color-text-tertiary)">Sử dụng</text>
+
+        <line x1="40" y1="202" x2="640" y2="202" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <rect x="40" y="202" width="600" height="48" fill="var(--c-blue-fill)" opacity="0.35"/>
+        <rect x="50" y="218" width="14" height="14" rx="3" fill="#185FA5" stroke="#185FA5" stroke-width="0.5"/>
+        <path d="M53 225L56 228L61 222" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <text class="t" x="74" y="228">Kim tiêm 20G, 50mm</text>
+        <text class="ts" x="74" y="242" fill="var(--color-text-tertiary)">VT-KI-020</text>
+        <text class="ts" x="310" y="232">Kim tiêm</text>
+        <text class="ts" x="426" y="232">4.500 ₫</text>
+        <g class="c-teal">
+          <rect x="506" y="220" width="68" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="540" y="230" text-anchor="middle" dominant-baseline="central" fill="#085041">Hoạt động</text>
+        </g>
+        <text class="ts" x="624" y="232" text-anchor="end">1.204</text>
+
+        <line x1="40" y1="250" x2="640" y2="250" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <rect x="40" y="250" width="600" height="48" fill="var(--c-blue-fill)" opacity="0.35"/>
+        <rect x="50" y="266" width="14" height="14" rx="3" fill="#185FA5" stroke="#185FA5" stroke-width="0.5"/>
+        <path d="M53 273L56 276L61 270" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <text class="t" x="74" y="276">Kim tiêm 23G, 30mm</text>
+        <text class="ts" x="74" y="290" fill="var(--color-text-tertiary)">VT-KI-023</text>
+        <text class="ts" x="310" y="280">Kim tiêm</text>
+        <text class="ts" x="426" y="280">3.800 ₫</text>
+        <g class="c-teal">
+          <rect x="506" y="268" width="68" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="540" y="278" text-anchor="middle" dominant-baseline="central" fill="#085041">Hoạt động</text>
+        </g>
+        <text class="ts" x="624" y="280" text-anchor="end">892</text>
+
+        <line x1="40" y1="298" x2="640" y2="298" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <rect x="50" y="314" width="14" height="14" rx="3" fill="var(--color-background-primary)" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="74" y="324">Ống nghiệm EDTA 3ml</text>
+        <text class="ts" x="74" y="338" fill="var(--color-text-tertiary)">VT-ON-030</text>
+        <text class="ts" x="310" y="328">Ống nghiệm</text>
+        <text class="ts" x="426" y="328">2.100 ₫</text>
+        <g class="c-teal">
+          <rect x="506" y="316" width="68" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="540" y="326" text-anchor="middle" dominant-baseline="central" fill="#085041">Hoạt động</text>
+        </g>
+        <text class="ts" x="624" y="328" text-anchor="end">623</text>
+
+        <line x1="40" y1="346" x2="640" y2="346" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <rect x="40" y="346" width="600" height="48" fill="var(--c-blue-fill)" opacity="0.35"/>
+        <rect x="50" y="362" width="14" height="14" rx="3" fill="#185FA5" stroke="#185FA5" stroke-width="0.5"/>
+        <path d="M53 369L56 372L61 366" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <text class="t" x="74" y="372">Gạc y tế vô trùng 5x5</text>
+        <text class="ts" x="74" y="386" fill="var(--color-text-tertiary)">VT-GA-005</text>
+        <text class="ts" x="310" y="376">Vật tư tiêu hao</text>
+        <text class="ts" x="426" y="376">1.200 ₫</text>
+        <g class="c-gray">
+          <rect x="506" y="364" width="68" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="540" y="374" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Ngưng</text>
+        </g>
+        <text class="ts" x="624" y="376" text-anchor="end" fill="var(--color-text-tertiary)">18</text>
+
+        <line x1="40" y1="394" x2="640" y2="394" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <rect x="50" y="410" width="14" height="14" rx="3" fill="var(--color-background-primary)" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="74" y="420">Găng tay y tế không bột S</text>
+        <text class="ts" x="74" y="434" fill="var(--color-text-tertiary)">VT-GT-001</text>
+        <text class="ts" x="310" y="424">Găng tay</text>
+        <text class="ts" x="426" y="424">1.500 ₫</text>
+        <g class="c-teal">
+          <rect x="506" y="412" width="68" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="540" y="422" text-anchor="middle" dominant-baseline="central" fill="#085041">Hoạt động</text>
+        </g>
+        <text class="ts" x="624" y="424" text-anchor="end">2.104</text>
+
+        <line x1="40" y1="442" x2="640" y2="442" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <rect x="50" y="458" width="14" height="14" rx="3" fill="var(--color-background-primary)" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="74" y="468">Cồn y tế 70° 500ml</text>
+        <text class="ts" x="74" y="482" fill="var(--color-text-tertiary)">VT-CN-500</text>
+        <text class="ts" x="310" y="472">Sát khuẩn</text>
+        <text class="ts" x="426" y="472">28.000 ₫</text>
+        <g class="c-teal">
+          <rect x="506" y="460" width="68" height="20" rx="10" stroke-width="0.5"/>
+          <text class="ts" x="540" y="470" text-anchor="middle" dominant-baseline="central" fill="#085041">Hoạt động</text>
+        </g>
+        <text class="ts" x="624" y="472" text-anchor="end">184</text>
+
+        <line x1="40" y1="490" x2="640" y2="490" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <rect x="40" y="514" width="600" height="52" rx="0" fill="#185FA5"/>
+
+        <text class="th" x="56" y="544" fill="white">3 mục đã chọn</text>
+        <text class="ts" x="138" y="544" fill="#B5D4F4">(tất cả trong Kho)</text>
+        <text class="ts" x="232" y="544" fill="#B5D4F4">Bỏ chọn</text>
+
+        <g>
+          <rect x="288" y="524" width="92" height="32" rx="6" fill="white" fill-opacity="0.12" stroke="white" stroke-opacity="0.35" stroke-width="0.5"/>
+          <text class="th" x="334" y="544" text-anchor="middle" dominant-baseline="central" fill="white">Kích hoạt</text>
+        </g>
+
+        <g>
+          <rect x="388" y="524" width="124" height="32" rx="6" fill="white" fill-opacity="0.12" stroke="white" stroke-opacity="0.35" stroke-width="0.5"/>
+          <text class="th" x="450" y="544" text-anchor="middle" dominant-baseline="central" fill="white">Ngưng hoạt động</text>
+        </g>
+
+        <g>
+          <rect x="520" y="524" width="80" height="32" rx="6" fill="white" fill-opacity="0.12" stroke="white" stroke-opacity="0.35" stroke-width="0.5"/>
+          <text class="th" x="560" y="544" text-anchor="middle" dominant-baseline="central" fill="white">Xuất CSV</text>
+        </g>
+
+        <g>
+          <rect x="608" y="524" width="24" height="32" rx="6" fill="#A32D2D" stroke="#791F1F" stroke-width="0.5"/>
+          <path d="M615 534H625M618 534V531H622V534M617 534V545H623V534" stroke="white" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+
+        <text class="ts" x="340" y="600" text-anchor="middle" fill="var(--color-text-tertiary)">Xóa có kiểm tra điểm sử dụng — mục bị chặn sẽ giữ nguyên</text>
+      </svg>
+      <div class="caption">Fig. 5 — bulk_action_selection</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Nhân sự — master-detail, not drawer</h2>
+    <p>The right question for Nhân sự is: <em>why is this catalog different from the other 19?</em> It is because a user record has three things a generic row-drawer can't hold gracefully — an <strong>avatar upload</strong>, a <strong>signature image</strong> (shown inline, critical for ca-đọc sign-off), and <strong>fingerprint enrollment status</strong>. Each of those needs full editor width and spatial relationships (the signature preview is roughly 3:1 aspect; it doesn't fit in a 320px drawer). So Nhân sự gets the master-detail variant.</p>
+    <p>The coexistence with the generic shape is this: the <strong>same group pills and sub-catalog tabs</strong> run at top; the <strong>same toolbar + search</strong> is present; only the body below switches from (table + row-drawer) to (list + editor). From the admin's perspective the chrome is identical, only the work area expands. This is a pattern other catalogs <em>could</em> adopt if they grow nested fields — Bệnh nhân is a candidate if you ever want to surface patient's image assets here rather than in the patient workspace.</p>
+    <p>One detail worth naming: the fingerprint status on the right is not a form field but a <strong>device-interaction state card</strong> — it reflects what the fingerprint scanner currently knows. That's why it has its own card with "Ghi nhận lại" as the action, rather than being a text input. Pattern-wise, any field that requires hardware or external state belongs in its own card, not in the form grid.</p>
+
+    <div class="mockup">
+      <svg width="100%" viewBox="0 0 680 700" role="img">
+        <title>Nhân sự — master-detail editor</title>
+        <desc>Personnel catalog with left master list of users and right-side full editor showing profile fields, avatar upload, signature image preview, and fingerprint enrollment status card.</desc>
+
+        <text x="40" y="38" font-size="18" font-weight="500" fill="var(--color-text-primary)">Nhân sự</text>
+        <text class="ts" x="40" y="56" fill="var(--color-text-secondary)">Danh mục · Hồ sơ & Tham chiếu · Nhân sự</text>
+
+        <g class="c-gray">
+          <rect x="492" y="28" width="64" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="524" y="40" text-anchor="middle" dominant-baseline="central">23/04</text>
+        </g>
+        <g class="c-gray">
+          <rect x="564" y="28" width="76" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="602" y="40" text-anchor="middle" dominant-baseline="central">Minh ▾</text>
+        </g>
+
+        <g class="c-gray">
+          <rect x="40" y="80" width="76" height="30" rx="15" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="78" y="98" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Đối tác</text>
+        </g>
+        <g class="c-gray">
+          <rect x="122" y="80" width="170" height="30" rx="15" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="207" y="98" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Dịch vụ & Chuyên khoa</text>
+        </g>
+        <g class="c-purple">
+          <rect x="298" y="80" width="152" height="30" rx="15" stroke-width="0.5"/>
+          <text class="ts" x="374" y="98" text-anchor="middle" dominant-baseline="central" fill="#3C3489">Hồ sơ & Tham chiếu</text>
+        </g>
+        <g class="c-gray">
+          <rect x="456" y="80" width="60" height="30" rx="15" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="486" y="98" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Kho</text>
+        </g>
+
+        <text class="ts" x="40" y="134" fill="var(--color-text-secondary)">Lý do đăng ký</text>
+        <text class="ts" x="118" y="134" fill="var(--color-text-tertiary)">12</text>
+        <text class="ts" x="132" y="134" fill="var(--color-text-secondary)">Lý do hủy phiếu thu</text>
+        <text class="ts" x="246" y="134" fill="var(--color-text-tertiary)">8</text>
+        <text class="th" x="262" y="134" fill="var(--color-text-primary)">Nhân sự</text>
+        <text class="ts" x="310" y="134" fill="var(--color-text-tertiary)">34</text>
+        <text class="ts" x="328" y="134" fill="var(--color-text-secondary)">Bệnh nhân</text>
+        <text class="ts" x="394" y="134" fill="var(--color-text-tertiary)">12.847</text>
+        <line x1="262" y1="146" x2="308" y2="146" stroke="var(--color-text-primary)" stroke-width="1.5"/>
+
+        <rect x="40" y="166" width="264" height="32" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="52" y="186" fill="var(--color-text-tertiary)">Tìm theo tên, email, vai trò...</text>
+        <text class="ts" x="292" y="186" fill="var(--color-text-tertiary)">/</text>
+
+        <g class="c-gray">
+          <rect x="316" y="166" width="84" height="32" rx="6" stroke-width="0.5"/>
+          <text class="ts" x="358" y="186" text-anchor="middle" dominant-baseline="central">Vai trò ▾</text>
+        </g>
+
+        <text class="ts" x="408" y="186" fill="var(--color-text-secondary)" dominant-baseline="central">34 nhân sự</text>
+
+        <g class="c-blue">
+          <rect x="576" y="166" width="64" height="32" rx="6" stroke-width="0.5"/>
+        </g>
+        <text class="th" x="608" y="186" text-anchor="middle" dominant-baseline="central">+ Thêm</text>
+
+        <rect x="40" y="218" width="220" height="482" rx="12" class="box" stroke-width="0.5"/>
+
+        <rect x="40" y="218" width="220" height="52" fill="var(--c-purple-fill)" opacity="0.4"/>
+        <rect x="40" y="218" width="3" height="52" fill="#534AB7"/>
+        <circle cx="64" cy="244" r="14" fill="var(--c-purple-fill)" stroke="var(--c-purple-stroke)" stroke-width="0.5"/>
+        <text class="ts" x="64" y="248" text-anchor="middle" fill="#3C3489">NM</text>
+        <text class="t" x="86" y="240">Nguyễn Văn Minh</text>
+        <text class="ts" x="86" y="254" fill="var(--color-text-tertiary)">Quản trị viên</text>
+
+        <line x1="40" y1="270" x2="260" y2="270" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <circle cx="64" cy="296" r="14" fill="var(--c-teal-fill)" stroke="var(--c-teal-stroke)" stroke-width="0.5"/>
+        <text class="ts" x="64" y="300" text-anchor="middle" fill="#085041">TH</text>
+        <text class="t" x="86" y="292">Trần Thu Hương</text>
+        <text class="ts" x="86" y="306" fill="var(--color-text-tertiary)">Bác sĩ chẩn đoán hình ảnh</text>
+        <g>
+          <circle cx="242" cy="300" r="3" fill="#1D9E75"/>
+        </g>
+
+        <line x1="40" y1="322" x2="260" y2="322" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <circle cx="64" cy="346" r="14" fill="var(--c-amber-fill)" stroke="var(--c-amber-stroke)" stroke-width="0.5"/>
+        <text class="ts" x="64" y="350" text-anchor="middle" fill="#633806">LA</text>
+        <text class="t" x="86" y="342">Lê Thị Phương Anh</text>
+        <text class="ts" x="86" y="356" fill="var(--color-text-tertiary)">KTV X-quang</text>
+
+        <line x1="40" y1="372" x2="260" y2="372" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <circle cx="64" cy="396" r="14" fill="var(--c-blue-fill)" stroke="var(--c-blue-stroke)" stroke-width="0.5"/>
+        <text class="ts" x="64" y="400" text-anchor="middle" fill="#0C447C">PQ</text>
+        <text class="t" x="86" y="392">Phạm Quang Đức</text>
+        <text class="ts" x="86" y="406" fill="var(--color-text-tertiary)">Tiếp tân</text>
+
+        <line x1="40" y1="422" x2="260" y2="422" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <circle cx="64" cy="446" r="14" fill="var(--c-purple-fill)" stroke="var(--c-purple-stroke)" stroke-width="0.5"/>
+        <text class="ts" x="64" y="450" text-anchor="middle" fill="#3C3489">HL</text>
+        <text class="t" x="86" y="442">Hoàng Lan Linh</text>
+        <text class="ts" x="86" y="456" fill="var(--color-text-tertiary)">Kế toán</text>
+
+        <line x1="40" y1="472" x2="260" y2="472" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <circle cx="64" cy="496" r="14" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="64" y="500" text-anchor="middle" fill="var(--color-text-tertiary)">VA</text>
+        <text class="t" x="86" y="492" fill="var(--color-text-tertiary)">Vũ Tuấn Anh</text>
+        <text class="ts" x="86" y="506" fill="var(--color-text-tertiary)">KTV MRI · tạm ngưng</text>
+
+        <line x1="40" y1="522" x2="260" y2="522" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <circle cx="64" cy="546" r="14" fill="var(--c-teal-fill)" stroke="var(--c-teal-stroke)" stroke-width="0.5"/>
+        <text class="ts" x="64" y="550" text-anchor="middle" fill="#085041">BN</text>
+        <text class="t" x="86" y="542">Bùi Ngọc Mai</text>
+        <text class="ts" x="86" y="556" fill="var(--color-text-tertiary)">Bác sĩ siêu âm</text>
+
+        <line x1="40" y1="572" x2="260" y2="572" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <circle cx="64" cy="596" r="14" fill="var(--c-pink-fill)" stroke="var(--c-pink-stroke)" stroke-width="0.5"/>
+        <text class="ts" x="64" y="600" text-anchor="middle" fill="#72243E">NT</text>
+        <text class="t" x="86" y="592">Ngô Thanh Tú</text>
+        <text class="ts" x="86" y="606" fill="var(--color-text-tertiary)">Điều dưỡng</text>
+
+        <text class="ts" x="150" y="680" text-anchor="middle" fill="var(--color-text-info)">Xem thêm 26 nhân sự ↓</text>
+
+        <rect x="272" y="218" width="368" height="482" rx="12" class="box" stroke-width="0.5"/>
+
+        <text class="th" x="288" y="242">Nguyễn Văn Minh</text>
+        <text class="ts" x="288" y="258" fill="var(--color-text-tertiary)">USR-001 · minh@linkrad.vn</text>
+
+        <text class="ts" x="496" y="258" fill="var(--color-text-tertiary)">Thông tin</text>
+        <text class="ts" x="550" y="258" fill="var(--color-text-tertiary)">Lịch sử</text>
+        <line x1="488" y1="268" x2="536" y2="268" stroke="var(--color-text-primary)" stroke-width="1.5"/>
+
+        <line x1="288" y1="274" x2="624" y2="274" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <rect x="288" y="294" width="72" height="72" rx="8" fill="var(--c-purple-fill)" stroke="var(--c-purple-stroke)" stroke-width="0.5"/>
+        <text class="th" x="324" y="334" text-anchor="middle" dominant-baseline="central" fill="#3C3489">NM</text>
+        <text class="ts" x="324" y="380" text-anchor="middle" fill="var(--color-text-info)">Đổi ảnh</text>
+
+        <text class="ts" x="376" y="306" fill="var(--color-text-secondary)">Họ và tên *</text>
+        <rect x="376" y="312" width="248" height="30" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="388" y="330">Nguyễn Văn Minh</text>
+
+        <text class="ts" x="376" y="358" fill="var(--color-text-secondary)">Vai trò</text>
+        <rect x="376" y="364" width="120" height="30" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="388" y="382">Quản trị viên</text>
+        <text class="ts" x="486" y="382" text-anchor="end" fill="var(--color-text-tertiary)">▾</text>
+
+        <text class="ts" x="504" y="358" fill="var(--color-text-secondary)">Trạng thái</text>
+        <g>
+          <rect x="504" y="368" width="40" height="22" rx="11" fill="#1D9E75"/>
+          <circle cx="534" cy="379" r="9" fill="white"/>
+        </g>
+        <text class="ts" x="552" y="384">Đang làm</text>
+
+        <text class="ts" x="288" y="424" fill="var(--color-text-secondary)">Email</text>
+        <rect x="288" y="430" width="160" height="30" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="300" y="448">minh@linkrad.vn</text>
+
+        <text class="ts" x="460" y="424" fill="var(--color-text-secondary)">Điện thoại</text>
+        <rect x="460" y="430" width="164" height="30" rx="6" fill="var(--color-background-secondary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="t" x="472" y="448">0912 345 678</text>
+
+        <rect x="288" y="478" width="208" height="100" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="300" y="498" fill="var(--color-text-secondary)">Chữ ký</text>
+        <text class="ts" x="484" y="498" text-anchor="end" fill="var(--color-text-info)">Tải lên lại</text>
+
+        <rect x="300" y="506" width="184" height="58" rx="4" fill="var(--color-background-secondary)"/>
+        <path d="M308 548 C316 540, 322 548, 330 536 C336 528, 344 544, 352 530 C360 522, 366 540, 376 526 C386 518, 394 536, 406 522 C418 514, 428 530, 440 518 C452 512, 464 524, 478 514"
+              fill="none" stroke="#171717" stroke-width="1.2" stroke-linecap="round"/>
+
+        <rect x="508" y="478" width="116" height="100" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="520" y="498" fill="var(--color-text-secondary)">Vân tay</text>
+
+        <circle cx="566" cy="532" r="18" fill="var(--c-teal-fill)" stroke="var(--c-teal-stroke)" stroke-width="0.5"/>
+        <path d="M556 530 Q566 520 576 530 M558 535 Q566 527 574 535 M560 540 Q566 534 572 540"
+              fill="none" stroke="#085041" stroke-width="1" stroke-linecap="round"/>
+        <text class="ts" x="566" y="562" text-anchor="middle" fill="#085041">Đã ghi</text>
+        <text class="ts" x="566" y="574" text-anchor="middle" fill="var(--color-text-info)">Ghi nhận lại</text>
+
+        <line x1="288" y1="614" x2="624" y2="614" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="288" y="636" fill="var(--color-text-tertiary)">Lần sửa: Hương · 3 ngày trước</text>
+
+        <g class="node">
+          <rect x="288" y="652" width="72" height="32" rx="6" class="box" stroke-width="0.5"/>
+          <text class="th" x="324" y="668" text-anchor="middle" dominant-baseline="central">Hủy</text>
+        </g>
+        <g class="c-blue">
+          <rect x="548" y="652" width="76" height="32" rx="6" stroke-width="0.5"/>
+        </g>
+        <text class="th" x="586" y="668" text-anchor="middle" dominant-baseline="central">Lưu</text>
+      </svg>
+      <div class="caption">Fig. 6 — nhan_su_master_detail</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>7. Shared patterns worth preserving</h2>
+    <p>Three components show up across every mockup and carry most of the IA weight. The <strong>group pills + sub-catalog tab strip</strong> replaces the flat sidebar on every detail view; it's the one nav component that makes 20 catalogs feel like 4×5 rather than 20. The <strong>row-context drawer with three tabs</strong> (Thông tin / Lịch sử / Điểm sử dụng) is the unified work surface — mockups 2 and 4 are that same drawer in two states. The <strong>verdict banner</strong> (teal / amber / red) appears on the Điểm sử dụng tab <em>and</em> on bulk-delete confirmation — a consistent way to convey "safe / reassign / blocked" whether the admin is acting on one row or forty.</p>
+  </section>
+
+  <section>
+    <h2>8. Keyboard wiring</h2>
+    <p><code>n</code> opens a new-row drawer anywhere inside a catalog; <code>/</code> focuses the toolbar search; <code>j</code> / <code>k</code> move the selection cursor down/up through table rows (and are <em>independent</em> of which row has the drawer open, so an admin can audit-scan a table while keeping one row's drawer pinned); <code>e</code> opens the drawer for the cursor row; <code>Esc</code> closes the drawer but keeps the cursor position, so a quick spot-check on row 12 doesn't lose your place at row 8. On the landing, <code>j</code> / <code>k</code> walk the recent-edits feed; <code>Enter</code> opens the target catalog at that row.</p>
+  </section>
+
+  <section>
+    <h2>9. States to think through before build</h2>
+    <p><strong>Empty catalog</strong> — "Chưa có dữ liệu" with a single <code>+ Thêm</code> button and a secondary "Nhập CSV" link. Don't illustrate, don't onboard; an admin who reached this screen already knows what a catalog is.</p>
+    <p><strong>Permission-scoped read-only</strong> — some catalogs may be view-only for non-admin roles. Row hover doesn't highlight, no drawer opens; the toolbar CTA is absent entirely rather than disabled-grey. Disabled buttons invite "how do I get this enabled?" questions; absent buttons answer that question silently.</p>
+    <p><strong>Bulk action blocked on some rows</strong> — the delete attempt from mockup 5 hits the verdict gate and returns "3 mục đã xóa, 12 mục bị chặn — xem chi tiết →" with a link into a filtered view of the 12 blocked rows. Never silent partial success.</p>
+    <p><strong>Long catalogs</strong> — Bệnh nhân has ~13k rows; the table needs server-side pagination with a readout like "đang xem 1–50 / 12.847" and a jump-to-row input rather than classic numbered pagination. Bệnh nhân might also deserve its own master-detail variant on the same justification as Nhân sự — if you ever surface images or attached docs at that level.</p>
+  </section>
+
+  <section>
+    <h2>10. What I didn't draw and why</h2>
+    <p>I didn't mock the <strong>CSV import step 1 and step 3</strong> — step 1 is a file drop + header mapping matrix (the interesting part is step 2's dry-run I drew) and step 3 is a one-screen confirmation with a "Áp dụng" button that becomes the success toast linking to the audit entry. I also didn't draw the <strong>row-drawer's Lịch sử tab</strong> — it's the same shape as the recent-edits feed on the landing (actor circle, event text, diff hint, timestamp), just filtered to one row with a "Xem trong nhật ký đầy đủ →" out-link. And I didn't mock the <strong>"xóa có kiểm tra" confirmation dialog</strong> that appears when bulk-delete hits blocked rows — it's the verdict banner pattern reused, plus a "Giữ lại 12 mục bị chặn, xóa 3 mục an toàn" explicit action.</p>
+  </section>
+
+  <div class="doc-footer">
+    Design exploration by Claude · LinkRad RIS/PACS/HIS · Danh mục surface · working sketches, translate freely into Tailwind
+  </div>
+
+</div>
+</body>
+</html>

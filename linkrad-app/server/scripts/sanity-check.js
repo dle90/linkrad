@@ -158,8 +158,7 @@ async function run() {
   const catalogEndpoints = [
     'service-types', 'services', 'specialties',
     'referral-doctors', 'partner-facilities', 'commission-groups', 'commission-rules',
-    'registration-reasons', 'billing-cancel-reasons', 'medical-facilities',
-    'tax-groups', 'admin-units', 'users', 'patients',
+    'tax-groups', 'users', 'patients',
   ]
   for (const ep of catalogEndpoints) {
     const r = await request('GET', `/api/catalogs/${ep}`)
@@ -167,14 +166,14 @@ async function run() {
     check(`  has data (${Array.isArray(r.data) ? r.data.length : '?'} items)`, Array.isArray(r.data) && r.data.length >= 0)
   }
 
-  // Test CRUD on a catalog
-  const newDoc = await request('POST', '/api/catalogs/registration-reasons', { code: 'TEST-01', name: 'Test Reason' })
+  // Test CRUD on a catalog (use specialties — simple and live)
+  const newDoc = await request('POST', '/api/catalogs/specialties', { code: 'TEST-01', name: 'Test Specialty' })
   check('POST create catalog item returns 201', newDoc.status === 201)
   if (newDoc.data._id) {
-    const upd = await request('PUT', `/api/catalogs/registration-reasons/${newDoc.data._id}`, { name: 'Test Reason Updated' })
+    const upd = await request('PUT', `/api/catalogs/specialties/${newDoc.data._id}`, { name: 'Test Specialty Updated' })
     check('PUT update catalog item returns 200', upd.status === 200)
-    check('Updated name matches', upd.data.name === 'Test Reason Updated')
-    const del = await request('DELETE', `/api/catalogs/registration-reasons/${newDoc.data._id}`)
+    check('Updated name matches', upd.data.name === 'Test Specialty Updated')
+    const del = await request('DELETE', `/api/catalogs/specialties/${newDoc.data._id}`)
     check('DELETE catalog item returns 200', del.status === 200)
   }
 

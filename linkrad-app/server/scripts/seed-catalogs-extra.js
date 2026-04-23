@@ -9,11 +9,7 @@ const ReferralDoctor = require('../models/ReferralDoctor')
 const PartnerFacility = require('../models/PartnerFacility')
 const CommissionGroup = require('../models/CommissionGroup')
 const CommissionRule = require('../models/CommissionRule')
-const RegistrationReason = require('../models/RegistrationReason')
-const BillingCancelReason = require('../models/BillingCancelReason')
-const MedicalFacility = require('../models/MedicalFacility')
 const TaxGroup = require('../models/TaxGroup')
-const AdminUnit = require('../models/AdminUnit')
 
 async function upsertAll(Model, items) {
   for (const item of items) {
@@ -62,38 +58,6 @@ async function seed() {
   ])
   console.log('✓ 5 quy tắc hoa hồng')
 
-  // ── Registration Reasons ───────────────────────────────
-  await upsertAll(RegistrationReason, [
-    { _id: 'RR-1', code: 'LDDK-01', name: 'Khám theo lịch hẹn' },
-    { _id: 'RR-2', code: 'LDDK-02', name: 'Khám tự đến' },
-    { _id: 'RR-3', code: 'LDDK-03', name: 'Bác sĩ giới thiệu' },
-    { _id: 'RR-4', code: 'LDDK-04', name: 'Tái khám' },
-    { _id: 'RR-5', code: 'LDDK-05', name: 'Cấp cứu' },
-    { _id: 'RR-6', code: 'LDDK-06', name: 'Đặt lịch online' },
-  ])
-  console.log('✓ 6 lý do phiếu đăng ký')
-
-  // ── Billing Cancel Reasons ─────────────────────────────
-  await upsertAll(BillingCancelReason, [
-    { _id: 'BCR-1', code: 'LDHPT-01', name: 'Bệnh nhân yêu cầu hủy' },
-    { _id: 'BCR-2', code: 'LDHPT-02', name: 'Nhập sai thông tin dịch vụ' },
-    { _id: 'BCR-3', code: 'LDHPT-03', name: 'Nhập sai giá dịch vụ' },
-    { _id: 'BCR-4', code: 'LDHPT-04', name: 'Trùng phiếu thu' },
-    { _id: 'BCR-5', code: 'LDHPT-05', name: 'Thay đổi hình thức thanh toán' },
-  ])
-  console.log('✓ 5 lý do hủy phiếu thu')
-
-  // ── Medical Facilities ─────────────────────────────────
-  await upsertAll(MedicalFacility, [
-    { _id: 'MF-1', code: 'CSYT-001', name: 'Bệnh viện Việt Tiệp', level: 'tinh', phone: '02253747373', address: 'Lê Chân, Hải Phòng', description: 'BV đa khoa hạng I tuyến tỉnh' },
-    { _id: 'MF-2', code: 'CSYT-002', name: 'Bệnh viện Bạch Mai', level: 'trung_uong', phone: '02438693731', address: 'Giải Phóng, Hà Nội', description: 'BV đa khoa tuyến trung ương' },
-    { _id: 'MF-3', code: 'CSYT-003', name: 'Bệnh viện Chợ Rẫy', level: 'trung_uong', phone: '02838554137', address: 'Q5, TP HCM', description: 'BV đa khoa tuyến trung ương phía Nam' },
-    { _id: 'MF-4', code: 'CSYT-004', name: 'Bệnh viện Kiến An', level: 'huyen', phone: '02253877777', address: 'Kiến An, HP', description: 'BV đa khoa tuyến huyện' },
-    { _id: 'MF-5', code: 'CSYT-005', name: 'Trạm Y tế Đường An', level: 'xa', phone: '02253000001', address: 'An Dương, HP', description: 'Trạm y tế tuyến xã' },
-    { _id: 'MF-6', code: 'CSYT-006', name: 'Phòng khám Đa khoa Hải Phòng', level: 'phong_kham', phone: '02253111111', address: 'Ngô Quyền, HP', description: 'Phòng khám đa khoa tư nhân' },
-  ])
-  console.log('✓ 6 cơ sở y tế (theo BYT)')
-
   // ── Tax Groups ─────────────────────────────────────────
   await upsertAll(TaxGroup, [
     { _id: 'TG-1', code: 'NotTaxable', name: 'Nhóm không chịu thuế', description: 'KCT', vatType: 'exempt', rate: 0, branchCode: 'all' },
@@ -103,23 +67,6 @@ async function seed() {
     { _id: 'TG-5', code: 'VAT0', name: 'Nhóm 0%', description: '', vatType: 'percentage', rate: 0, branchCode: 'all' },
   ])
   console.log('✓ 4 nhóm thuế dịch vụ')
-
-  // ── Admin Units (sample) ───────────────────────────────
-  await upsertAll(AdminUnit, [
-    { _id: 'AU-HP', code: '31', name: 'Thành phố Hải Phòng', level: 'province', parentCode: null, fullName: 'Thành phố Hải Phòng' },
-    { _id: 'AU-HN', code: '01', name: 'Thành phố Hà Nội', level: 'province', parentCode: null, fullName: 'Thành phố Hà Nội' },
-    { _id: 'AU-HCM', code: '79', name: 'Thành phố Hồ Chí Minh', level: 'province', parentCode: null, fullName: 'Thành phố Hồ Chí Minh' },
-    { _id: 'AU-HP-LC', code: '31-03', name: 'Quận Lê Chân', level: 'district', parentCode: '31', fullName: 'Quận Lê Chân, TP Hải Phòng' },
-    { _id: 'AU-HP-NQ', code: '31-01', name: 'Quận Ngô Quyền', level: 'district', parentCode: '31', fullName: 'Quận Ngô Quyền, TP Hải Phòng' },
-    { _id: 'AU-HP-AD', code: '31-07', name: 'Huyện An Dương', level: 'district', parentCode: '31', fullName: 'Huyện An Dương, TP Hải Phòng' },
-    { _id: 'AU-HP-KA', code: '31-09', name: 'Quận Kiến An', level: 'district', parentCode: '31', fullName: 'Quận Kiến An, TP Hải Phòng' },
-    { _id: 'AU-HP-HB', code: '31-05', name: 'Quận Hải An', level: 'district', parentCode: '31', fullName: 'Quận Hải An, TP Hải Phòng' },
-    { _id: 'AU-HP-AD-DA', code: '31-07-01', name: 'Xã Đường An', level: 'ward', parentCode: '31-07', fullName: 'Xã Đường An, Huyện An Dương, TP Hải Phòng' },
-    { _id: 'AU-HP-AD-AD', code: '31-07-02', name: 'Thị trấn An Dương', level: 'ward', parentCode: '31-07', fullName: 'TT An Dương, Huyện An Dương, TP Hải Phòng' },
-    { _id: 'AU-HP-LC-TL', code: '31-03-01', name: 'Phường Trại Lẻ', level: 'ward', parentCode: '31-03', fullName: 'Phường Trại Lẻ, Quận Lê Chân, TP Hải Phòng' },
-    { _id: 'AU-HP-NQ-MP', code: '31-01-01', name: 'Phường Máy Phiên', level: 'ward', parentCode: '31-01', fullName: 'Phường Máy Phiên, Quận Ngô Quyền, TP Hải Phòng' },
-  ])
-  console.log('✓ 12 đơn vị hành chính mẫu (3 tỉnh, 5 quận/huyện, 4 phường/xã)')
 
   console.log('\n✅ Seed catalogs hoàn tất!')
   process.exit(0)

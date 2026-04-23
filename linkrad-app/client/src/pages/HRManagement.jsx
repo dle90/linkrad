@@ -24,7 +24,7 @@ const DEPT_TYPE_LABEL = { branch: 'Chi nhánh', hq: 'Phòng ban' }
 // ═══════════════════════════════════════════════════════
 // EMPLOYEE LIST & FORM
 // ═══════════════════════════════════════════════════════
-function EmployeeSection() {
+export function EmployeeSection() {
   const [employees, setEmployees] = useState([])
   const [departments, setDepartments] = useState([])
   const [roles, setRoles] = useState([])
@@ -266,7 +266,7 @@ function EmployeeSection() {
 // ═══════════════════════════════════════════════════════
 // DEPARTMENT LIST & FORM
 // ═══════════════════════════════════════════════════════
-function DepartmentSection() {
+export function DepartmentSection() {
   const [departments, setDepartments] = useState([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
@@ -389,7 +389,7 @@ function DepartmentSection() {
 // ═══════════════════════════════════════════════════════
 // PERMISSION MATRIX
 // ═══════════════════════════════════════════════════════
-function PermissionMatrix() {
+export function PermissionMatrix() {
   const [roles, setRoles] = useState([])
   const [permDefs, setPermDefs] = useState({ permissions: {}, groups: [] })
   const [loading, setLoading] = useState(true)

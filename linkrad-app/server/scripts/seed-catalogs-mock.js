@@ -16,9 +16,6 @@ const Specialty = require('../models/Specialty')
 const ServiceType = require('../models/ServiceType')
 const TaxGroup = require('../models/TaxGroup')
 const Service = require('../models/Service')
-const MedicalFacility = require('../models/MedicalFacility')
-const RegistrationReason = require('../models/RegistrationReason')
-const BillingCancelReason = require('../models/BillingCancelReason')
 const ReferralDoctor = require('../models/ReferralDoctor')
 const PartnerFacility = require('../models/PartnerFacility')
 const CommissionGroup = require('../models/CommissionGroup')
@@ -77,25 +74,6 @@ async function seed() {
     { _id: 'SVC-MOCK-011', code: 'MR002', name: 'MRI cột sống thắt lưng',   serviceTypeCode: 'CDHA', modality: 'MRI', bodyPart: 'Cột sống',   basePrice: 2800000, unit: 'lần', technicalInfo: '' },
     { _id: 'SVC-MOCK-012', code: 'XN001', name: 'Công thức máu',            serviceTypeCode: 'XN',   modality: 'LAB', bodyPart: '',           basePrice: 80000,   unit: 'lần', technicalInfo: '' },
   ], 'Dịch vụ')
-
-  await upsert(MedicalFacility, [
-    { _id: 'MF-MOCK-01', code: 'BVBACH', name: 'Bệnh viện Bạch Mai',         level: 'trung_uong', phone: '02438693731', address: '78 Giải Phóng, Đống Đa, Hà Nội',    description: '' },
-    { _id: 'MF-MOCK-02', code: 'BVVIET', name: 'Bệnh viện Hữu nghị Việt Đức', level: 'trung_uong', phone: '02438253531', address: '40 Tràng Thi, Hoàn Kiếm, Hà Nội',   description: '' },
-    { _id: 'MF-MOCK-03', code: 'PKVIN',  name: 'Phòng khám Vinmec Times City',level: 'phong_kham', phone: '02439743556', address: '458 Minh Khai, Hai Bà Trưng, Hà Nội', description: '' },
-  ], 'Cơ sở y tế')
-
-  await upsert(RegistrationReason, [
-    { _id: 'RR-MOCK-01', code: 'KHAMDK',  name: 'Khám định kỳ' },
-    { _id: 'RR-MOCK-02', code: 'TRIEUC',  name: 'Có triệu chứng' },
-    { _id: 'RR-MOCK-03', code: 'TAIKHAM', name: 'Tái khám theo hẹn' },
-    { _id: 'RR-MOCK-04', code: 'KHAC',    name: 'Khác' },
-  ], 'Lý do đăng ký')
-
-  await upsert(BillingCancelReason, [
-    { _id: 'BCR-MOCK-01', code: 'BNHUY',    name: 'Bệnh nhân hủy' },
-    { _id: 'BCR-MOCK-02', code: 'NHAPSAI',  name: 'Nhập sai thông tin' },
-    { _id: 'BCR-MOCK-03', code: 'KHAC',     name: 'Khác' },
-  ], 'Lý do huỷ phiếu thu')
 
   await upsert(ReferralDoctor, [
     { _id: 'RD-MOCK-01', code: 'BS001', name: 'BS. Nguyễn Văn Hùng',   phone: '0912345001', specialty: 'Nội khoa',     workplace: 'BV Bạch Mai',    area: 'Hà Nội',     gender: 'M', paymentMethod: 'transfer', assignedStaff: '' },
