@@ -67,7 +67,7 @@ const MODALITIES = [
 ]
 
 // ── Filter bar ────────────────────────────────────────────────
-function FilterBar({ filters, setFilters, granularityToggle = false }) {
+export function FilterBar({ filters, setFilters, granularityToggle = false }) {
   const upd = (k, v) => setFilters(f => ({ ...f, [k]: v }))
   return (
     <div className="flex items-center gap-3 mb-3 flex-wrap bg-white rounded-lg border p-3">
@@ -160,7 +160,7 @@ function useReportLoader(endpoint, filters) {
   return { data, loading, reload: load }
 }
 
-function CasesByMachineReport({ filters }) {
+export function CasesByMachineReport({ filters }) {
   const { data, loading } = useReportLoader('/reports/rad/cases-by-machine', filters)
   const cols = [
     { key: 'stt', label: 'STT', render: (_, i) => i + 1, cls: 'text-gray-400' },
@@ -192,7 +192,7 @@ function CasesByMachineReport({ filters }) {
   )
 }
 
-function CasesByMachineGroupReport({ filters }) {
+export function CasesByMachineGroupReport({ filters }) {
   const { data, loading } = useReportLoader('/reports/rad/cases-by-machine-group', filters)
   const cols = [
     { key: 'stt', label: 'STT', render: (_, i) => i + 1, cls: 'text-gray-400' },
@@ -224,7 +224,7 @@ function CasesByMachineGroupReport({ filters }) {
   )
 }
 
-function CasesByRadiologistReport({ filters }) {
+export function CasesByRadiologistReport({ filters }) {
   const { data, loading } = useReportLoader('/reports/rad/cases-by-radiologist', filters)
   const cols = [
     { key: 'stt', label: 'STT', render: (_, i) => i + 1, cls: 'text-gray-400' },
@@ -259,7 +259,7 @@ function CasesByRadiologistReport({ filters }) {
   )
 }
 
-function CasesByRadiologistModalityReport({ filters }) {
+export function CasesByRadiologistModalityReport({ filters }) {
   const { data, loading } = useReportLoader('/reports/rad/cases-by-radiologist-modality', filters)
   const modalities = data.modalities || []
   const cols = [
@@ -277,7 +277,7 @@ function CasesByRadiologistModalityReport({ filters }) {
   return <ReportTable columns={cols} rows={data.rows} loading={loading} footerRow={totals} />
 }
 
-function CasesByTimeReport({ filters }) {
+export function CasesByTimeReport({ filters }) {
   const { data, loading } = useReportLoader('/reports/rad/cases-by-time', filters)
   const max = Math.max(1, ...data.rows.map(r => r.count))
   const cols = [
@@ -316,7 +316,7 @@ function CasesByTimeReport({ filters }) {
   )
 }
 
-function ServicesDetailReport({ filters }) {
+export function ServicesDetailReport({ filters }) {
   const { data, loading } = useReportLoader('/reports/rad/services-detail', { ...filters, includeAll: 1 })
   const cols = [
     { key: 'stt', label: 'STT', render: (_, i) => i + 1, cls: 'text-gray-400' },
@@ -337,7 +337,7 @@ function ServicesDetailReport({ filters }) {
   return <ReportTable columns={cols} rows={data.rows} loading={loading} />
 }
 
-function PatientListReport({ filters }) {
+export function PatientListReport({ filters }) {
   const { data, loading } = useReportLoader('/reports/rad/patient-list', filters)
   const cols = [
     { key: 'stt', label: 'STT', render: (_, i) => i + 1, cls: 'text-gray-400' },

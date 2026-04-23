@@ -216,7 +216,37 @@ The infrastructure from Phase 2 (snapshotted `effectiveSalespersonId` per invoic
 - **Reorder-point per warehouse**: `Supply.minimumStock` is a global default applied at every warehouse in the matrix. If a clinic wants different thresholds per site (e.g. HN handles more CT, needs more contrast), we'd add a `SupplyWarehouseConfig { supplyId, warehouseId, minimumStock }` collection. Defer until someone asks.
 - **Auto-release on transfer timeout**: if a transfer_out is issued but the dest never confirms receipt, stock is stuck. Decide a policy (auto-confirm after N days? auto-cancel? dashboard alert?).
 
-## Next session queue (set 2026-04-22, updated 2026-04-23)
+## Báo cáo R1 done 2026-04-24
+
+Unified the reporting surface end-to-end, matching the Danh mục sidebar-tree pattern.
+
+**Before**: 3 Dashboard sidebar entries + 15 per-report sidebar entries = **18 surfaces** across [Reports.jsx](linkrad-app/client/src/pages/Reports.jsx), [RadiologyReports.jsx](linkrad-app/client/src/pages/RadiologyReports.jsx), [DashboardClinical.jsx](linkrad-app/client/src/pages/DashboardClinical.jsx), [DashboardOps.jsx](linkrad-app/client/src/pages/DashboardOps.jsx), [DashboardFinance.jsx](linkrad-app/client/src/pages/DashboardFinance.jsx).
+
+**After**: 7 surfaces in one tree:
+```
+📊 Báo cáo
+  • Tổng Quan (placeholder — R2)
+  ▾ Lâm sàng     → Tổng quan (DashboardClinical) · Ca chụp / Ca đọc (unified, 7→1)
+  ▾ Vận Hành     → Tổng quan (DashboardOps) · Kho (placeholder → R2)
+  ▾ Tài Chính    → Tổng quan (DashboardFinance) · Doanh thu (unified, 6→1)
+```
+
+- Shared tree config at [src/config/reportGroups.js](linkrad-app/client/src/config/reportGroups.js) — same pattern as catalogGroups.js
+- Sidebar `Báo cáo` becomes collapsible tree via new `<ReportTree>` component in [Layout.jsx](linkrad-app/client/src/components/Layout.jsx); state persists in `linkrad_report_tree_expanded` localStorage
+- `Dashboard` sidebar group removed entirely
+- Old `/rad-reports/*` + `/dashboard/{clinical,ops,finance}` URLs redirect to the new tree via `<Navigate>` — muscle-memory bookmarks still work
+- `Ca chụp / Ca đọc` unified page has a horizontal group-by picker (7 dimensions: Thời gian / Máy / Nhóm máy / BS đọc / BS × Modality / Dịch vụ / Bệnh nhân) that dispatches to the existing per-dimension renderers from RadiologyReports.jsx (now exported)
+- `Doanh thu` unified page dispatches to 7 existing business-report renderers (KPI NVKD parked for future Vận Hành tab)
+- Legacy page components `RadiologyReports` / `Reports` per-report renderers kept as exports — used as building blocks by the unified pages, no functional change to the data fetches themselves
+- `/catalogs/medical-facilities` removal from an earlier pass already pointed Reports.jsx to `/hr/departments?type=branch` for branch filtering — branches now come from Department master everywhere
+
+**Deferred to R2** (Claude Design prompt queued in the 2026-04-24 chat for the next wireframe pass):
+- Tổng Quan executive dashboard with 6-10 cross-persona KPIs + sparkline tiles (this-month revenue · MoM · cases today · TAT · top services · unpaid receivables · pending read queue · inventory below min etc.)
+- Shared FilterBar across all reports with date preset + site filter — currently each per-dim renderer still has its own bespoke filter UI
+- Proper unified Kho report (tiêu thụ vật tư / sổ kho / tồn theo chi nhánh) with group-by — R1 stubs to the /inventory workspace
+- Server-side consolidation: merge the 7 `/rad-reports/*` and 7 `/reports/*` endpoints into two group-by-aware endpoints (low priority; the client dispatch hides the split today)
+
+## Next session queue (set 2026-04-22, updated 2026-04-24)
 
 - **UIUX pass on Danh mục Pass A done 2026-04-23** — PageHeader strip, killed dark-navy `#1e3a5f` headers in UsersTable+PatientsTable, unified toolbar (search + status filter + count + ＋ Thêm), client-side pagination 50/page with Tải thêm, column sort, empty-state CTA, house-style buttons throughout.
 - **Danh mục dead-catalog cleanup done 2026-04-23** — 3 catalogs confirmed zero workflow consumers and deleted: `RegistrationReason` (never picked in Registration), `BillingCancelReason` (Invoice.cancelReason is free-text; no picker — there's a separate `CancelReason` model used by Inventory which stayed), `AdminUnit` (Registration.jsx hardcodes `ADDR_SHORTCUTS`). Removed: 3 models, 3 `catalogCRUD` registrations in [routes/catalogs.js](linkrad-app/server/routes/catalogs.js), the `/admin-units/bulk` custom route, sidebar entries in [Layout.jsx](linkrad-app/client/src/components/Layout.jsx), MENU + CATALOG_FIELDS in [Catalogs.jsx](linkrad-app/client/src/pages/Catalogs.jsx), seed entries in `seed-catalogs-mock.js` + `seed-catalogs-extra.js` + `seed-catalogs-mock-remove.js`, and sanity-check CRUD probe. Prod collections untouched — if a future need surfaces, docs still exist in Atlas.

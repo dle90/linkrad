@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkRad — Báo cáo design sketches</title>
+  <style>
+    :root {
+      --color-background-page: #fafaf9;
+      --color-background-primary: #ffffff;
+      --color-background-secondary: #f5f5f4;
+      --color-background-warning: #fef3c7;
+      --color-background-danger: #fee2e2;
+      --color-background-info: #dbeafe;
+
+      --color-text-primary: #171717;
+      --color-text-secondary: #525252;
+      --color-text-tertiary: #a3a3a3;
+      --color-text-warning: #b45309;
+      --color-text-danger: #b91c1c;
+      --color-text-info: #1d4ed8;
+
+      --color-border-primary: #e5e5e5;
+      --color-border-tertiary: #e5e5e5;
+      --color-border-warning: #fbbf24;
+      --color-border-danger: #f87171;
+
+      --c-blue-fill: #E6F1FB;
+      --c-blue-stroke: #85B7EB;
+      --c-teal-fill: #E1F5EE;
+      --c-teal-stroke: #5DCAA5;
+      --c-gray-fill: #F1EFE8;
+      --c-gray-stroke: #B4B2A9;
+      --c-amber-fill: #FAEEDA;
+      --c-amber-stroke: #EF9F27;
+      --c-purple-fill: #EEEDFE;
+      --c-purple-stroke: #AFA9EC;
+      --c-red-fill: #FCEBEB;
+      --c-red-stroke: #F09595;
+      --c-coral-fill: #FAECE7;
+      --c-coral-stroke: #F0997B;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--color-background-page);
+      color: var(--color-text-primary);
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 72px 32px 120px;
+    }
+
+    .doc-header {
+      margin-bottom: 48px;
+      padding-bottom: 32px;
+      border-bottom: 0.5px solid var(--color-border-primary);
+    }
+
+    .doc-header .eyebrow {
+      font-size: 12px;
+      color: var(--color-text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+    }
+
+    .doc-header h1 {
+      font-size: 32px;
+      font-weight: 500;
+      line-height: 1.25;
+      margin: 0 0 12px 0;
+      letter-spacing: -0.01em;
+    }
+
+    .doc-header .sub {
+      color: var(--color-text-secondary);
+      font-size: 16px;
+      margin: 0;
+    }
+
+    section { margin-bottom: 64px; }
+
+    section h2 {
+      font-size: 22px;
+      font-weight: 500;
+      line-height: 1.3;
+      margin: 0 0 20px 0;
+      letter-spacing: -0.005em;
+    }
+
+    section h3 {
+      font-size: 16px;
+      font-weight: 500;
+      margin: 32px 0 12px 0;
+    }
+
+    p {
+      margin: 0 0 16px 0;
+      color: var(--color-text-primary);
+    }
+
+    strong { font-weight: 500; color: var(--color-text-primary); }
+    em { font-style: italic; }
+
+    a {
+      color: var(--color-text-info);
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.88em;
+      background: var(--color-background-secondary);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .framing {
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-primary);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 48px;
+    }
+    .framing p:last-child { margin-bottom: 0; }
+
+    .mockup {
+      margin: 32px 0 16px 0;
+      background: var(--color-background-primary);
+      border: 0.5px solid var(--color-border-primary);
+      border-radius: 12px;
+      padding: 24px;
+      overflow: hidden;
+    }
+
+    .mockup svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-width: 100%;
+    }
+
+    .mockup .caption {
+      font-size: 12px;
+      color: var(--color-text-tertiary);
+      margin-top: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    svg text {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      fill: var(--color-text-primary);
+    }
+
+    svg .t { font-size: 14px; }
+    svg .ts { font-size: 12px; }
+    svg .th { font-size: 14px; font-weight: 500; }
+
+    svg .box {
+      fill: var(--color-background-primary);
+      stroke: var(--color-border-primary);
+    }
+
+    svg .c-blue   rect { fill: var(--c-blue-fill);   stroke: var(--c-blue-stroke); }
+    svg .c-teal   rect { fill: var(--c-teal-fill);   stroke: var(--c-teal-stroke); }
+    svg .c-gray   rect { fill: var(--c-gray-fill);   stroke: var(--c-gray-stroke); }
+    svg .c-amber  rect { fill: var(--c-amber-fill);  stroke: var(--c-amber-stroke); }
+    svg .c-purple rect { fill: var(--c-purple-fill); stroke: var(--c-purple-stroke); }
+    svg .c-red    rect { fill: var(--c-red-fill);    stroke: var(--c-red-stroke); }
+    svg .c-coral  rect { fill: var(--c-coral-fill);  stroke: var(--c-coral-stroke); }
+
+    svg .node rect {
+      fill: var(--color-background-primary);
+      stroke: var(--color-border-primary);
+    }
+
+    .doc-footer {
+      margin-top: 96px;
+      padding-top: 32px;
+      border-top: 0.5px solid var(--color-border-primary);
+      color: var(--color-text-tertiary);
+      font-size: 13px;
+    }
+
+    @media (max-width: 640px) {
+      .wrap { padding: 48px 20px 80px; }
+      .doc-header h1 { font-size: 26px; }
+      section h2 { font-size: 20px; }
+      .mockup { padding: 16px 12px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc-header">
+    <div class="eyebrow">Design exploration · LinkRad</div>
+    <h1>Báo cáo — reports surface</h1>
+    <p class="sub">Exec dashboard, unified detail reports for clinical and finance, and the Kho ledger. One shared shape across domains, with mode-toggle and cross-tab mechanics. Sketches; translate freely into Tailwind.</p>
+  </header>
+
+  <div class="framing">
+    <p><strong>Before sketching: four reframes on the brief.</strong></p>
+    <p><strong>Reframe 1 — Tổng Quan is an attention surface, not a KPI poster.</strong> The brief lists 10 candidate KPIs and asks which 6–10 to keep. Wrong question. A morning-read dashboard should answer "do I need to do anything today?" in three seconds. That means the top of the page is a <em>triage row</em> that only shows when something's wrong (the brief's alert row, elevated to primary), and KPIs below are a secondary <em>status check</em>. On a healthy day, the page reads mostly calm — which is itself the signal. A wall of 10 sparklines demands the same attention whether it's a good day or a bad one, so none of them actually get it.</p>
+    <p><strong>Reframe 2 — persona-row grouping beats priority-mixing.</strong> The brief asks which; I'd pick clinical / ops / finance rows without hesitation. The giám đốc reads them in a specific order (is the clinic running? is money flowing? are we behind on anything?), and a row-per-persona lets them scan one row and decide if they need to look further. Priority-mixing assumes everyone's priorities are the same, which they aren't across clinic chains. Rows also mean you can hide an entire persona if a user doesn't have access without the page looking broken.</p>
+    <p><strong>Reframe 3 — "group-by picker" is really two different controls.</strong> The primary dimension is what the chart and table are <em>organized by</em>. The secondary dimension is a cross-tab modifier and fundamentally changes the shape of the output (bar chart → stacked bar, table → matrix). If they're rendered as one unified pill row the user can't tell which one is doing what. I'd split them: primary as a bold "Xem theo" pill group (always one selected), secondary as a smaller optional "× chia theo" chip that appears inactive until toggled on. The <code>×</code> glyph names the operation — this is a cross-tab.</p>
+    <p><strong>Reframe 4 — "Không (raw rows)" is a different mode, not a group-by option.</strong> The brief lists it as one choice among seven for Doanh thu. But "ungrouped" means: no chart, no summary pivot, yes pagination, yes column-level sort, probably different default columns. That's not a group-by value — that's a view mode. I'd separate: <strong>Chế độ:</strong> <code>Xem tổng hợp</code> / <code>Xem từng dòng</code> toggle, with Xem theo and chia theo only appearing when Xem tổng hợp is active. Collapses the seven-option dropdown to six + a view switch. Also makes the mental model obvious: grouped-and-summarized vs. raw-transactions.</p>
+  </div>
+
+  <section>
+    <h2>1. Tổng Quan — the morning read</h2>
+    <p>Top of page is the <strong>triage row</strong> — only renders when it contains items; on a clean morning it collapses to a single-line "Không có cảnh báo nào" and takes up no vertical budget. Below the filter strip sit three persona rows stacked: clinical, ops, finance. Each row has its KPIs at roughly equal weight so the eye scans left-to-right inside a persona without hierarchy questions, then jumps down to the next persona.</p>
+    <p>Every KPI tile carries four things: label, current value, delta vs. comparison period (with direction and semantic color — but <strong>semantic color on the delta only, never the value</strong> — a healthy revenue number shouldn't glow green, that's alert fatigue), and a sparkline. The comparison period matches the filter (tháng này → vs. tháng trước; today → vs. hôm qua). Tile-click deep-links to the detail report for that domain, pre-filtered to the same date range and site. Hover reveals the link affordance in the bottom-right corner — not a button, because it'd compete with the number.</p>
+    <p>One design call worth naming: <code>Ca quá hạn TAT</code> and <code>Vật tư dưới định mức</code> appear in <strong>both</strong> the triage row (when &gt;0) and their persona row (always). That's intentional. The triage row is "you must act today"; the persona row is "here's the status, for context." Duplicating the number isn't redundant — it's the same value seen through two lenses, the way Điểm sử dụng and Lần sửa are two lenses on the same row in Danh mục.</p>
+
+    <div class="mockup">
+      <svg width="100%" viewBox="0 0 680 820" role="img">
+        <title>Tổng Quan — executive dashboard</title>
+        <desc>Exec morning-read dashboard. Triage alert strip at top, filter bar with date range and site, three persona rows (clinical, ops, finance) each containing three to four KPI tiles with sparklines and delta chips.</desc>
+
+        <text x="40" y="38" font-size="18" font-weight="500" fill="var(--color-text-primary)">Tổng Quan</text>
+        <text class="ts" x="40" y="56" fill="var(--color-text-secondary)">Báo cáo · Tổng Quan</text>
+
+        <g class="c-gray">
+          <rect x="492" y="28" width="64" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="524" y="40" text-anchor="middle" dominant-baseline="central">23/04</text>
+        </g>
+        <g class="c-gray">
+          <rect x="564" y="28" width="76" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="602" y="40" text-anchor="middle" dominant-baseline="central">Giám đốc ▾</text>
+        </g>
+
+        <g class="c-red">
+          <rect x="40" y="80" width="600" height="52" rx="8" stroke-width="0.5"/>
+        </g>
+        <path d="M62 100L68 112L56 112Z" fill="#A32D2D"/>
+        <circle cx="62" cy="108" r="0.5" fill="white"/>
+        <text class="th" x="80" y="104" fill="#501313">2 vấn đề cần xử lý hôm nay</text>
+        <text class="ts" x="80" y="122" fill="#791F1F">3 ca quá hạn TAT (p95 &gt; 4h) · 15 vật tư dưới định mức tại Hà Nội &amp; HCM</text>
+        <text class="ts" x="624" y="108" text-anchor="end" fill="#501313">Xem →</text>
+
+        <rect x="40" y="152" width="600" height="40" rx="8" fill="var(--color-background-primary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="56" y="176" fill="var(--color-text-tertiary)">Kỳ:</text>
+        <g class="c-gray">
+          <rect x="82" y="162" width="120" height="22" rx="11" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="142" y="173" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Hôm nay</text>
+        </g>
+        <g class="c-blue">
+          <rect x="208" y="162" width="120" height="22" rx="11" stroke-width="0.5"/>
+          <text class="ts" x="268" y="173" text-anchor="middle" dominant-baseline="central" fill="#0C447C">Tháng này</text>
+        </g>
+        <g class="c-gray">
+          <rect x="334" y="162" width="108" height="22" rx="11" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="388" y="173" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Quý này</text>
+        </g>
+        <g class="c-gray">
+          <rect x="448" y="162" width="108" height="22" rx="11" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="502" y="173" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Tùy chỉnh ▾</text>
+        </g>
+
+        <text class="ts" x="562" y="176" fill="var(--color-text-tertiary)">|</text>
+        <text class="ts" x="576" y="176" fill="var(--color-text-secondary)">Tất cả CN ▾</text>
+        <text class="ts" x="640" y="176" text-anchor="end" fill="var(--color-text-tertiary)">/</text>
+
+        <text class="ts" x="40" y="216" fill="var(--color-text-tertiary)">LÂM SÀNG</text>
+        <text class="ts" x="640" y="216" text-anchor="end" fill="var(--color-text-info)">Tổng quan Lâm sàng →</text>
+
+        <rect x="40" y="226" width="145" height="86" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="56" y="246" fill="var(--color-text-secondary)">Ca chụp</text>
+        <text x="56" y="276" font-size="22" font-weight="500" fill="var(--color-text-primary)">412</text>
+        <g class="c-teal">
+          <rect x="110" y="262" width="62" height="18" rx="9" stroke-width="0.5"/>
+          <text class="ts" x="141" y="271" text-anchor="middle" dominant-baseline="central" fill="#085041">+12% MoM</text>
+        </g>
+        <polyline points="56,300 68,298 80,294 92,296 104,290 116,285 128,284 140,280 152,283 164,278 172,274"
+                 fill="none" stroke="#1D9E75" stroke-width="1.2" opacity="0.7"/>
+
+        <rect x="193" y="226" width="145" height="86" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="209" y="246" fill="var(--color-text-secondary)">TAT p50</text>
+        <text x="209" y="276" font-size="22" font-weight="500" fill="var(--color-text-primary)">2,4</text>
+        <text class="ts" x="243" y="276">giờ</text>
+        <g class="c-teal">
+          <rect x="260" y="262" width="62" height="18" rx="9" stroke-width="0.5"/>
+          <text class="ts" x="291" y="271" text-anchor="middle" dominant-baseline="central" fill="#085041">−0,3h</text>
+        </g>
+        <polyline points="209,294 221,296 233,298 245,295 257,298 269,292 281,294 293,290 305,292 317,289 325,288"
+                 fill="none" stroke="#1D9E75" stroke-width="1.2" opacity="0.7"/>
+
+        <rect x="346" y="226" width="145" height="86" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="362" y="246" fill="var(--color-text-secondary)">TAT p95</text>
+        <text x="362" y="276" font-size="22" font-weight="500" fill="var(--color-text-danger)">5,1</text>
+        <text class="ts" x="396" y="276">giờ</text>
+        <g class="c-red">
+          <rect x="416" y="262" width="62" height="18" rx="9" stroke-width="0.5"/>
+          <text class="ts" x="447" y="271" text-anchor="middle" dominant-baseline="central" fill="#791F1F">+0,7h</text>
+        </g>
+        <polyline points="362,296 374,295 386,294 398,292 410,293 422,290 434,289 446,286 458,283 470,280 478,276"
+                 fill="none" stroke="#A32D2D" stroke-width="1.2" opacity="0.7"/>
+
+        <rect x="499" y="226" width="141" height="86" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="515" y="246" fill="var(--color-text-secondary)">BS. đọc top</text>
+        <text class="t" x="515" y="270">BS. Hương</text>
+        <text class="ts" x="515" y="284" fill="var(--color-text-tertiary)">88 ca / tháng</text>
+        <text class="ts" x="624" y="270" text-anchor="end" fill="var(--color-text-primary)">88</text>
+        <text class="ts" x="624" y="284" text-anchor="end" fill="var(--color-text-tertiary)">+3</text>
+        <line x1="515" y1="294" x2="624" y2="294" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="515" y="306" fill="var(--color-text-tertiary)">BS. Dũng 74 · BS. An 67</text>
+
+        <text class="ts" x="40" y="352" fill="var(--color-text-tertiary)">VẬN HÀNH</text>
+        <text class="ts" x="640" y="352" text-anchor="end" fill="var(--color-text-info)">Tổng quan Vận hành →</text>
+
+        <rect x="40" y="362" width="145" height="86" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="56" y="382" fill="var(--color-text-secondary)">Bệnh nhân tiếp nhận</text>
+        <text x="56" y="412" font-size="22" font-weight="500" fill="var(--color-text-primary)">1.847</text>
+        <g class="c-teal">
+          <rect x="126" y="398" width="46" height="18" rx="9" stroke-width="0.5"/>
+          <text class="ts" x="149" y="407" text-anchor="middle" dominant-baseline="central" fill="#085041">+8%</text>
+        </g>
+        <polyline points="56,436 68,434 80,432 92,430 104,430 116,428 128,426 140,425 152,422 164,420 172,418"
+                 fill="none" stroke="#1D9E75" stroke-width="1.2" opacity="0.7"/>
+
+        <rect x="193" y="362" width="145" height="86" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="209" y="382" fill="var(--color-text-secondary)">Ca chờ đọc</text>
+        <text x="209" y="412" font-size="22" font-weight="500" fill="var(--color-text-warning)">24</text>
+        <g class="c-amber">
+          <rect x="240" y="398" width="82" height="18" rx="9" stroke-width="0.5"/>
+          <text class="ts" x="281" y="407" text-anchor="middle" dominant-baseline="central" fill="#633806">3 quá hạn</text>
+        </g>
+        <polyline points="209,428 221,428 233,430 245,432 257,430 269,434 281,432 293,436 305,434 317,432 325,430"
+                 fill="none" stroke="#BA7517" stroke-width="1.2" opacity="0.7"/>
+
+        <rect x="346" y="362" width="145" height="86" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="362" y="382" fill="var(--color-text-secondary)">Vật tư &lt; định mức</text>
+        <text x="362" y="412" font-size="22" font-weight="500" fill="var(--color-text-danger)">15</text>
+        <text class="ts" x="386" y="412">mục</text>
+        <g class="c-red">
+          <rect x="406" y="398" width="72" height="18" rx="9" stroke-width="0.5"/>
+          <text class="ts" x="442" y="407" text-anchor="middle" dominant-baseline="central" fill="#791F1F">+5 tuần này</text>
+        </g>
+        <polyline points="362,430 374,430 386,428 398,430 410,428 422,426 434,426 446,424 458,420 470,418 478,414"
+                 fill="none" stroke="#A32D2D" stroke-width="1.2" opacity="0.7"/>
+
+        <rect x="499" y="362" width="141" height="86" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="515" y="382" fill="var(--color-text-secondary)">Sai khác tự động</text>
+        <text x="515" y="412" font-size="22" font-weight="500" fill="var(--color-text-primary)">7</text>
+        <text class="ts" x="534" y="412">ca / tháng</text>
+        <g class="c-gray">
+          <rect x="568" y="398" width="56" height="18" rx="9" stroke-width="0.5"/>
+          <text class="ts" x="596" y="407" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">ổn định</text>
+        </g>
+        <polyline points="515,432 525,432 535,430 545,432 555,430 565,432 575,430 585,432 595,430 605,432 615,430"
+                 fill="none" stroke="#888780" stroke-width="1.2" opacity="0.5"/>
+
+        <text class="ts" x="40" y="488" fill="var(--color-text-tertiary)">TÀI CHÍNH</text>
+        <text class="ts" x="640" y="488" text-anchor="end" fill="var(--color-text-info)">Tổng quan Tài chính →</text>
+
+        <rect x="40" y="498" width="193" height="86" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="56" y="518" fill="var(--color-text-secondary)">Doanh thu tháng này</text>
+        <text x="56" y="548" font-size="22" font-weight="500" fill="var(--color-text-primary)">2,84 tỷ</text>
+        <g class="c-teal">
+          <rect x="156" y="534" width="62" height="18" rx="9" stroke-width="0.5"/>
+          <text class="ts" x="187" y="543" text-anchor="middle" dominant-baseline="central" fill="#085041">+14% MoM</text>
+        </g>
+        <polyline points="56,572 74,568 92,562 110,564 128,558 146,552 164,550 182,545 200,542 218,536 222,530"
+                 fill="none" stroke="#1D9E75" stroke-width="1.2" opacity="0.7"/>
+
+        <rect x="241" y="498" width="193" height="86" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="257" y="518" fill="var(--color-text-secondary)">Công nợ phải thu</text>
+        <text x="257" y="548" font-size="22" font-weight="500" fill="var(--color-text-warning)">384 tr</text>
+        <g class="c-amber">
+          <rect x="342" y="534" width="84" height="18" rx="9" stroke-width="0.5"/>
+          <text class="ts" x="384" y="543" text-anchor="middle" dominant-baseline="central" fill="#633806">23 phiếu quá 30d</text>
+        </g>
+        <polyline points="257,562 275,560 293,564 311,568 329,564 347,566 365,570 383,568 401,566 419,570 423,572"
+                 fill="none" stroke="#BA7517" stroke-width="1.2" opacity="0.7"/>
+
+        <rect x="442" y="498" width="198" height="86" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="458" y="518" fill="var(--color-text-secondary)">Hoa hồng phải trả</text>
+        <text x="458" y="548" font-size="22" font-weight="500" fill="var(--color-text-primary)">142 tr</text>
+        <g class="c-gray">
+          <rect x="540" y="534" width="94" height="18" rx="9" stroke-width="0.5"/>
+          <text class="ts" x="587" y="543" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">18 bác sĩ · 2 CS</text>
+        </g>
+        <polyline points="458,572 478,570 498,566 518,568 538,564 558,562 578,558 598,558 618,554 628,552 632,550"
+                 fill="none" stroke="#888780" stroke-width="1.2" opacity="0.5"/>
+
+        <rect x="40" y="598" width="297" height="160" rx="12" class="box" stroke-width="0.5"/>
+        <text class="th" x="56" y="622">Top 5 dịch vụ theo doanh thu</text>
+        <text class="ts" x="321" y="622" text-anchor="end" fill="var(--color-text-info)">Xem →</text>
+        <line x1="56" y1="632" x2="321" y2="632" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="56" y="650">CT bụng có thuốc</text>
+        <rect x="160" y="642" width="108" height="10" rx="2" fill="var(--c-blue-fill)"/>
+        <rect x="160" y="642" width="108" height="10" rx="2" fill="#378ADD"/>
+        <text class="ts" x="321" y="650" text-anchor="end" fill="var(--color-text-primary)">684 tr</text>
+
+        <text class="ts" x="56" y="672">MRI gối không thuốc</text>
+        <rect x="160" y="664" width="88" height="10" rx="2" fill="var(--c-blue-fill)"/>
+        <rect x="160" y="664" width="88" height="10" rx="2" fill="#378ADD"/>
+        <text class="ts" x="321" y="672" text-anchor="end" fill="var(--color-text-primary)">512 tr</text>
+
+        <text class="ts" x="56" y="694">Siêu âm ổ bụng</text>
+        <rect x="160" y="686" width="70" height="10" rx="2" fill="var(--c-blue-fill)"/>
+        <rect x="160" y="686" width="70" height="10" rx="2" fill="#378ADD"/>
+        <text class="ts" x="321" y="694" text-anchor="end" fill="var(--color-text-primary)">398 tr</text>
+
+        <text class="ts" x="56" y="716">X-quang ngực thẳng</text>
+        <rect x="160" y="708" width="52" height="10" rx="2" fill="var(--c-blue-fill)"/>
+        <rect x="160" y="708" width="52" height="10" rx="2" fill="#378ADD"/>
+        <text class="ts" x="321" y="716" text-anchor="end" fill="var(--color-text-primary)">284 tr</text>
+
+        <text class="ts" x="56" y="738">Nội soi dạ dày</text>
+        <rect x="160" y="730" width="38" height="10" rx="2" fill="var(--c-blue-fill)"/>
+        <rect x="160" y="730" width="38" height="10" rx="2" fill="#378ADD"/>
+        <text class="ts" x="321" y="738" text-anchor="end" fill="var(--color-text-primary)">186 tr</text>
+
+        <rect x="345" y="598" width="295" height="160" rx="12" class="box" stroke-width="0.5"/>
+        <text class="th" x="361" y="622">Doanh thu theo chi nhánh</text>
+        <text class="ts" x="624" y="622" text-anchor="end" fill="var(--color-text-info)">Xem →</text>
+        <line x1="361" y1="632" x2="624" y2="632" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="361" y="650">Hà Nội</text>
+        <rect x="440" y="642" width="172" height="10" rx="2" fill="var(--c-teal-fill)"/>
+        <rect x="440" y="642" width="172" height="10" rx="2" fill="#1D9E75"/>
+        <text class="ts" x="624" y="650" text-anchor="end" fill="var(--color-text-primary)">1,24 tỷ</text>
+
+        <text class="ts" x="361" y="672">HCM</text>
+        <rect x="440" y="664" width="128" height="10" rx="2" fill="var(--c-teal-fill)"/>
+        <rect x="440" y="664" width="128" height="10" rx="2" fill="#1D9E75"/>
+        <text class="ts" x="624" y="672" text-anchor="end" fill="var(--color-text-primary)">0,92 tỷ</text>
+
+        <text class="ts" x="361" y="694">Thanh Hóa</text>
+        <rect x="440" y="686" width="62" height="10" rx="2" fill="var(--c-teal-fill)"/>
+        <rect x="440" y="686" width="62" height="10" rx="2" fill="#1D9E75"/>
+        <text class="ts" x="624" y="694" text-anchor="end" fill="var(--color-text-primary)">0,45 tỷ</text>
+
+        <text class="ts" x="361" y="716">Kho Tổng</text>
+        <rect x="440" y="708" width="32" height="10" rx="2" fill="var(--c-teal-fill)"/>
+        <rect x="440" y="708" width="32" height="10" rx="2" fill="#1D9E75"/>
+        <text class="ts" x="624" y="716" text-anchor="end" fill="var(--color-text-primary)">0,23 tỷ</text>
+
+        <text class="ts" x="361" y="744" fill="var(--color-text-tertiary)">dữ liệu cập nhật 09:42 hôm nay</text>
+
+        <text class="ts" x="340" y="802" text-anchor="middle" fill="var(--color-text-tertiary)">Nhấn phím &lt;/&gt; để mở bộ lọc · phím &lt;g&gt; để đổi kỳ</text>
+      </svg>
+      <div class="caption">Fig. 1 — tong_quan_exec_dashboard</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Ca chụp / Ca đọc — the unified detail report</h2>
+    <p>This is the shape that repeats for Doanh thu (mockup 3) and Kho (mockup 4). Worth getting right once.</p>
+    <p>Two rows under the PageHeader carry the whole mechanic. The first row is the <strong>FilterBar</strong> — date range, site, modality, loaded with the selection state visible so you can tell at a glance what you're looking at. The second row is the <strong>dimension bar</strong>, and this is where Reframe 3 lives: <code>Xem theo</code> is a pill group with exactly one selected (primary dimension, determines the chart), and <code>× chia theo</code> is a smaller chip that starts inactive. Toggle it on and you get a secondary dimension picker + the chart switches from bar to stacked bar. The <code>×</code> prefix names the operation literally: this is a cross-tab.</p>
+    <p>Below the dimension bar, a four-number summary strip (Ca, TAT p50, TAT p95, % đúng hạn) that <em>doesn't change shape</em> regardless of grouping — it's always the summary for the filtered result. The chart renders the primary dimension; labels are bars (horizontal, which reads better when the dimension has 6+ values like doctor names). The table below has dimension-driven columns: grouping by Máy shows <code>Máy / Ca / TAT p50 / TAT p95 / % đúng hạn</code>, grouping by BS đọc shows <code>BS / Ca đọc / TAT trung bình / % đúng hạn</code>. Row-click drills into /ris with the row's value pre-applied as a filter, scoped to the same date range.</p>
+    <p>One thing the mockup shows that's easy to miss: when <code>× chia theo</code> is active, the chart legend appears and the table becomes a matrix (dimension × secondary), not a flat list. The sketch here is primary-only for legibility; the stacked variant is described in prose below rather than drawn, since it's the same layout with a pattern swap.</p>
+
+    <div class="mockup">
+      <svg width="100%" viewBox="0 0 680 820" role="img">
+        <title>Ca chụp / Ca đọc — unified detail report</title>
+        <desc>Unified clinical detail report. FilterBar with date, site, modality. Dimension bar with Xem theo pill group and optional chia theo cross-tab chip. Four-number summary strip. Horizontal bar chart grouped by machine. Table below with dimension-driven columns.</desc>
+
+        <text x="40" y="38" font-size="18" font-weight="500" fill="var(--color-text-primary)">Ca chụp / Ca đọc</text>
+        <text class="ts" x="40" y="56" fill="var(--color-text-secondary)">Báo cáo · Lâm sàng · Ca chụp / Ca đọc</text>
+
+        <g class="c-gray">
+          <rect x="492" y="28" width="64" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="524" y="40" text-anchor="middle" dominant-baseline="central">23/04</text>
+        </g>
+        <g class="c-gray">
+          <rect x="564" y="28" width="76" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="602" y="40" text-anchor="middle" dominant-baseline="central">Giám đốc ▾</text>
+        </g>
+
+        <rect x="40" y="80" width="600" height="40" rx="8" fill="var(--color-background-primary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="56" y="104" fill="var(--color-text-tertiary)">Kỳ:</text>
+        <g class="c-blue">
+          <rect x="78" y="90" width="144" height="22" rx="11" stroke-width="0.5"/>
+          <text class="ts" x="150" y="101" text-anchor="middle" dominant-baseline="central" fill="#0C447C">01/04 — 23/04/2026</text>
+        </g>
+        <text class="ts" x="232" y="104" fill="var(--color-text-tertiary)">|</text>
+        <text class="ts" x="244" y="104" fill="var(--color-text-secondary)">Chi nhánh:</text>
+        <g class="c-gray">
+          <rect x="306" y="90" width="130" height="22" rx="11" stroke-width="0.5"/>
+          <text class="ts" x="371" y="101" text-anchor="middle" dominant-baseline="central">Tất cả (4) ▾</text>
+        </g>
+        <text class="ts" x="446" y="104" fill="var(--color-text-tertiary)">|</text>
+        <text class="ts" x="458" y="104" fill="var(--color-text-secondary)">Modality:</text>
+        <g class="c-gray">
+          <rect x="510" y="90" width="124" height="22" rx="11" stroke-width="0.5"/>
+          <text class="ts" x="572" y="101" text-anchor="middle" dominant-baseline="central">Tất cả (7) ▾</text>
+        </g>
+
+        <text class="ts" x="40" y="148" fill="var(--color-text-tertiary)">Xem theo</text>
+        <g class="c-gray">
+          <rect x="90" y="134" width="58" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="119" y="147" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Máy</text>
+        </g>
+        <g class="c-blue">
+          <rect x="152" y="134" width="82" height="26" rx="13" stroke-width="0.5"/>
+          <text class="ts" x="193" y="147" text-anchor="middle" dominant-baseline="central" fill="#0C447C">Nhóm máy</text>
+        </g>
+        <g class="c-gray">
+          <rect x="238" y="134" width="72" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="274" y="147" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">BS đọc</text>
+        </g>
+        <g class="c-gray">
+          <rect x="314" y="134" width="76" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="352" y="147" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Modality</text>
+        </g>
+        <g class="c-gray">
+          <rect x="394" y="134" width="82" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="435" y="147" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Bệnh nhân</text>
+        </g>
+        <g class="c-gray">
+          <rect x="480" y="134" width="74" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="517" y="147" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Thời gian</text>
+        </g>
+
+        <line x1="564" y1="138" x2="564" y2="156" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <rect x="572" y="140" width="14" height="14" rx="3" fill="var(--color-background-primary)" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="592" y="147" dominant-baseline="central" fill="var(--color-text-tertiary)">× chia theo</text>
+
+        <rect x="40" y="180" width="145" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="56" y="200" fill="var(--color-text-secondary)">Tổng số ca</text>
+        <text x="56" y="228" font-size="22" font-weight="500" fill="var(--color-text-primary)">8.412</text>
+
+        <rect x="193" y="180" width="145" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="209" y="200" fill="var(--color-text-secondary)">TAT p50</text>
+        <text x="209" y="228" font-size="22" font-weight="500" fill="var(--color-text-primary)">2,4h</text>
+
+        <rect x="346" y="180" width="145" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="362" y="200" fill="var(--color-text-secondary)">TAT p95</text>
+        <text x="362" y="228" font-size="22" font-weight="500" fill="var(--color-text-warning)">5,1h</text>
+
+        <rect x="499" y="180" width="141" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="515" y="200" fill="var(--color-text-secondary)">% đúng hạn</text>
+        <text x="515" y="228" font-size="22" font-weight="500" fill="var(--color-text-primary)">94%</text>
+
+        <rect x="40" y="264" width="600" height="260" rx="12" class="box" stroke-width="0.5"/>
+        <text class="th" x="56" y="288">Ca theo nhóm máy</text>
+        <text class="ts" x="624" y="288" text-anchor="end" fill="var(--color-text-tertiary)">6 nhóm</text>
+        <line x1="56" y1="300" x2="624" y2="300" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="150" y="322" text-anchor="end" fill="var(--color-text-secondary)">CT</text>
+        <rect x="160" y="312" width="360" height="14" rx="2" fill="#378ADD"/>
+        <text class="ts" x="530" y="322" fill="var(--color-text-primary)">2.458</text>
+
+        <text class="ts" x="150" y="348" text-anchor="end" fill="var(--color-text-secondary)">X-quang</text>
+        <rect x="160" y="338" width="302" height="14" rx="2" fill="#378ADD"/>
+        <text class="ts" x="472" y="348" fill="var(--color-text-primary)">2.064</text>
+
+        <text class="ts" x="150" y="374" text-anchor="end" fill="var(--color-text-secondary)">Siêu âm</text>
+        <rect x="160" y="364" width="244" height="14" rx="2" fill="#378ADD"/>
+        <text class="ts" x="414" y="374" fill="var(--color-text-primary)">1.671</text>
+
+        <text class="ts" x="150" y="400" text-anchor="end" fill="var(--color-text-secondary)">MRI</text>
+        <rect x="160" y="390" width="168" height="14" rx="2" fill="#378ADD"/>
+        <text class="ts" x="338" y="400" fill="var(--color-text-primary)">1.152</text>
+
+        <text class="ts" x="150" y="426" text-anchor="end" fill="var(--color-text-secondary)">Nội soi</text>
+        <rect x="160" y="416" width="98" height="14" rx="2" fill="#378ADD"/>
+        <text class="ts" x="268" y="426" fill="var(--color-text-primary)">672</text>
+
+        <text class="ts" x="150" y="452" text-anchor="end" fill="var(--color-text-secondary)">DEXA</text>
+        <rect x="160" y="442" width="58" height="14" rx="2" fill="#378ADD"/>
+        <text class="ts" x="228" y="452" fill="var(--color-text-primary)">395</text>
+
+        <line x1="160" y1="468" x2="160" y2="478" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <line x1="280" y1="468" x2="280" y2="478" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <line x1="400" y1="468" x2="400" y2="478" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <line x1="520" y1="468" x2="520" y2="478" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="160" y="492" text-anchor="middle" fill="var(--color-text-tertiary)">0</text>
+        <text class="ts" x="280" y="492" text-anchor="middle" fill="var(--color-text-tertiary)">800</text>
+        <text class="ts" x="400" y="492" text-anchor="middle" fill="var(--color-text-tertiary)">1.600</text>
+        <text class="ts" x="520" y="492" text-anchor="middle" fill="var(--color-text-tertiary)">2.400</text>
+
+        <rect x="40" y="544" width="600" height="236" rx="12" class="box" stroke-width="0.5"/>
+
+        <rect x="40" y="544" width="600" height="36" fill="var(--color-background-secondary)"/>
+        <text class="ts" x="56" y="566" fill="var(--color-text-tertiary)">Nhóm máy</text>
+        <text class="ts" x="232" y="566" fill="var(--color-text-tertiary)" text-anchor="end">Ca</text>
+        <text class="ts" x="320" y="566" fill="var(--color-text-tertiary)" text-anchor="end">TAT p50</text>
+        <text class="ts" x="408" y="566" fill="var(--color-text-tertiary)" text-anchor="end">TAT p95</text>
+        <text class="ts" x="508" y="566" fill="var(--color-text-tertiary)" text-anchor="end">% đúng hạn</text>
+        <text class="ts" x="624" y="566" fill="var(--color-text-tertiary)" text-anchor="end">MoM</text>
+
+        <line x1="40" y1="580" x2="640" y2="580" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="t" x="56" y="602">CT</text>
+        <text class="ts" x="56" y="616" fill="var(--color-text-tertiary)">3 máy · 2 chi nhánh</text>
+        <text class="t" x="232" y="608" text-anchor="end">2.458</text>
+        <text class="t" x="320" y="608" text-anchor="end">2,2h</text>
+        <text class="t" x="408" y="608" text-anchor="end" fill="var(--color-text-warning)">4,8h</text>
+        <text class="t" x="508" y="608" text-anchor="end">95%</text>
+        <text class="ts" x="624" y="608" text-anchor="end" fill="#085041">+14%</text>
+
+        <line x1="40" y1="630" x2="640" y2="630" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="56" y="652">X-quang</text>
+        <text class="ts" x="56" y="666" fill="var(--color-text-tertiary)">8 máy · 4 chi nhánh</text>
+        <text class="t" x="232" y="658" text-anchor="end">2.064</text>
+        <text class="t" x="320" y="658" text-anchor="end">1,4h</text>
+        <text class="t" x="408" y="658" text-anchor="end">3,2h</text>
+        <text class="t" x="508" y="658" text-anchor="end">98%</text>
+        <text class="ts" x="624" y="658" text-anchor="end" fill="#085041">+6%</text>
+
+        <line x1="40" y1="680" x2="640" y2="680" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="56" y="702">Siêu âm</text>
+        <text class="ts" x="56" y="716" fill="var(--color-text-tertiary)">6 máy · 4 chi nhánh</text>
+        <text class="t" x="232" y="708" text-anchor="end">1.671</text>
+        <text class="t" x="320" y="708" text-anchor="end">2,0h</text>
+        <text class="t" x="408" y="708" text-anchor="end">4,1h</text>
+        <text class="t" x="508" y="708" text-anchor="end">96%</text>
+        <text class="ts" x="624" y="708" text-anchor="end" fill="#085041">+9%</text>
+
+        <line x1="40" y1="730" x2="640" y2="730" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="56" y="752">MRI</text>
+        <text class="ts" x="56" y="766" fill="var(--color-text-tertiary)">2 máy · 1 chi nhánh</text>
+        <text class="t" x="232" y="758" text-anchor="end">1.152</text>
+        <text class="t" x="320" y="758" text-anchor="end">3,6h</text>
+        <text class="t" x="408" y="758" text-anchor="end" fill="var(--color-text-danger)">6,2h</text>
+        <text class="t" x="508" y="758" text-anchor="end" fill="var(--color-text-warning)">88%</text>
+        <text class="ts" x="624" y="758" text-anchor="end" fill="#791F1F">−3%</text>
+
+        <text class="ts" x="320" y="800" text-anchor="middle" fill="var(--color-text-info)">Xuất CSV (e) · Xem tiếp 2 nhóm ↓</text>
+      </svg>
+      <div class="caption">Fig. 2 — ca_chup_ca_doc_report</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Doanh thu — the same shape, view-mode split</h2>
+    <p>Reuse is the design: filter bar → dimension bar → summary strip → chart → table. Status filter replaces modality filter (all / paid / refunded / e-invoiced), and the dimension options shift to revenue-relevant ones. Everything else is the same component.</p>
+    <p>The one genuinely new mechanic is Reframe 4 — the <strong>Chế độ</strong> toggle. Two states: <code>Xem tổng hợp</code> (default) → grouped, charted, summarized; same layout as the clinical report. The Xem theo pill group appears. <code>Xem từng dòng</code> → raw rows, no chart, no grouping. Summary strip stays (still shows the overall totals, which is useful). Table becomes a paginated ledger with sortable columns and a page readout. The Xem theo pill group hides because it doesn't apply.</p>
+    <p>The mockup below shows Xem tổng hợp active, grouped by Chi nhánh — this is the most common use (weekly finance review). Row-click drills into Phiếu thu filtered to the grouped value. I've kept the secondary <code>× chia theo</code> chip visible but inactive; toggling it on for <code>Chi nhánh × Loại dịch vụ</code> turns the chart into a stacked bar and the table into a small matrix, same mechanic as clinical.</p>
+    <p>One thing the finance mockup shows that clinical doesn't: the summary strip here carries a <code>Nợ</code> (outstanding receivables) tile, which is a count-and-amount rather than a rate — it's a link to the consume-points-style drill-down showing which invoices are actually unpaid. Clinical's equivalent would be "ca quá hạn TAT" but that already has its own alert in Tổng Quan, so it's not duplicated in the summary.</p>
+
+    <div class="mockup">
+      <svg width="100%" viewBox="0 0 680 820" role="img">
+        <title>Doanh thu — unified financial report</title>
+        <desc>Unified revenue detail report. FilterBar with date, site, status. View-mode toggle between summarized and raw rows. Dimension bar. Four-number summary strip with receivables. Horizontal bar chart grouped by branch. Table with revenue columns.</desc>
+
+        <text x="40" y="38" font-size="18" font-weight="500" fill="var(--color-text-primary)">Doanh thu</text>
+        <text class="ts" x="40" y="56" fill="var(--color-text-secondary)">Báo cáo · Tài chính · Doanh thu</text>
+
+        <g class="c-gray">
+          <rect x="492" y="28" width="64" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="524" y="40" text-anchor="middle" dominant-baseline="central">23/04</text>
+        </g>
+        <g class="c-gray">
+          <rect x="564" y="28" width="76" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="602" y="40" text-anchor="middle" dominant-baseline="central">Giám đốc ▾</text>
+        </g>
+
+        <rect x="40" y="80" width="600" height="40" rx="8" fill="var(--color-background-primary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="56" y="104" fill="var(--color-text-tertiary)">Kỳ:</text>
+        <g class="c-blue">
+          <rect x="78" y="90" width="144" height="22" rx="11" stroke-width="0.5"/>
+          <text class="ts" x="150" y="101" text-anchor="middle" dominant-baseline="central" fill="#0C447C">01/04 — 23/04/2026</text>
+        </g>
+        <text class="ts" x="232" y="104" fill="var(--color-text-tertiary)">|</text>
+        <text class="ts" x="244" y="104" fill="var(--color-text-secondary)">Chi nhánh:</text>
+        <g class="c-gray">
+          <rect x="306" y="90" width="130" height="22" rx="11" stroke-width="0.5"/>
+          <text class="ts" x="371" y="101" text-anchor="middle" dominant-baseline="central">Tất cả (4) ▾</text>
+        </g>
+        <text class="ts" x="446" y="104" fill="var(--color-text-tertiary)">|</text>
+        <text class="ts" x="458" y="104" fill="var(--color-text-secondary)">Trạng thái:</text>
+        <g class="c-gray">
+          <rect x="520" y="90" width="114" height="22" rx="11" stroke-width="0.5"/>
+          <text class="ts" x="577" y="101" text-anchor="middle" dominant-baseline="central">Tất cả ▾</text>
+        </g>
+
+        <text class="ts" x="40" y="148" fill="var(--color-text-tertiary)">Chế độ</text>
+        <g class="c-blue">
+          <rect x="82" y="134" width="104" height="26" rx="13" stroke-width="0.5"/>
+          <text class="ts" x="134" y="147" text-anchor="middle" dominant-baseline="central" fill="#0C447C">Xem tổng hợp</text>
+        </g>
+        <g class="c-gray">
+          <rect x="190" y="134" width="104" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="242" y="147" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Xem từng dòng</text>
+        </g>
+
+        <line x1="304" y1="138" x2="304" y2="156" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="316" y="148" fill="var(--color-text-tertiary)">Xem theo</text>
+        <g class="c-teal">
+          <rect x="372" y="134" width="84" height="26" rx="13" stroke-width="0.5"/>
+          <text class="ts" x="414" y="147" text-anchor="middle" dominant-baseline="central" fill="#085041">Chi nhánh</text>
+        </g>
+        <g class="c-gray">
+          <rect x="460" y="134" width="68" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="494" y="147" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Dịch vụ</text>
+        </g>
+        <g class="c-gray">
+          <rect x="532" y="134" width="76" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="570" y="147" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Đối tác GT</text>
+        </g>
+        <g class="c-gray">
+          <rect x="612" y="134" width="28" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="626" y="147" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">▾</text>
+        </g>
+
+        <text class="ts" x="40" y="188" fill="var(--color-text-tertiary)">và</text>
+        <rect x="68" y="180" width="14" height="14" rx="3" fill="var(--color-background-primary)" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="88" y="188" dominant-baseline="central" fill="var(--color-text-tertiary)">× chia theo: Loại dịch vụ</text>
+        <text class="ts" x="270" y="188" fill="var(--color-text-tertiary)">(bật để so sánh)</text>
+
+        <rect x="40" y="208" width="144" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="56" y="228" fill="var(--color-text-secondary)">Tổng doanh thu</text>
+        <text x="56" y="256" font-size="22" font-weight="500" fill="var(--color-text-primary)">2,84 tỷ</text>
+
+        <rect x="192" y="208" width="144" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="208" y="228" fill="var(--color-text-secondary)">Số phiếu</text>
+        <text x="208" y="256" font-size="22" font-weight="500" fill="var(--color-text-primary)">1.847</text>
+
+        <rect x="344" y="208" width="144" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="360" y="228" fill="var(--color-text-secondary)">Giảm giá / KM</text>
+        <text x="360" y="256" font-size="22" font-weight="500" fill="var(--color-text-primary)">128 tr</text>
+
+        <rect x="496" y="208" width="144" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="512" y="228" fill="var(--color-text-secondary)">Nợ phải thu</text>
+        <text x="512" y="256" font-size="22" font-weight="500" fill="var(--color-text-warning)">384 tr</text>
+        <text class="ts" x="572" y="256" fill="var(--color-text-tertiary)">/23 phiếu</text>
+
+        <rect x="40" y="292" width="600" height="228" rx="12" class="box" stroke-width="0.5"/>
+        <text class="th" x="56" y="316">Doanh thu theo chi nhánh</text>
+        <text class="ts" x="624" y="316" text-anchor="end" fill="var(--color-text-tertiary)">4 chi nhánh</text>
+        <line x1="56" y1="328" x2="624" y2="328" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="150" y="350" text-anchor="end" fill="var(--color-text-secondary)">Hà Nội</text>
+        <rect x="160" y="340" width="380" height="14" rx="2" fill="#1D9E75"/>
+        <text class="ts" x="550" y="350" fill="var(--color-text-primary)">1.242 tr</text>
+
+        <text class="ts" x="150" y="376" text-anchor="end" fill="var(--color-text-secondary)">HCM</text>
+        <rect x="160" y="366" width="282" height="14" rx="2" fill="#1D9E75"/>
+        <text class="ts" x="452" y="376" fill="var(--color-text-primary)">923 tr</text>
+
+        <text class="ts" x="150" y="402" text-anchor="end" fill="var(--color-text-secondary)">Thanh Hóa</text>
+        <rect x="160" y="392" width="136" height="14" rx="2" fill="#1D9E75"/>
+        <text class="ts" x="306" y="402" fill="var(--color-text-primary)">445 tr</text>
+
+        <text class="ts" x="150" y="428" text-anchor="end" fill="var(--color-text-secondary)">Kho Tổng</text>
+        <rect x="160" y="418" width="68" height="14" rx="2" fill="#1D9E75"/>
+        <text class="ts" x="238" y="428" fill="var(--color-text-primary)">230 tr</text>
+
+        <line x1="160" y1="452" x2="160" y2="462" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <line x1="280" y1="452" x2="280" y2="462" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <line x1="400" y1="452" x2="400" y2="462" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <line x1="520" y1="452" x2="520" y2="462" stroke="var(--color-text-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="160" y="476" text-anchor="middle" fill="var(--color-text-tertiary)">0</text>
+        <text class="ts" x="280" y="476" text-anchor="middle" fill="var(--color-text-tertiary)">400 tr</text>
+        <text class="ts" x="400" y="476" text-anchor="middle" fill="var(--color-text-tertiary)">800 tr</text>
+        <text class="ts" x="520" y="476" text-anchor="middle" fill="var(--color-text-tertiary)">1.200 tr</text>
+        <text class="ts" x="324" y="496" text-anchor="middle" fill="var(--color-text-tertiary)">doanh thu (triệu VND)</text>
+
+        <rect x="40" y="540" width="600" height="238" rx="12" class="box" stroke-width="0.5"/>
+
+        <rect x="40" y="540" width="600" height="36" fill="var(--color-background-secondary)"/>
+        <text class="ts" x="56" y="562" fill="var(--color-text-tertiary)">Chi nhánh</text>
+        <text class="ts" x="240" y="562" fill="var(--color-text-tertiary)" text-anchor="end">Doanh thu</text>
+        <text class="ts" x="340" y="562" fill="var(--color-text-tertiary)" text-anchor="end">Phiếu</text>
+        <text class="ts" x="444" y="562" fill="var(--color-text-tertiary)" text-anchor="end">TB/phiếu</text>
+        <text class="ts" x="536" y="562" fill="var(--color-text-tertiary)" text-anchor="end">Nợ</text>
+        <text class="ts" x="624" y="562" fill="var(--color-text-tertiary)" text-anchor="end">MoM</text>
+
+        <line x1="40" y1="576" x2="640" y2="576" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="t" x="56" y="598">Hà Nội</text>
+        <text class="ts" x="56" y="612" fill="var(--color-text-tertiary)">12 bác sĩ · 6 máy</text>
+        <text class="t" x="240" y="604" text-anchor="end">1.242 tr</text>
+        <text class="t" x="340" y="604" text-anchor="end">782</text>
+        <text class="t" x="444" y="604" text-anchor="end">1,59 tr</text>
+        <text class="t" x="536" y="604" text-anchor="end" fill="var(--color-text-warning)">168 tr</text>
+        <text class="ts" x="624" y="604" text-anchor="end" fill="#085041">+18%</text>
+
+        <line x1="40" y1="626" x2="640" y2="626" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="56" y="648">HCM</text>
+        <text class="ts" x="56" y="662" fill="var(--color-text-tertiary)">9 bác sĩ · 5 máy</text>
+        <text class="t" x="240" y="654" text-anchor="end">923 tr</text>
+        <text class="t" x="340" y="654" text-anchor="end">584</text>
+        <text class="t" x="444" y="654" text-anchor="end">1,58 tr</text>
+        <text class="t" x="536" y="654" text-anchor="end" fill="var(--color-text-warning)">142 tr</text>
+        <text class="ts" x="624" y="654" text-anchor="end" fill="#085041">+11%</text>
+
+        <line x1="40" y1="676" x2="640" y2="676" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="56" y="698">Thanh Hóa</text>
+        <text class="ts" x="56" y="712" fill="var(--color-text-tertiary)">4 bác sĩ · 3 máy</text>
+        <text class="t" x="240" y="704" text-anchor="end">445 tr</text>
+        <text class="t" x="340" y="704" text-anchor="end">362</text>
+        <text class="t" x="444" y="704" text-anchor="end">1,23 tr</text>
+        <text class="t" x="536" y="704" text-anchor="end">54 tr</text>
+        <text class="ts" x="624" y="704" text-anchor="end" fill="#791F1F">−2%</text>
+
+        <line x1="40" y1="726" x2="640" y2="726" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="t" x="56" y="748">Kho Tổng</text>
+        <text class="ts" x="56" y="762" fill="var(--color-text-tertiary)">chủ yếu dịch vụ cận lâm sàng</text>
+        <text class="t" x="240" y="754" text-anchor="end">230 tr</text>
+        <text class="t" x="340" y="754" text-anchor="end">119</text>
+        <text class="t" x="444" y="754" text-anchor="end">1,93 tr</text>
+        <text class="t" x="536" y="754" text-anchor="end">20 tr</text>
+        <text class="ts" x="624" y="754" text-anchor="end" fill="#085041">+6%</text>
+
+        <text class="ts" x="320" y="800" text-anchor="middle" fill="var(--color-text-info)">Xuất CSV (e) · Nhấp dòng để xem phiếu chi tiết →</text>
+      </svg>
+      <div class="caption">Fig. 3 — doanh_thu_report</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. Kho — two reports, shared shape</h2>
+    <p>The two Kho reports the brief asks for — <strong>Tiêu thụ vật tư</strong> and <strong>Sổ kho</strong> — map cleanly onto the same unified shape with small variations. I'll describe both, then sketch the more interesting one.</p>
+    <p><strong>Tiêu thụ vật tư</strong> is a straight reuse of the clinical/finance shape: filter (date, site, category), Xem theo <code>[Vật tư] [Nhóm vật tư] [Chi nhánh] [Dịch vụ]</code>, summary strip (tổng tiêu thụ / giá trị / biến động vs. tháng trước / biên lỗi auto-deduct), bar chart, table. Nothing genuinely new.</p>
+    <p><strong>Sổ kho</strong> is more interesting because it inherits Reframe 4 from finance. Its natural mode is <code>Xem từng dòng</code> — a transaction ledger showing nhập/xuất/điều chuyển/điều chỉnh/auto-deduct line by line, paginated, filterable by transaction type. But you also want an aggregate view ("tổng nhập tháng này theo loại giao dịch") which is <code>Xem tổng hợp</code> grouped by loại giao dịch. Same toggle, same behavior.</p>
+    <p>I'm sketching Sổ kho in ledger mode below. The key design choices: <strong>transaction-type chips</strong> serve as a filter (the row of pill filters with counts), each row carries a type indicator (color-coded bullet + 3-char code), the quantity delta shows with sign (+50 for nhập, −3 for xuất), and the rolling balance on the right anchors everything. No chart in this mode — the ledger <em>is</em> the chart; adding a bar graph of volume-by-day would compete with the table without adding information the user isn't already extracting by scanning.</p>
+    <p>One pattern worth naming: the ledger is the <strong>unified transaction log from the warehouse module, filtered to reporting mode</strong>. Same record shape, different chrome (filter bar + summary strip above instead of inventory-workspace chrome). This means admins auditing "why did Hà Nội run out of contrast on 15/04" in the warehouse log get the same view they'd see here in Sổ kho — just from a different entry point. That reuse is deliberate; makes this report trivial to build because the data layer already exists.</p>
+
+    <div class="mockup">
+      <svg width="100%" viewBox="0 0 680 820" role="img">
+        <title>Sổ kho — warehouse transaction ledger report</title>
+        <desc>Inventory ledger report. FilterBar with date, site, supply. View-mode toggle in ledger mode. Transaction-type filter chips with counts. Four-number summary strip. Paginated ledger table with type indicator, delta, and rolling balance.</desc>
+
+        <text x="40" y="38" font-size="18" font-weight="500" fill="var(--color-text-primary)">Sổ kho</text>
+        <text class="ts" x="40" y="56" fill="var(--color-text-secondary)">Báo cáo · Vận hành · Kho · Sổ kho</text>
+
+        <g class="c-gray">
+          <rect x="492" y="28" width="64" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="524" y="40" text-anchor="middle" dominant-baseline="central">23/04</text>
+        </g>
+        <g class="c-gray">
+          <rect x="564" y="28" width="76" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="602" y="40" text-anchor="middle" dominant-baseline="central">Giám đốc ▾</text>
+        </g>
+
+        <rect x="40" y="80" width="600" height="40" rx="8" fill="var(--color-background-primary)" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+        <text class="ts" x="56" y="104" fill="var(--color-text-tertiary)">Kỳ:</text>
+        <g class="c-blue">
+          <rect x="78" y="90" width="144" height="22" rx="11" stroke-width="0.5"/>
+          <text class="ts" x="150" y="101" text-anchor="middle" dominant-baseline="central" fill="#0C447C">01/04 — 23/04/2026</text>
+        </g>
+        <text class="ts" x="232" y="104" fill="var(--color-text-tertiary)">|</text>
+        <text class="ts" x="244" y="104" fill="var(--color-text-secondary)">Kho:</text>
+        <g class="c-gray">
+          <rect x="278" y="90" width="98" height="22" rx="11" stroke-width="0.5"/>
+          <text class="ts" x="327" y="101" text-anchor="middle" dominant-baseline="central">Hà Nội ▾</text>
+        </g>
+        <text class="ts" x="386" y="104" fill="var(--color-text-tertiary)">|</text>
+        <text class="ts" x="398" y="104" fill="var(--color-text-secondary)">Vật tư:</text>
+        <g class="c-gray">
+          <rect x="444" y="90" width="190" height="22" rx="11" stroke-width="0.5"/>
+          <text class="ts" x="539" y="101" text-anchor="middle" dominant-baseline="central">Tất cả (186) ▾</text>
+        </g>
+
+        <text class="ts" x="40" y="148" fill="var(--color-text-tertiary)">Chế độ</text>
+        <g class="c-gray">
+          <rect x="82" y="134" width="104" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="134" y="147" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">Xem tổng hợp</text>
+        </g>
+        <g class="c-blue">
+          <rect x="190" y="134" width="104" height="26" rx="13" stroke-width="0.5"/>
+          <text class="ts" x="242" y="147" text-anchor="middle" dominant-baseline="central" fill="#0C447C">Xem từng dòng</text>
+        </g>
+
+        <line x1="304" y1="138" x2="304" y2="156" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="316" y="148" fill="var(--color-text-tertiary)">Loại GD:</text>
+        <g class="c-gray">
+          <rect x="364" y="134" width="60" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="394" y="147" text-anchor="middle" dominant-baseline="central">Tất cả</text>
+        </g>
+        <g class="c-teal">
+          <rect x="428" y="134" width="54" height="26" rx="13" stroke-width="0.5"/>
+          <text class="ts" x="455" y="147" text-anchor="middle" dominant-baseline="central" fill="#085041">Nhập</text>
+        </g>
+        <g class="c-coral">
+          <rect x="486" y="134" width="54" height="26" rx="13" stroke-width="0.5"/>
+          <text class="ts" x="513" y="147" text-anchor="middle" dominant-baseline="central" fill="#712B13">Xuất</text>
+        </g>
+        <g class="c-amber">
+          <rect x="544" y="134" width="64" height="26" rx="13" stroke-width="0.5"/>
+          <text class="ts" x="576" y="147" text-anchor="middle" dominant-baseline="central" fill="#633806">Tự động</text>
+        </g>
+        <g class="c-gray">
+          <rect x="612" y="134" width="28" height="26" rx="13" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="626" y="147" text-anchor="middle" dominant-baseline="central" fill="var(--color-text-tertiary)">+2</text>
+        </g>
+
+        <rect x="40" y="180" width="145" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="56" y="200" fill="var(--color-text-secondary)">Tổng giao dịch</text>
+        <text x="56" y="228" font-size="22" font-weight="500" fill="var(--color-text-primary)">2.047</text>
+
+        <rect x="193" y="180" width="145" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="209" y="200" fill="var(--color-text-secondary)">Nhập · giá trị</text>
+        <text x="209" y="228" font-size="22" font-weight="500" fill="var(--color-text-primary)">184 tr</text>
+
+        <rect x="346" y="180" width="145" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="362" y="200" fill="var(--color-text-secondary)">Xuất · giá trị</text>
+        <text x="362" y="228" font-size="22" font-weight="500" fill="var(--color-text-primary)">142 tr</text>
+
+        <rect x="499" y="180" width="141" height="64" rx="8" class="box" stroke-width="0.5"/>
+        <text class="ts" x="515" y="200" fill="var(--color-text-secondary)">Sai khác</text>
+        <text x="515" y="228" font-size="22" font-weight="500" fill="var(--color-text-warning)">7</text>
+        <text class="ts" x="534" y="228">ca / 2,4 tr</text>
+
+        <rect x="40" y="264" width="600" height="484" rx="12" class="box" stroke-width="0.5"/>
+
+        <rect x="40" y="264" width="600" height="36" fill="var(--color-background-secondary)"/>
+        <text class="ts" x="56" y="286" fill="var(--color-text-tertiary)">Ngày · giờ</text>
+        <text class="ts" x="152" y="286" fill="var(--color-text-tertiary)">Loại</text>
+        <text class="ts" x="196" y="286" fill="var(--color-text-tertiary)">Vật tư · lô</text>
+        <text class="ts" x="434" y="286" fill="var(--color-text-tertiary)" text-anchor="end">Số lượng</text>
+        <text class="ts" x="516" y="286" fill="var(--color-text-tertiary)" text-anchor="end">Người / tham chiếu</text>
+        <text class="ts" x="624" y="286" fill="var(--color-text-tertiary)" text-anchor="end">Tồn sau</text>
+
+        <line x1="40" y1="300" x2="640" y2="300" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="56" y="322">23/04 · 09:12</text>
+        <circle cx="148" cy="318" r="4" fill="#1D9E75"/>
+        <g class="c-teal">
+          <rect x="156" y="310" width="32" height="18" rx="4" stroke-width="0.5"/>
+          <text class="ts" x="172" y="319" text-anchor="middle" dominant-baseline="central" fill="#085041">NK</text>
+        </g>
+        <text class="t" x="196" y="322">Omnipaque 350 · L2404-077</text>
+        <text class="t" x="434" y="322" text-anchor="end" fill="#085041">+50</text>
+        <text class="ts" x="516" y="318" text-anchor="end" fill="var(--color-text-secondary)">Linh</text>
+        <text class="ts" x="516" y="330" text-anchor="end" fill="var(--color-text-tertiary)">PN-2404-018</text>
+        <text class="t" x="624" y="322" text-anchor="end">78 lọ</text>
+
+        <line x1="40" y1="344" x2="640" y2="344" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="ts" x="56" y="366">23/04 · 08:47</text>
+        <circle cx="148" cy="362" r="4" fill="#BA7517"/>
+        <g class="c-amber">
+          <rect x="156" y="354" width="32" height="18" rx="4" stroke-width="0.5"/>
+          <text class="ts" x="172" y="363" text-anchor="middle" dominant-baseline="central" fill="#633806">TD</text>
+        </g>
+        <text class="t" x="196" y="366">Kim tiêm 20G · L2403-015</text>
+        <text class="t" x="434" y="366" text-anchor="end" fill="#712B13">−3</text>
+        <text class="ts" x="516" y="362" text-anchor="end" fill="var(--color-text-secondary)">KTV Hà</text>
+        <text class="ts" x="516" y="374" text-anchor="end" fill="var(--color-text-tertiary)">CT-2404-0512 · tự động</text>
+        <text class="t" x="624" y="366" text-anchor="end">127 cây</text>
+
+        <line x1="40" y1="388" x2="640" y2="388" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="ts" x="56" y="410">23/04 · 08:32</text>
+        <circle cx="148" cy="406" r="4" fill="#D85A30"/>
+        <g class="c-coral">
+          <rect x="156" y="398" width="32" height="18" rx="4" stroke-width="0.5"/>
+          <text class="ts" x="172" y="407" text-anchor="middle" dominant-baseline="central" fill="#712B13">XK</text>
+        </g>
+        <text class="t" x="196" y="410">Gel siêu âm 500ml · L2312-008</text>
+        <text class="t" x="434" y="410" text-anchor="end" fill="#712B13">−8</text>
+        <text class="ts" x="516" y="406" text-anchor="end" fill="var(--color-text-secondary)">Minh</text>
+        <text class="ts" x="516" y="418" text-anchor="end" fill="var(--color-text-tertiary)">hết hạn · tiêu hủy</text>
+        <text class="t" x="624" y="410" text-anchor="end">0 chai</text>
+
+        <line x1="40" y1="432" x2="640" y2="432" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="ts" x="56" y="454">22/04 · 16:22</text>
+        <circle cx="148" cy="450" r="4" fill="#BA7517"/>
+        <g class="c-amber">
+          <rect x="156" y="442" width="32" height="18" rx="4" stroke-width="0.5"/>
+          <text class="ts" x="172" y="451" text-anchor="middle" dominant-baseline="central" fill="#633806">TD</text>
+        </g>
+        <text class="t" x="196" y="454">Iopamiron 370 · L2403-021</text>
+        <rect x="196" y="458" width="180" height="16" rx="3" fill="var(--color-background-warning)"/>
+        <path d="M206 466L210 472L202 472Z" fill="#BA7517"/>
+        <text class="ts" x="220" y="470" fill="#633806">sai khác +1 lọ so với định mức</text>
+        <text class="t" x="434" y="454" text-anchor="end" fill="#712B13">−4</text>
+        <text class="t" x="434" y="468" text-anchor="end" fill="#633806">(ĐM: 3)</text>
+        <text class="ts" x="516" y="450" text-anchor="end" fill="var(--color-text-secondary)">KTV Dũng</text>
+        <text class="ts" x="516" y="462" text-anchor="end" fill="var(--color-text-tertiary)">CT-2404-0491</text>
+        <text class="t" x="624" y="454" text-anchor="end">18 lọ</text>
+
+        <line x1="40" y1="490" x2="640" y2="490" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="ts" x="56" y="512">22/04 · 14:08</text>
+        <circle cx="148" cy="508" r="4" fill="#378ADD"/>
+        <g class="c-blue">
+          <rect x="156" y="500" width="32" height="18" rx="4" stroke-width="0.5"/>
+          <text class="ts" x="172" y="509" text-anchor="middle" dominant-baseline="central" fill="#0C447C">DC</text>
+        </g>
+        <text class="t" x="196" y="512">Syringe 20ml · L2404-015</text>
+        <text class="t" x="434" y="512" text-anchor="end" fill="#0C447C">+200</text>
+        <text class="ts" x="516" y="508" text-anchor="end" fill="var(--color-text-secondary)">Linh</text>
+        <text class="ts" x="516" y="520" text-anchor="end" fill="var(--color-text-tertiary)">từ Kho Tổng · DC-2404-009</text>
+        <text class="t" x="624" y="512" text-anchor="end">420 cây</text>
+
+        <line x1="40" y1="534" x2="640" y2="534" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="ts" x="56" y="556">22/04 · 11:38</text>
+        <circle cx="148" cy="552" r="4" fill="#1D9E75"/>
+        <g class="c-teal">
+          <rect x="156" y="544" width="32" height="18" rx="4" stroke-width="0.5"/>
+          <text class="ts" x="172" y="553" text-anchor="middle" dominant-baseline="central" fill="#085041">NK</text>
+        </g>
+        <text class="t" x="196" y="556">Gạc y tế 10x10 · L2404-011</text>
+        <text class="t" x="434" y="556" text-anchor="end" fill="#085041">+120</text>
+        <text class="ts" x="516" y="552" text-anchor="end" fill="var(--color-text-secondary)">Linh</text>
+        <text class="ts" x="516" y="564" text-anchor="end" fill="var(--color-text-tertiary)">PN-2404-017</text>
+        <text class="t" x="624" y="556" text-anchor="end">312 túi</text>
+
+        <line x1="40" y1="578" x2="640" y2="578" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="ts" x="56" y="600">22/04 · 10:14</text>
+        <circle cx="148" cy="596" r="4" fill="#BA7517"/>
+        <g class="c-amber">
+          <rect x="156" y="588" width="32" height="18" rx="4" stroke-width="0.5"/>
+          <text class="ts" x="172" y="597" text-anchor="middle" dominant-baseline="central" fill="#633806">TD</text>
+        </g>
+        <text class="t" x="196" y="600">Cồn 70° 500ml · L2312-048</text>
+        <text class="t" x="434" y="600" text-anchor="end" fill="#712B13">−1</text>
+        <text class="ts" x="516" y="596" text-anchor="end" fill="var(--color-text-secondary)">KTV An</text>
+        <text class="ts" x="516" y="608" text-anchor="end" fill="var(--color-text-tertiary)">XR-2404-0318</text>
+        <text class="t" x="624" y="600" text-anchor="end">12 chai</text>
+
+        <line x1="40" y1="622" x2="640" y2="622" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="ts" x="56" y="644">22/04 · 09:02</text>
+        <circle cx="148" cy="640" r="4" fill="#7F77DD"/>
+        <g class="c-purple">
+          <rect x="156" y="632" width="32" height="18" rx="4" stroke-width="0.5"/>
+          <text class="ts" x="172" y="641" text-anchor="middle" dominant-baseline="central" fill="#3C3489">ĐC</text>
+        </g>
+        <text class="t" x="196" y="644">Kim luồn 18G · L2401-030</text>
+        <text class="t" x="434" y="644" text-anchor="end">+2</text>
+        <text class="ts" x="516" y="640" text-anchor="end" fill="var(--color-text-secondary)">Linh</text>
+        <text class="ts" x="516" y="652" text-anchor="end" fill="var(--color-text-tertiary)">kiểm kê tháng 4</text>
+        <text class="t" x="624" y="644" text-anchor="end">48 cây</text>
+
+        <line x1="40" y1="666" x2="640" y2="666" stroke="var(--color-border-tertiary)" stroke-width="0.5" stroke-dasharray="2 3"/>
+
+        <text class="ts" x="56" y="688">21/04 · 18:44</text>
+        <circle cx="148" cy="684" r="4" fill="#D85A30"/>
+        <g class="c-coral">
+          <rect x="156" y="676" width="32" height="18" rx="4" stroke-width="0.5"/>
+          <text class="ts" x="172" y="685" text-anchor="middle" dominant-baseline="central" fill="#712B13">XK</text>
+        </g>
+        <text class="t" x="196" y="688">Bao găng S · L2312-006</text>
+        <text class="t" x="434" y="688" text-anchor="end" fill="#712B13">−24</text>
+        <text class="ts" x="516" y="684" text-anchor="end" fill="var(--color-text-secondary)">Hương</text>
+        <text class="ts" x="516" y="696" text-anchor="end" fill="var(--color-text-tertiary)">trả về Kho Tổng</text>
+        <text class="t" x="624" y="688" text-anchor="end">146 đôi</text>
+
+        <line x1="40" y1="710" x2="640" y2="710" stroke="var(--color-border-tertiary)" stroke-width="0.5"/>
+
+        <text class="ts" x="56" y="732" fill="var(--color-text-tertiary)">Trang 1 / 42</text>
+        <text class="ts" x="182" y="732" fill="var(--color-text-tertiary)">đang xem 1–9 / 2.047</text>
+
+        <g class="c-gray">
+          <rect x="438" y="720" width="80" height="24" rx="12" stroke-width="0.5" fill="var(--color-background-primary)"/>
+          <text class="ts" x="478" y="732" text-anchor="middle" dominant-baseline="central">← Trước</text>
+        </g>
+        <g class="c-gray">
+          <rect x="524" y="720" width="64" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="556" y="732" text-anchor="middle" dominant-baseline="central">Sau →</text>
+        </g>
+        <g class="c-blue">
+          <rect x="596" y="720" width="44" height="24" rx="12" stroke-width="0.5"/>
+          <text class="ts" x="618" y="732" text-anchor="middle" dominant-baseline="central" fill="#0C447C">CSV</text>
+        </g>
+
+        <text class="ts" x="320" y="792" text-anchor="middle" fill="var(--color-text-tertiary)">Nhấp dòng để mở phiếu gốc trong Quản lý kho · cùng dữ liệu, chrome khác</text>
+      </svg>
+      <div class="caption">Fig. 4 — so_kho_report</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. Shared mechanics worth naming</h2>
+    <p>Three components carry the weight across these four mockups. The <strong>FilterBar + dimension bar</strong> is the two-row header that everything below responds to — keeping them as separate visual strips (not collapsed into one long row) lets the user scan <em>scope</em> and <em>organization</em> as two separate thoughts. The <strong>Chế độ view-mode toggle</strong> (Reframe 4) only shows on reports where raw-row view makes sense, which is Doanh thu and Sổ kho — clinical and consumption reports don't need it because "ungrouped ca chụp" isn't a useful mental model. The <strong>row-click drill-down</strong> is consistent: every row is a link into the transactional workspace for that domain (Ca chụp → /ris, Doanh thu → /phieu-thu, Sổ kho → /quan-ly-kho) with the row's dimension and the report's date range pre-applied.</p>
+  </section>
+
+  <section>
+    <h2>6. Secondary dimension — the stacked variant</h2>
+    <p>The <code>× chia theo</code> chip is inactive in all four sketches. When toggled on, three things change: (1) a secondary-dimension picker appears next to the chip (same pill row as the primary); (2) the chart shifts from flat bar to stacked bar with a legend showing the secondary values and an accompanying pattern/hatch cue for each stack — color alone isn't accessible; (3) the table becomes a small matrix with secondary-dimension columns. The user can clear the cross-tab by toggling the chip off, which collapses back to the flat primary. I didn't draw it because it's the same layout with predictable changes — but it's worth prototyping early, because the table-as-matrix case has real width constraints (if you cross-tab Chi nhánh × Dịch vụ with 4 × 380 = 1520 cells, you need column virtualization or top-N truncation).</p>
+  </section>
+
+  <section>
+    <h2>7. Keyboard wiring</h2>
+    <p><code>/</code> focuses the first filter in the FilterBar (date range); once inside, <code>Tab</code> walks through filters and <code>Esc</code> closes an open picker. <code>g</code> cycles the Xem theo primary dimension in the order shown left-to-right — this is the killer shortcut for a giám đốc exploring a report, because it lets you re-organize without touching the mouse. <code>e</code> triggers CSV export. On tables, <code>j</code>/<code>k</code> move the row cursor; <code>Enter</code> drills. These match the conventions from Danh mục and Quản lý kho so the user learns them once.</p>
+  </section>
+
+  <section>
+    <h2>8. States to think about before build</h2>
+    <p><strong>Empty filter result</strong> — "Không có dữ liệu cho bộ lọc hiện tại" with a <code>Xóa bộ lọc</code> link, not an illustration. Cheaper to re-filter than to explain why there's nothing.</p>
+    <p><strong>Large-result Xem từng dòng</strong> — the Sổ kho pagination on mockup 4 is "1–9 / 2.047" which is honest. Server-side pagination is mandatory; sorting too. Don't try to load 2k rows client-side and filter — the date filter is the real bound.</p>
+    <p><strong>Stale data</strong> — every mockup carries "dữ liệu cập nhật 09:42 hôm nay" somewhere subtle (Tổng Quan has it on the second chart card). Reports aren't real-time — they run off a nightly or hourly aggregate, and surfacing that honestly prevents "why doesn't this match the live workspace?" support tickets.</p>
+    <p><strong>Loading</strong> — skeleton rows in the table, skeleton bars in the chart (bars of varying lengths in a tertiary-gray fill). Never block the filter bar — the user might be adjusting filters while data loads.</p>
+    <p><strong>Permission scoping</strong> — if a user doesn't have access to a persona's data, the corresponding row in Tổng Quan doesn't render at all (not "Bạn không có quyền") and the sidebar hides the persona. Silent scoping reads more gracefully than visible locks.</p>
+  </section>
+
+  <section>
+    <h2>9. What I didn't draw</h2>
+    <p>The three persona-specific Tổng quan pages (Lâm sàng / Vận hành / Tài chính) — the brief says they already exist as /dashboard/{clinical,ops,finance}, just wrapped in new chrome. I didn't draw the <strong>Tiêu thụ vật tư</strong> Kho report because it's the finance-report shape with a different filter set and column list; sketching it would just be a palette swap. I didn't draw the <strong>stacked bar variant</strong> when <code>× chia theo</code> is on, or the <strong>Xem từng dòng</strong> finance view — both are described in prose and are predictable derivations of what's drawn.</p>
+    <p>The next thing I'd prototype is the <strong>cross-report consistency</strong> — put Ca chụp, Doanh thu, and Tiêu thụ vật tư on the same screen side-by-side to check that a giám đốc going from Ca chụp to Doanh thu feels like the same report with a different filter, not a different product. The unified shape only pays off if that feels true in interaction, not just in screenshots.</p>
+  </section>
+
+  <div class="doc-footer">
+    Design exploration by Claude · LinkRad RIS/PACS/HIS · Báo cáo surface · working sketches, translate freely into Tailwind
+  </div>
+
+</div>
+</body>
+</html>

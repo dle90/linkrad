@@ -1,6 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate, Navigate } from 'react-router-dom'
 import api from '../api'
+import { useAuth } from '../context/AuthContext'
+import DashboardClinical from './DashboardClinical'
+import DashboardOps from './DashboardOps'
+import DashboardFinance from './DashboardFinance'
+import {
+  CasesByMachineReport, CasesByMachineGroupReport, CasesByRadiologistReport,
+  CasesByRadiologistModalityReport, CasesByTimeReport, ServicesDetailReport,
+  PatientListReport, FilterBar as CaChupFilterBar,
+} from './RadiologyReports'
+import {
+  REPORT_GROUPS, REPORT_TO_GROUP, TOP_LEVEL,
+  CA_CHUP_DIMENSIONS, DOANH_THU_DIMENSIONS,
+} from '../config/reportGroups'
+
+const LAST_REPORT_KEY = 'linkrad_last_report'
 
 const fmtMoney = (v) => v == null ? '0' : Number(v).toLocaleString('vi-VN')
 const fmtDate = (d) => {
@@ -17,17 +32,9 @@ const fmtTime = (d) => {
 }
 const today = () => new Date().toISOString().slice(0, 10)
 
-// ── Sidebar menu ────────────────────────────────────────
-const REPORT_MENU = [
-  { key: 'revenue-detail', label: 'Báo cáo doanh thu chi tiết', icon: '📊' },
-  { key: 'customer-detail', label: 'Báo cáo chi tiết khách hàng', icon: '👥' },
-  { key: 'promotion-detail', label: 'Báo cáo chương trình khuyến mãi', icon: '🎁' },
-  { key: 'clinic-revenue', label: 'Báo cáo doanh thu phòng khám', icon: '🏥' },
-  { key: 'refund-exchange', label: 'Báo cáo hoàn trả/đổi dịch vụ', icon: '🔄' },
-  { key: 'e-invoice', label: 'Báo cáo hóa đơn điện tử', icon: '🧾' },
-  { key: 'referral-revenue', label: 'BC doanh thu theo đối tác giới thiệu', icon: '🤝' },
-  { key: 'salesperson-kpi', label: 'BC KPI nhân viên kinh doanh', icon: '🎯' },
-]
+// R1 2026-04-24: 8-report REPORT_MENU replaced by reportGroups.js config.
+// The 8 per-dimension renderers below are kept as exports and dispatched
+// from the Doanh thu unified page via DOANH_THU_DIMENSIONS.
 
 // ── Column groups (collapsible) ─────────────────────────
 const COLUMN_GROUPS = [
@@ -103,7 +110,7 @@ const COLUMN_GROUPS = [
 ]
 
 // ── Detailed Revenue Report ─────────────────────────────
-function RevenueDetailReport() {
+export function RevenueDetailReport() {
   const [dateFrom, setDateFrom] = useState(today())
   const [dateTo, setDateTo] = useState(today())
   const [branchFilter, setBranchFilter] = useState('')
@@ -359,7 +366,7 @@ const CUSTOMER_COLS = [
   { key: 'paymentMethod', label: 'Hình thức thanh toán', filterable: true },
 ]
 
-function CustomerDetailReport() {
+export function CustomerDetailReport() {
   const [dateFrom, setDateFrom] = useState(today())
   const [dateTo, setDateTo] = useState(today())
   const [data, setData] = useState([])
@@ -444,7 +451,7 @@ const PROMO_COLS = [
   { key: 'netAmount', label: 'Tổng tiền thực thu', align: 'right', isNumeric: true, filterable: true, cls: 'font-medium', render: r => `${fmtMoney(r.netAmount)} d` },
 ]
 
-function PromotionDetailReport() {
+export function PromotionDetailReport() {
   const [dateFrom, setDateFrom] = useState(today())
   const [dateTo, setDateTo] = useState(today())
   const [data, setData] = useState([])
@@ -551,7 +558,7 @@ const CLINIC_REV_COLS = [
   { key: 'paymentMethod', label: 'Hình thức thanh toán', filterable: true },
 ]
 
-function ClinicRevenueReport() {
+export function ClinicRevenueReport() {
   const [tab, setTab] = useState('revenue') // revenue | collection
   const [dateFrom, setDateFrom] = useState(today())
   const [dateTo, setDateTo] = useState(today())
@@ -658,7 +665,7 @@ const REFUND_COLS = [
   { key: 'paymentMethod', label: 'Hình thức thanh toán', filterable: true },
 ]
 
-function RefundExchangeReport() {
+export function RefundExchangeReport() {
   const [tab, setTab] = useState('refund') // refund | exchange
   const [dateFrom, setDateFrom] = useState(today())
   const [dateTo, setDateTo] = useState(today())
@@ -756,7 +763,7 @@ const EINVOICE_COLS = [
   { key: 'amount', label: 'Tiền chưa xuất', align: 'right', isNumeric: true, filterable: true, render: r => `${fmtMoney(r.amount)} d` },
 ]
 
-function EInvoiceReport() {
+export function EInvoiceReport() {
   const [tab, setTab] = useState('not_issued') // not_issued | issued
   const [dateFrom, setDateFrom] = useState(today())
   const [dateTo, setDateTo] = useState(today())
@@ -872,7 +879,7 @@ function EInvoiceReport() {
 }
 
 // ── Referral Revenue Report ─────────────────────────────
-function ReferralRevenueReport() {
+export function ReferralRevenueReport() {
   const [dateFrom, setDateFrom] = useState(today())
   const [dateTo, setDateTo] = useState(today())
   const [branch, setBranch] = useState('')
@@ -1061,28 +1068,190 @@ function SalespersonKpiReport() {
 }
 
 // ══════════════════════════════════════════════════════════
-//  MAIN REPORTS PAGE
+//  MAIN REPORTS PAGE (R1 unified 2026-04-24)
 // ══════════════════════════════════════════════════════════
+
+function ReportPageHeader({ breadcrumb, userName }) {
+  const date = new Date()
+  const dateStr = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+  return (
+    <div className="flex items-center gap-6 px-4 py-2 border-b bg-white -mx-4 -mt-4 mb-4">
+      <div className="flex items-baseline gap-2">
+        <div className="text-lg font-semibold text-gray-800">Báo cáo</div>
+        <div className="text-xs text-gray-400 font-mono">/báo cáo</div>
+      </div>
+      <div className="flex-1 text-xs text-gray-500">{breadcrumb}</div>
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        {userName && <span className="px-2 py-1 bg-gray-100 rounded-md">👤 {userName}</span>}
+        <span className="px-2 py-1 bg-gray-100 rounded-md">{dateStr}</span>
+      </div>
+    </div>
+  )
+}
+
+// Group-by picker shared by the two unified detail reports. Horizontal pill
+// row — active pill filled, idle is plain text (matches the Danh mục pattern
+// user landed on after 2026-04-23 feedback).
+function GroupByPicker({ dimensions, active, onChange }) {
+  return (
+    <div className="flex items-center gap-1 mb-3 flex-wrap">
+      <span className="text-xs text-gray-500 mr-2">Nhóm theo:</span>
+      {dimensions.map(d => {
+        const isActive = d.key === active
+        const cls = isActive
+          ? 'px-3 py-1.5 rounded-full bg-blue-600 text-white shadow-sm'
+          : 'px-3 py-1.5 rounded-full text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+        return (
+          <button key={d.key} onClick={() => onChange(d.key)} className={`text-xs font-semibold transition-colors ${cls}`}>
+            {d.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Unified Ca chụp / Ca đọc report — wraps the 7 per-dimension renderers from
+// RadiologyReports.jsx behind one group-by picker. Each dimension owns its
+// own internal filter state for R1; shared FilterBar is a later polish.
+const CA_CHUP_RENDERERS = {
+  'cases-by-machine':              CasesByMachineReport,
+  'cases-by-machine-group':        CasesByMachineGroupReport,
+  'cases-by-radiologist':          CasesByRadiologistReport,
+  'cases-by-radiologist-modality': CasesByRadiologistModalityReport,
+  'cases-by-time':                 CasesByTimeReport,
+  'services-detail':               ServicesDetailReport,
+  'patient-list':                  PatientListReport,
+}
+function monthAgo() { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10) }
+function todayStr() { return new Date().toISOString().slice(0, 10) }
+
+function CaChupReport() {
+  const [dim, setDim] = useState('cases-by-time')
+  const [filters, setFilters] = useState({ dateFrom: monthAgo(), dateTo: todayStr(), modality: '', site: '', granularity: 'day' })
+  const Renderer = CA_CHUP_RENDERERS[dim]
+  return (
+    <>
+      <CaChupFilterBar filters={filters} setFilters={setFilters} granularityToggle={dim === 'cases-by-time'} />
+      <GroupByPicker dimensions={CA_CHUP_DIMENSIONS} active={dim} onChange={setDim} />
+      {Renderer ? <Renderer filters={filters} /> : <div className="text-sm text-gray-400 p-4">Không có bộ hiển thị phù hợp.</div>}
+    </>
+  )
+}
+
+// Unified Doanh thu report — each per-dim business report is self-contained
+// with its own internal filter state, so the unified page is just a picker
+// that swaps the active renderer. Shared top-level filter bar is a future
+// consolidation.
+const DOANH_THU_RENDERERS = {
+  'revenue-detail':    RevenueDetailReport,
+  'clinic-revenue':    ClinicRevenueReport,
+  'customer-detail':   CustomerDetailReport,
+  'referral-revenue':  ReferralRevenueReport,
+  'promotion-detail':  PromotionDetailReport,
+  'refund-exchange':   RefundExchangeReport,
+  'e-invoice':         EInvoiceReport,
+}
+function DoanhThuReport() {
+  const [dim, setDim] = useState('revenue-detail')
+  const Renderer = DOANH_THU_RENDERERS[dim]
+  return (
+    <>
+      <GroupByPicker dimensions={DOANH_THU_DIMENSIONS} active={dim} onChange={setDim} />
+      {Renderer ? <Renderer /> : <div className="text-sm text-gray-400 p-4">Không có bộ hiển thị phù hợp.</div>}
+    </>
+  )
+}
+
+// Tổng Quan executive dashboard — R1 placeholder. R2 will replace with real
+// KPI tiles (this-month revenue, MoM delta, cases today, TAT, unpaid).
+function TongQuanPlaceholder() {
+  const nav = useNavigate()
+  const tiles = [
+    { key: 'lam-sang-overview',  label: 'Lâm sàng',   desc: 'Ca chụp, BS đọc, TAT hôm nay', emoji: '🩺' },
+    { key: 'van-hanh-overview',  label: 'Vận Hành',   desc: 'Doanh thu hôm nay, ca, chi nhánh', emoji: '⚙️' },
+    { key: 'tai-chinh-overview', label: 'Tài Chính',  desc: 'Doanh thu tháng, EBITDA, LNST',    emoji: '💼' },
+  ]
+  return (
+    <div className="space-y-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+        <b>Đang phát triển</b> — trang Tổng Quan sẽ hiển thị các chỉ số then chốt (doanh thu tháng, MoM, ca hôm nay, TAT, công nợ chưa thu). Hiện tại, chọn một mảng để xem.
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {tiles.map(t => (
+          <button
+            key={t.key}
+            onClick={() => nav(`/reports/${t.key}`)}
+            className="text-left bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md hover:border-blue-200 transition-all"
+          >
+            <div className="text-3xl mb-2">{t.emoji}</div>
+            <div className="font-semibold text-gray-900 mb-1">{t.label}</div>
+            <div className="text-xs text-gray-500">{t.desc}</div>
+            <div className="mt-3 text-xs text-blue-600">Mở →</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Kho report — R1 links to the operational Inventory workspace; R2 will
+// ship a proper Báo cáo Kho with group-by (vật tư / kho / thời gian / lý do).
+function KhoReportPlaceholder() {
+  const nav = useNavigate()
+  return (
+    <div className="space-y-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+        <b>Đang phát triển</b> — báo cáo Kho (tiêu thụ vật tư, sổ kho, tồn theo chi nhánh) sẽ được xây dựng trong R2.
+        Hiện tại, tab Giao dịch ở trang Quản lý kho cung cấp đầy đủ chức năng lọc/xuất.
+      </div>
+      <button onClick={() => nav('/inventory')}
+        className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+        Mở Quản lý kho →
+      </button>
+    </div>
+  )
+}
+
 export default function Reports() {
+  const { auth } = useAuth()
   const { reportKey } = useParams()
-  const activeKey = reportKey || 'revenue-detail'
-  const activeLabel = REPORT_MENU.find(i => i.key === activeKey)?.label || ''
+  const activeKey = reportKey || ''
+
+  useEffect(() => {
+    if (activeKey) try { localStorage.setItem(LAST_REPORT_KEY, activeKey) } catch {}
+  }, [activeKey])
+
+  if (!activeKey) {
+    let remembered = null
+    try { remembered = localStorage.getItem(LAST_REPORT_KEY) } catch {}
+    const valid = remembered && (remembered === TOP_LEVEL.key || REPORT_TO_GROUP[remembered])
+    return <Navigate to={`/reports/${valid ? remembered : TOP_LEVEL.key}`} replace />
+  }
+
+  // Breadcrumb
+  const top = activeKey === TOP_LEVEL.key ? TOP_LEVEL : null
+  const groupInfo = REPORT_TO_GROUP[activeKey]
+  const breadcrumb = top
+    ? <b className="text-gray-700">Tổng Quan</b>
+    : groupInfo
+      ? <>{groupInfo.group.label} · <b className="text-gray-700">{groupInfo.item.label}</b></>
+      : 'Không tìm thấy'
 
   const renderContent = () => {
-    if (activeKey === 'revenue-detail') return <RevenueDetailReport />
-    if (activeKey === 'customer-detail') return <CustomerDetailReport />
-    if (activeKey === 'promotion-detail') return <PromotionDetailReport />
-    if (activeKey === 'clinic-revenue') return <ClinicRevenueReport />
-    if (activeKey === 'refund-exchange') return <RefundExchangeReport />
-    if (activeKey === 'e-invoice') return <EInvoiceReport />
-    if (activeKey === 'referral-revenue') return <ReferralRevenueReport />
-    if (activeKey === 'salesperson-kpi') return <SalespersonKpiReport />
-    return <div className="text-gray-400 text-sm p-4">Chọn báo cáo từ menu bên trái</div>
+    if (activeKey === TOP_LEVEL.key)        return <TongQuanPlaceholder />
+    if (activeKey === 'lam-sang-overview')  return <DashboardClinical />
+    if (activeKey === 'van-hanh-overview')  return <DashboardOps />
+    if (activeKey === 'tai-chinh-overview') return <DashboardFinance />
+    if (activeKey === 'ca-chup-doc')        return <CaChupReport />
+    if (activeKey === 'doanh-thu')          return <DoanhThuReport />
+    if (activeKey === 'kho')                return <KhoReportPlaceholder />
+    return <div className="text-gray-400 text-sm p-4">Báo cáo không tồn tại.</div>
   }
 
   return (
     <div>
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">{activeLabel}</h3>
+      <ReportPageHeader breadcrumb={breadcrumb} userName={auth?.displayName || auth?.username} />
       {renderContent()}
     </div>
   )

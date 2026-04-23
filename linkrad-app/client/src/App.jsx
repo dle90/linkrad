@@ -68,11 +68,17 @@ function AuthenticatedRoutes() {
             {isWorkflowUser && <Route path="/catalogs/:catalogKey" element={<Catalogs />} />}
             {isWorkflowUser && <Route path="/reports" element={<Reports />} />}
             {isWorkflowUser && <Route path="/reports/:reportKey" element={<Reports />} />}
-            {isWorkflowUser && <Route path="/rad-reports" element={<RadiologyReports />} />}
-            {isWorkflowUser && <Route path="/rad-reports/:reportKey" element={<RadiologyReports />} />}
-            {isWorkflowUser && <Route path="/dashboard/clinical" element={<DashboardClinical />} />}
-            {isWorkflowUser && <Route path="/dashboard/ops" element={<DashboardOps />} />}
-            {(auth.role === 'admin' || auth.role === 'giamdoc') && <Route path="/dashboard/finance" element={<DashboardFinance />} />}
+            {/* R1 2026-04-24: Báo cáo consolidated — old /rad-reports/* and
+                 /dashboard/{clinical,ops,finance} redirect into the new tree.
+                 The 15 legacy rad/business report sub-keys map to the two
+                 unified reports; users arriving from bookmarks land on the
+                 right group and can pick their dimension from the in-page
+                 group-by picker. */}
+            {isWorkflowUser && <Route path="/rad-reports" element={<Navigate to="/reports/ca-chup-doc" replace />} />}
+            {isWorkflowUser && <Route path="/rad-reports/:reportKey" element={<Navigate to="/reports/ca-chup-doc" replace />} />}
+            {isWorkflowUser && <Route path="/dashboard/clinical" element={<Navigate to="/reports/lam-sang-overview" replace />} />}
+            {isWorkflowUser && <Route path="/dashboard/ops" element={<Navigate to="/reports/van-hanh-overview" replace />} />}
+            {(auth.role === 'admin' || auth.role === 'giamdoc') && <Route path="/dashboard/finance" element={<Navigate to="/reports/tai-chinh-overview" replace />} />}
             {isWorkflowUser && <Route path="/today" element={<TodayDashboard />} />}
             {/* MWL + Critical findings now live as tabs inside /ris.
                 Old standalone routes redirect for backward compatibility (search/links). */}

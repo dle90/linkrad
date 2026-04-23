@@ -5,16 +5,9 @@ import api, { logoutUser } from '../api'
 import GlobalSearch from './GlobalSearch'
 import NotificationBell from './NotificationBell'
 import { CATALOG_GROUPS, CATALOG_TO_GROUP } from '../config/catalogGroups'
+import { REPORT_GROUPS, REPORT_TO_GROUP, TOP_LEVEL as REPORT_TOP_LEVEL } from '../config/reportGroups'
 
 const NAV = [
-  {
-    group: 'Dashboard',
-    items: [
-      { path: '/dashboard/clinical', label: 'Lâm Sàng',  icon: '🩺', workflowOnly: true },
-      { path: '/dashboard/ops',      label: 'Vận Hành',  icon: '⚙️', workflowOnly: true },
-      { path: '/dashboard/finance',  label: 'Tài Chính', icon: '💼', financialsOnly: true },
-    ]
-  },
   {
     group: 'Tiếp đón',
     items: [
@@ -43,34 +36,12 @@ const NAV = [
     group: 'Danh mục',
   },
   {
+    // Rendered by <ReportTree> below — 4 top-level entries (Tổng Quan leaf
+    // + 3 persona groups Lâm sàng / Vận Hành / Tài Chính) collapsible, same
+    // pattern as CatalogTree. Replaces the old Dashboard + Báo cáo groups
+    // and the 15 individual report sidebar links.
+    reportTree: true,
     group: 'Báo cáo',
-    subgroups: [
-      {
-        title: 'Chẩn đoán hình ảnh',
-        items: [
-          { path: '/rad-reports/cases-by-machine',              label: 'BC số ca theo máy',          icon: '🖥️', perm: 'rad-reports.view' },
-          { path: '/rad-reports/cases-by-machine-group',        label: 'BC số ca theo nhóm máy',     icon: '📦', perm: 'rad-reports.view' },
-          { path: '/rad-reports/cases-by-radiologist',          label: 'BC số ca theo BS đọc',       icon: '👨‍⚕️', perm: 'rad-reports.view' },
-          { path: '/rad-reports/cases-by-radiologist-modality', label: 'BC BS đọc × loại máy',       icon: '📋', perm: 'rad-reports.view' },
-          { path: '/rad-reports/cases-by-time',                 label: 'BC theo thời gian',          icon: '🕒', perm: 'rad-reports.view' },
-          { path: '/rad-reports/services-detail',               label: 'BC chi tiết DV ca theo máy', icon: '📄', perm: 'rad-reports.view' },
-          { path: '/rad-reports/patient-list',                  label: 'BC DS BN đã đọc KQ',         icon: '🧑', perm: 'rad-reports.view' },
-        ]
-      },
-      {
-        title: 'Kinh doanh',
-        items: [
-          { path: '/reports/revenue-detail',    label: 'BC doanh thu chi tiết',   icon: '📊', perm: 'reports.view' },
-          { path: '/reports/customer-detail',   label: 'BC chi tiết khách hàng',  icon: '👥', perm: 'reports.view' },
-          { path: '/reports/promotion-detail',  label: 'BC chương trình KM',      icon: '🎁', perm: 'reports.view' },
-          { path: '/reports/clinic-revenue',    label: 'BC doanh thu phòng khám', icon: '🏥', perm: 'reports.view' },
-          { path: '/reports/refund-exchange',   label: 'BC hoàn trả/đổi DV',      icon: '🔄', perm: 'reports.view' },
-          { path: '/reports/e-invoice',         label: 'BC hóa đơn điện tử',      icon: '🧾', perm: 'reports.view' },
-          { path: '/reports/referral-revenue',  label: 'BC doanh thu đối tác GT', icon: '🤝', perm: 'referral.view' },
-          { path: '/reports/salesperson-kpi',   label: 'BC KPI NVKD',             icon: '🎯', perm: 'kpi-sales.view' },
-        ]
-      }
-    ]
   },
   {
     group: 'Quản lý',
@@ -245,6 +216,98 @@ function CatalogTree({ hasPerm }) {
   )
 }
 
+// ── Collapsible Báo cáo tree ───────────────────────────────────────────────
+// 4 top-level entries: Tổng Quan (leaf) + 3 persona groups (Lâm sàng /
+// Vận Hành / Tài Chính) that expand to their sub-reports. Expansion persists
+// in localStorage and auto-opens the group containing the active report.
+// Same shape as CatalogTree — factored only because report data shape
+// differs enough (has a leaf at top level) that sharing was awkward.
+const REPORT_TREE_LS_KEY = 'linkrad_report_tree_expanded'
+
+function ReportTree({ hasPerm, isFinancialsUser }) {
+  const location = useLocation()
+
+  const activeKey = (() => {
+    const m = location.pathname.match(/^\/reports\/([^/?#]+)/)
+    return m ? m[1] : null
+  })()
+  const activeGroupKey = activeKey ? REPORT_TO_GROUP[activeKey]?.group?.key : null
+
+  const [expanded, setExpanded] = React.useState(() => {
+    try {
+      const raw = localStorage.getItem(REPORT_TREE_LS_KEY)
+      if (raw) return new Set(JSON.parse(raw))
+    } catch {}
+    return new Set(activeGroupKey ? [activeGroupKey] : ['lam-sang'])
+  })
+
+  React.useEffect(() => {
+    if (!activeGroupKey) return
+    setExpanded(prev => {
+      if (prev.has(activeGroupKey)) return prev
+      const next = new Set(prev); next.add(activeGroupKey); return next
+    })
+  }, [activeGroupKey])
+
+  React.useEffect(() => {
+    try { localStorage.setItem(REPORT_TREE_LS_KEY, JSON.stringify([...expanded])) } catch {}
+  }, [expanded])
+
+  const canView = hasPerm ? (hasPerm('reports.view') || hasPerm('rad-reports.view') || isFinancialsUser) : true
+  if (!canView) return null
+
+  const toggleGroup = (key) => setExpanded(prev => {
+    const next = new Set(prev)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    return next
+  })
+
+  const isActiveTopLevel = activeKey === REPORT_TOP_LEVEL.key
+
+  return (
+    <div>
+      {/* Top-level: Tổng Quan leaf */}
+      <NavLink
+        to={`/reports/${REPORT_TOP_LEVEL.key}`}
+        className={`flex items-center px-4 py-1.5 text-sm transition-colors ${isActiveTopLevel ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300' : 'text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+      >
+        <span className="mr-2 text-xs">{REPORT_TOP_LEVEL.icon}</span>
+        <span className="flex-1 truncate">{REPORT_TOP_LEVEL.label}</span>
+      </NavLink>
+      {/* Persona groups */}
+      {REPORT_GROUPS.map(g => {
+        const isOpen = expanded.has(g.key)
+        const isActiveGroup = g.key === activeGroupKey
+        return (
+          <div key={g.key}>
+            <button
+              type="button"
+              onClick={() => toggleGroup(g.key)}
+              className={`w-full flex items-center px-4 py-1.5 text-sm transition-colors ${isActiveGroup ? 'text-white' : 'text-blue-200 hover:text-white hover:bg-blue-800'}`}
+            >
+              <span className="mr-1.5 text-[10px] w-3 inline-block opacity-70">{isOpen ? '▾' : '▸'}</span>
+              <span className="flex-1 text-left font-medium">{g.label}</span>
+            </button>
+            {isOpen && g.items.map(it => {
+              const isActive = it.key === activeKey
+              return (
+                <NavLink
+                  key={it.key}
+                  to={`/reports/${it.key}`}
+                  className={`flex items-center pl-9 pr-4 py-1.5 text-sm transition-colors ${isActive ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300' : 'text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+                >
+                  <span className="mr-2 text-xs">{it.icon}</span>
+                  <span className="flex-1 truncate">{it.label}</span>
+                </NavLink>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Layout({ children }) {
   const { auth, logout, hasPerm } = useAuth()
   const isAdmin = auth?.role === 'admin'
@@ -307,6 +370,18 @@ export default function Layout({ children }) {
                     {section.group}
                   </div>
                   <CatalogTree hasPerm={hasPerm} />
+                </div>
+              )
+            }
+
+            if (section.reportTree) {
+              if (!isWorkflowUser) return null
+              return (
+                <div key={section.group} className="mb-2">
+                  <div className="px-4 py-1 text-blue-400 text-xs font-semibold uppercase tracking-wider">
+                    {section.group}
+                  </div>
+                  <ReportTree hasPerm={hasPerm} isFinancialsUser={isFinancialsUser} />
                 </div>
               )
             }
