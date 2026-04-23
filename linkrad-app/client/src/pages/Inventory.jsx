@@ -1,843 +1,1273 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import api from '../api'
 
-const fmtMoney = (v) => v == null ? '0' : Number(v).toLocaleString('vi-VN')
-const TX_TYPES = { import: 'Nhập kho', export: 'Xuất kho', adjustment: 'Điều chỉnh', auto_deduct: 'Trừ tự động' }
-const TX_CLS = { import: 'bg-green-100 text-green-700', export: 'bg-orange-100 text-orange-700', adjustment: 'bg-blue-100 text-blue-700', auto_deduct: 'bg-purple-100 text-purple-700' }
+// ─── constants ──────────────────────────────────────────────────────────────
+const TX_TYPES = {
+  import: 'Nhập kho', export: 'Xuất kho', adjustment: 'Điều chỉnh',
+  auto_deduct: 'Trừ tự động', transfer_out: 'Chuyển đi', transfer_in: 'Chuyển đến',
+}
+const TX_CLS = {
+  import: 'bg-teal-50 text-teal-700 border-teal-200',
+  export: 'bg-orange-50 text-orange-700 border-orange-200',
+  adjustment: 'bg-slate-50 text-slate-700 border-slate-200',
+  auto_deduct: 'bg-purple-50 text-purple-700 border-purple-200',
+  transfer_out: 'bg-amber-50 text-amber-700 border-amber-200',
+  transfer_in: 'bg-blue-50 text-blue-700 border-blue-200',
+}
 const ST_CLS = { draft: 'bg-gray-100 text-gray-700', confirmed: 'bg-green-100 text-green-700', cancelled: 'bg-red-100 text-red-700' }
 const ST_LBL = { draft: 'Nháp', confirmed: 'Đã xác nhận', cancelled: 'Đã hủy' }
 
-// ── Reusable CRUD Modal ──────────────────────────────────
-function CrudModal({ title, fields, record, onClose, onSave }) {
-  const [form, setForm] = useState(record || {})
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const handleSave = async () => {
-    for (const f of fields) { if (f.required && !form[f.key]?.toString().trim()) return setError(`${f.label} là bắt buộc`) }
-    setSaving(true); setError('')
-    try { await onSave(form) } catch (err) { setError(err.response?.data?.error || 'Lỗi'); setSaving(false) }
-  }
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b flex justify-between"><h3 className="font-semibold text-gray-800">{title}</h3><button onClick={onClose} className="text-gray-400 hover:text-gray-600">&times;</button></div>
-        <div className="p-6 space-y-3">
-          {error && <div className="text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
-          <div className="grid grid-cols-2 gap-3">
-            {fields.map(f => (
-              <div key={f.key} className={f.wide ? 'col-span-2' : ''}>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}{f.required ? ' *' : ''}</label>
-                {f.type === 'select' ? (
-                  <select className="w-full border rounded px-2 py-1.5 text-sm" value={form[f.key] || ''} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}>
-                    <option value="">-- Chọn --</option>
-                    {f.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                ) : f.type === 'number' ? (
-                  <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={form[f.key] || 0} onChange={e => setForm(p => ({ ...p, [f.key]: +e.target.value }))} />
-                ) : (
-                  <input className="w-full border rounded px-2 py-1.5 text-sm" value={form[f.key] || ''} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="px-6 py-3 border-t flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">Hủy</button>
-          <button onClick={handleSave} disabled={saving} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{saving ? 'Đang lưu...' : 'Lưu'}</button>
-        </div>
-      </div>
-    </div>
-  )
+const REASON_PRESETS = {
+  export: [
+    { code: 'expired',  name: 'Tiêu hủy — hết hạn' },
+    { code: 'damaged',  name: 'Hỏng / vỡ' },
+    { code: 'return',   name: 'Trả NCC' },
+    { code: 'other',    name: 'Khác' },
+  ],
+  adjustment: [
+    { code: 'stocktake', name: 'Kiểm kê định kỳ' },
+    { code: 'count_error', name: 'Sai số đếm' },
+    { code: 'other', name: 'Khác' },
+  ],
+  stocktake: [
+    { code: 'count_error', name: 'Sai số đếm' },
+    { code: 'loss', name: 'Thất thoát' },
+    { code: 'found', name: 'Tìm thấy dôi dư' },
+    { code: 'damaged', name: 'Hỏng / vỡ' },
+    { code: 'other', name: 'Khác' },
+  ],
 }
 
-// ── Transaction (Import/Export) Modal ────────────────────
-function TransactionModal({ type, supplies, suppliers, warehouses, cancelReasons, userDept, onClose, onSaved }) {
-  const [site, setSite] = useState(userDept || '')
-  const [warehouseId, setWarehouseId] = useState('')
-  const [accountingPeriod, setAccountingPeriod] = useState(() => {
-    const d = new Date(); return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
-  })
-  const [supplierId, setSupplierId] = useState('')
-  const [supplierName, setSupplierName] = useState('')
-  const [reason, setReason] = useState('')
-  const [txNotes, setTxNotes] = useState('')
-  const emptyItem = { supplyId: '', supplyName: '', supplyCode: '', unit: '', packagingSpec: '', quantity: 1, conversionQuantity: 0, purchasePrice: 0, lotNumber: '', manufacturingDate: '', expiryDate: '', vatRate: 10, discountPercent: 0, discountAmount: 0, notes: '' }
-  const [items, setItems] = useState([{ ...emptyItem }])
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const addItem = () => setItems(p => [...p, { ...emptyItem }])
-  const removeItem = (i) => setItems(p => p.filter((_, idx) => idx !== i))
-  const updateItem = (i, field, val) => setItems(p => p.map((it, idx) => idx === i ? { ...it, [field]: val } : it))
-  const selectSupply = (i, id) => {
-    const s = supplies.find(s => s._id === id)
-    setItems(p => p.map((it, idx) => idx === i ? { ...it, supplyId: id, supplyName: s?.name || '', supplyCode: s?.code || '', unit: s?.unit || '', packagingSpec: s?.packagingSpec || '', conversionQuantity: (it.quantity || 1) * (s?.conversionRate || 1) } : it))
-  }
-  // Auto-calc conversion when quantity changes
-  const updateQuantity = (i, qty) => {
-    const s = supplies.find(s => s._id === items[i].supplyId)
-    setItems(p => p.map((it, idx) => idx === i ? { ...it, quantity: qty, conversionQuantity: qty * (s?.conversionRate || 1) } : it))
-  }
-
-  // Computed totals per item
-  const calcItem = (it) => {
-    const amtBefore = (it.purchasePrice || 0) * (it.quantity || 0)
-    const vatAmt = Math.round(amtBefore * (it.vatRate || 0) / 100)
-    const amtAfter = amtBefore + vatAmt
-    const discAmt = it.discountAmount || Math.round(amtAfter * (it.discountPercent || 0) / 100)
-    return { amtBefore, vatAmt, amtAfter, discAmt, total: amtAfter - discAmt }
-  }
-  const totals = items.reduce((acc, it) => {
-    const c = calcItem(it); return { before: acc.before + c.amtBefore, vat: acc.vat + c.vatAmt, disc: acc.disc + c.discAmt, total: acc.total + c.total }
-  }, { before: 0, vat: 0, disc: 0, total: 0 })
-
-  const handleSave = async () => {
-    if (items.some(it => !it.supplyId || !it.quantity)) return setError('Vui lòng chọn vật tư và số lượng')
-    setSaving(true)
-    const wh = warehouses.find(w => w._id === warehouseId)
-    try {
-      await api.post('/inventory/transactions', {
-        type, site, warehouseId, warehouseName: wh?.name || '', warehouseCode: wh?.code || '',
-        accountingPeriod, items, supplierId, supplierName, reason, notes: txNotes,
-      })
-      onSaved()
-    } catch (err) { setError(err.response?.data?.error || 'Lỗi'); setSaving(false) }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b flex justify-between">
-          <h3 className="font-semibold text-gray-800">{type === 'import' ? 'Tạo phiếu nhập kho' : 'Tạo phiếu xuất kho'}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">&times;</button>
-        </div>
-        <div className="p-6 space-y-4">
-          {error && <div className="text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
-          {/* Header fields */}
-          <div className="grid grid-cols-4 gap-3">
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Chi nhánh</label><input className="w-full border rounded px-2 py-1.5 text-sm" value={site} onChange={e => setSite(e.target.value)} /></div>
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Kho</label>
-              <select className="w-full border rounded px-2 py-1.5 text-sm" value={warehouseId} onChange={e => setWarehouseId(e.target.value)}>
-                <option value="">-- Tất cả --</option>{warehouses.map(w => <option key={w._id} value={w._id}>{w.code} - {w.name}</option>)}
-              </select></div>
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Kỳ kế toán</label><input className="w-full border rounded px-2 py-1.5 text-sm" value={accountingPeriod} onChange={e => setAccountingPeriod(e.target.value)} placeholder="MM/YYYY" /></div>
-            {type === 'import' && <div><label className="block text-xs font-medium text-gray-600 mb-1">Nhà cung cấp</label>
-              <select className="w-full border rounded px-2 py-1.5 text-sm" value={supplierId} onChange={e => { setSupplierId(e.target.value); setSupplierName(suppliers.find(s => s._id === e.target.value)?.name || '') }}>
-                <option value="">-- Chọn --</option>{suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-              </select></div>}
-            <div><label className="block text-xs font-medium text-gray-600 mb-1">Lý do</label><input className="w-full border rounded px-2 py-1.5 text-sm" value={reason} onChange={e => setReason(e.target.value)} /></div>
-            <div className="col-span-2"><label className="block text-xs font-medium text-gray-600 mb-1">Ghi chú phiếu</label><input className="w-full border rounded px-2 py-1.5 text-sm" value={txNotes} onChange={e => setTxNotes(e.target.value)} /></div>
-          </div>
-
-          {/* Items table */}
-          <div>
-            <div className="flex justify-between items-center mb-2"><label className="text-sm font-medium text-gray-700">Danh sách vật tư</label><button onClick={addItem} className="text-sm text-blue-600 hover:text-blue-800">+ Thêm dòng</button></div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs min-w-[1100px]">
-                <thead><tr className="bg-gray-50 text-gray-600">
-                  <th className="text-left px-1.5 py-1.5">Vật tư</th>
-                  <th className="text-left px-1.5 py-1.5 w-16">ĐVT</th>
-                  <th className="text-left px-1.5 py-1.5 w-20">Quy cách</th>
-                  <th className="text-right px-1.5 py-1.5 w-14">SL</th>
-                  <th className="text-right px-1.5 py-1.5 w-16">SL CĐ</th>
-                  {type === 'import' && <>
-                    <th className="text-left px-1.5 py-1.5 w-20">Mã lô</th>
-                    <th className="text-left px-1.5 py-1.5 w-24">Ngày SX</th>
-                    <th className="text-left px-1.5 py-1.5 w-24">Hạn SD</th>
-                    <th className="text-right px-1.5 py-1.5 w-20">Giá mua</th>
-                    <th className="text-right px-1.5 py-1.5 w-16">Giá/ĐV</th>
-                    <th className="text-right px-1.5 py-1.5 w-20">Trước thuế</th>
-                    <th className="text-right px-1.5 py-1.5 w-12">VAT%</th>
-                    <th className="text-right px-1.5 py-1.5 w-12">CK%</th>
-                    <th className="text-right px-1.5 py-1.5 w-20">Tổng tiền</th>
-                  </>}
-                  <th className="text-left px-1.5 py-1.5 w-20">Ghi chú</th>
-                  <th className="px-1 py-1.5 w-6"></th>
-                </tr></thead>
-                <tbody>{items.map((it, i) => {
-                  const c = calcItem(it)
-                  return (
-                    <tr key={i} className="border-b">
-                      <td className="px-1.5 py-1"><select className="w-full border rounded px-1 py-1 text-xs" value={it.supplyId} onChange={e => selectSupply(i, e.target.value)}><option value="">-- Chọn --</option>{supplies.map(s => <option key={s._id} value={s._id}>{s.name} ({s.code})</option>)}</select></td>
-                      <td className="px-1.5 py-1 text-gray-500">{it.unit || '-'}</td>
-                      <td className="px-1.5 py-1 text-gray-500">{it.packagingSpec || '-'}</td>
-                      <td className="px-1.5 py-1"><input type="number" className="w-14 border rounded px-1 py-1 text-right text-xs" value={it.quantity} onChange={e => updateQuantity(i, +e.target.value)} min={1} /></td>
-                      <td className="px-1.5 py-1 text-right text-gray-500">{it.conversionQuantity || '-'}</td>
-                      {type === 'import' && <>
-                        <td className="px-1.5 py-1"><input className="w-20 border rounded px-1 py-1 text-xs" value={it.lotNumber} onChange={e => updateItem(i, 'lotNumber', e.target.value)} /></td>
-                        <td className="px-1.5 py-1"><input type="date" className="border rounded px-1 py-1 text-xs" value={it.manufacturingDate} onChange={e => updateItem(i, 'manufacturingDate', e.target.value)} /></td>
-                        <td className="px-1.5 py-1"><input type="date" className="border rounded px-1 py-1 text-xs" value={it.expiryDate} onChange={e => updateItem(i, 'expiryDate', e.target.value)} /></td>
-                        <td className="px-1.5 py-1"><input type="number" className="w-20 border rounded px-1 py-1 text-right text-xs" value={it.purchasePrice} onChange={e => updateItem(i, 'purchasePrice', +e.target.value)} /></td>
-                        <td className="px-1.5 py-1 text-right text-gray-500">{it.conversionQuantity > 0 ? fmtMoney(Math.round((it.purchasePrice || 0) * (it.quantity || 0) / it.conversionQuantity)) : '-'}</td>
-                        <td className="px-1.5 py-1 text-right">{fmtMoney(c.amtBefore)}</td>
-                        <td className="px-1.5 py-1"><input type="number" className="w-12 border rounded px-1 py-1 text-right text-xs" value={it.vatRate} onChange={e => updateItem(i, 'vatRate', +e.target.value)} /></td>
-                        <td className="px-1.5 py-1"><input type="number" className="w-12 border rounded px-1 py-1 text-right text-xs" value={it.discountPercent} onChange={e => updateItem(i, 'discountPercent', +e.target.value)} /></td>
-                        <td className="px-1.5 py-1 text-right font-medium">{fmtMoney(c.total)}</td>
-                      </>}
-                      <td className="px-1.5 py-1"><input className="w-20 border rounded px-1 py-1 text-xs" value={it.notes || ''} onChange={e => updateItem(i, 'notes', e.target.value)} /></td>
-                      <td className="px-1 py-1">{items.length > 1 && <button onClick={() => removeItem(i)} className="text-red-400 hover:text-red-600">&times;</button>}</td>
-                    </tr>
-                  )
-                })}</tbody>
-              </table>
-            </div>
-            {type === 'import' && (
-              <div className="flex justify-end gap-6 mt-3 text-sm">
-                <span className="text-gray-500">Trước thuế: <span className="font-medium text-gray-700">{fmtMoney(totals.before)}</span></span>
-                <span className="text-gray-500">VAT: <span className="font-medium text-blue-600">{fmtMoney(totals.vat)}</span></span>
-                <span className="text-gray-500">Chiết khấu: <span className="font-medium text-orange-600">{fmtMoney(totals.disc)}</span></span>
-                <span className="text-gray-700 font-semibold">Tổng tiền: <span className="text-blue-700">{fmtMoney(totals.total)}</span></span>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="px-6 py-3 border-t flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">Hủy</button>
-          <button onClick={handleSave} disabled={saving} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{saving ? 'Đang lưu...' : 'Tạo phiếu'}</button>
-        </div>
-      </div>
-    </div>
-  )
+const fmtMoney = (v) => v == null ? '0' : Number(v).toLocaleString('vi-VN')
+const fmtDate = (iso) => {
+  if (!iso) return '—'
+  const s = (iso || '').toString()
+  if (s.length === 7 && s.includes('/')) return s
+  const d = s.slice(0, 10)
+  if (!d) return '—'
+  const [y, m, dd] = d.split('-')
+  return `${dd}/${m}/${y}`
+}
+const daysUntil = (iso) => {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return Math.ceil((d.getTime() - Date.now()) / 86400000)
 }
 
-// ── HIS Mapping Modal ────────────────────────────────────
-function HisMappingModal({ services, supplies, onClose, onSaved }) {
-  const [serviceId, setServiceId] = useState('')
-  const [supplyId, setSupplyId] = useState('')
-  const [quantity, setQuantity] = useState(1)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const svc = services.find(s => s._id === serviceId)
-  const spl = supplies.find(s => s._id === supplyId)
-  const handleSave = async () => {
-    if (!serviceId || !supplyId) return setError('Vui lòng chọn dịch vụ và vật tư')
-    setSaving(true)
-    try {
-      await api.post('/inventory/his-mapping', { serviceId, serviceCode: svc?.code, serviceName: svc?.name, supplyId, supplyCode: spl?.code, supplyName: spl?.name, quantity, unit: spl?.unit })
-      onSaved()
-    } catch (err) { setError(err.response?.data?.error || 'Lỗi'); setSaving(false) }
-  }
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b"><h3 className="font-semibold text-gray-800">Thêm định mức vật tư - dịch vụ</h3></div>
-        <div className="p-6 space-y-3">
-          {error && <div className="text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
-          <div><label className="block text-xs font-medium text-gray-600 mb-1">Dịch vụ *</label>
-            <select className="w-full border rounded px-2 py-1.5 text-sm" value={serviceId} onChange={e => setServiceId(e.target.value)}><option value="">-- Chọn --</option>{services.map(s => <option key={s._id} value={s._id}>{s.code} - {s.name}</option>)}</select></div>
-          <div><label className="block text-xs font-medium text-gray-600 mb-1">Vật tư *</label>
-            <select className="w-full border rounded px-2 py-1.5 text-sm" value={supplyId} onChange={e => setSupplyId(e.target.value)}><option value="">-- Chọn --</option>{supplies.map(s => <option key={s._id} value={s._id}>{s.code} - {s.name}</option>)}</select></div>
-          <div><label className="block text-xs font-medium text-gray-600 mb-1">Số lượng tiêu hao</label>
-            <input type="number" className="w-full border rounded px-2 py-1.5 text-sm" value={quantity} onChange={e => setQuantity(+e.target.value)} min={1} /></div>
-        </div>
-        <div className="px-6 py-3 border-t flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">Hủy</button>
-          <button onClick={handleSave} disabled={saving} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{saving ? 'Đang lưu...' : 'Lưu'}</button>
-        </div>
-      </div>
-    </div>
-  )
-}
+// ─── tiny atoms ─────────────────────────────────────────────────────────────
+const Pill = ({ children, className = '' }) => (
+  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${className}`}>{children}</span>
+)
+const TabBtn = ({ active, children, onClick, badge }) => (
+  <button
+    onClick={onClick}
+    className={`px-4 py-2 rounded-full text-sm font-medium transition ${active ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
+  >
+    {children}
+    {badge != null && badge > 0 && (
+      <span className={`ml-1.5 px-1.5 rounded-full text-xs font-semibold ${active ? 'bg-white/20' : 'bg-red-100 text-red-700'}`}>{badge}</span>
+    )}
+  </button>
+)
+const Card = ({ children, className = '' }) => (
+  <div className={`bg-white rounded-xl border border-gray-200 ${className}`}>{children}</div>
+)
 
-// ── Stock Card Modal ─────────────────────────────────────
-function StockCardModal({ supply, onClose }) {
-  const [entries, setEntries] = useState([])
-  const [loading, setLoading] = useState(true)
-  useEffect(() => { api.get(`/inventory/reports/card/${supply._id}`).then(r => { setEntries(r.data.entries || []); setLoading(false) }).catch(() => setLoading(false)) }, [supply._id])
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b flex justify-between"><div><h3 className="font-semibold text-gray-800">Thẻ kho - {supply.name}</h3><p className="text-xs text-gray-500">Mã: {supply.code} | Tồn: {supply.currentStock} {supply.unit}</p></div><button onClick={onClose} className="text-gray-400 hover:text-gray-600">&times;</button></div>
-        <div className="p-4">{loading ? <p className="text-gray-400 text-sm p-4">Đang tải...</p> : entries.length === 0 ? <p className="text-gray-400 text-sm p-4 text-center">Chưa có giao dịch</p> : (
-          <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600"><th className="text-left px-3 py-2">Ngày</th><th className="text-left px-3 py-2">Số phiếu</th><th className="text-left px-3 py-2">Loại</th><th className="text-right px-3 py-2">Nhập</th><th className="text-right px-3 py-2">Xuất</th><th className="text-right px-3 py-2">Tồn</th></tr></thead>
-          <tbody>{entries.map((e, i) => (<tr key={i} className="border-t"><td className="px-3 py-1.5">{e.date}</td><td className="px-3 py-1.5 font-medium text-blue-600">{e.transactionNumber}</td><td className="px-3 py-1.5"><span className={`px-1.5 py-0.5 rounded text-xs ${TX_CLS[e.type]}`}>{TX_TYPES[e.type]}</span></td><td className="px-3 py-1.5 text-right text-green-600">{e.inQty > 0 ? `+${e.inQty}` : ''}</td><td className="px-3 py-1.5 text-right text-red-600">{e.outQty > 0 ? `-${e.outQty}` : ''}</td><td className="px-3 py-1.5 text-right font-medium">{e.balance}</td></tr>))}</tbody></table>
-        )}</div>
-      </div>
-    </div>
-  )
-}
-
-// ══════════════════════════════════════════════════════════
-//  MAIN INVENTORY PAGE
-// ══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+//  MAIN PAGE
+// ═══════════════════════════════════════════════════════════════════════════
 export default function Inventory() {
-  const { auth, hasPerm } = useAuth()
-  const canEdit = hasPerm('inventory.manage')
-  const [tab, setTab] = useState('import')
-  const [loading, setLoading] = useState(false)
+  const { auth } = useAuth()
 
-  // Shared data
-  const [supplies, setSupplies] = useState([])
-  const [categories, setCategories] = useState([])
-  const [suppliers, setSuppliers] = useState([])
+  // Warehouse scope: the module's core state.
+  //  - warehouses: list of warehouses the current user can see
+  //  - supervisor: true if this user gets the "all" option + matrix tab
+  //  - activeWh: currently selected warehouse, or null = "all accessible" (supervisor only)
   const [warehouses, setWarehouses] = useState([])
-  const [cancelReasons, setCancelReasons] = useState([])
-  const [hisMappings, setHisMappings] = useState([])
-  const [services, setServices] = useState([])
-  const [lots, setLots] = useState([])
+  const [supervisor, setSupervisor] = useState(false)
+  const [activeWhId, setActiveWhId] = useState(null)  // null = "all" (supervisor only)
+  const [tab, setTab] = useState('overview')
+  const [bootError, setBootError] = useState('')
 
-  // Transaction lists
-  const [importTxs, setImportTxs] = useState([])
-  const [exportTxs, setExportTxs] = useState([])
-
-  // Reports
-  const [reportData, setReportData] = useState(null)
-
-  // Modals
-  const [showTxModal, setShowTxModal] = useState(null)
-  const [editModal, setEditModal] = useState(null) // { type, record, fields, title, saveFn }
-  const [showHisModal, setShowHisModal] = useState(false)
-  const [showStockCard, setShowStockCard] = useState(null)
-
-  // Filters
-  const [filterQ, setFilterQ] = useState('')
-  const [filterCat, setFilterCat] = useState('')
-  const [reportSub, setReportSub] = useState('import') // sub-tab for reports
-  const [hangHoaSub, setHangHoaSub] = useState('supplies') // sub-tab for hang hoa
-  const [khoSub, setKhoSub] = useState('warehouses') // sub-tab for kho
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-
-  // Load shared data
-  const loadBase = useCallback(async () => {
-    try {
-      const [s, c, sup, wh, cr] = await Promise.all([
-        api.get('/inventory/supplies'), api.get('/inventory/categories'),
-        api.get('/inventory/suppliers'), api.get('/inventory/warehouses'),
-        api.get('/inventory/cancel-reasons'),
-      ])
-      setSupplies(s.data); setCategories(c.data); setSuppliers(sup.data)
-      setWarehouses(wh.data); setCancelReasons(cr.data)
-    } catch {}
+  useEffect(() => {
+    api.get('/inventory/warehouses/accessible').then(({ data }) => {
+      setWarehouses(data.warehouses || [])
+      setSupervisor(!!data.supervisor)
+      // Default scope: nv_kho → their only warehouse; supervisor → "all"
+      if (data.supervisor) setActiveWhId(null)
+      else if (data.defaultWarehouseId) setActiveWhId(data.defaultWarehouseId)
+      else if (data.warehouses?.length === 1) setActiveWhId(data.warehouses[0]._id)
+    }).catch(e => setBootError(e.response?.data?.error || 'Không tải được kho'))
   }, [])
 
-  const loadImportTxs = useCallback(async () => {
-    setLoading(true)
-    try { const r = await api.get('/inventory/transactions', { params: { type: 'import', limit: 200 } }); setImportTxs(r.data) } catch {}
-    setLoading(false)
-  }, [])
+  const activeWh = useMemo(() => warehouses.find(w => w._id === activeWhId), [warehouses, activeWhId])
 
-  const loadExportTxs = useCallback(async () => {
-    setLoading(true)
-    try { const r = await api.get('/inventory/transactions', { params: { type: 'export', limit: 200 } }); setExportTxs(r.data) } catch {}
-    setLoading(false)
-  }, [])
+  // Query param shared by all scope-bound endpoints
+  const whParam = activeWhId ? `?warehouseId=${activeWhId}` : ''
 
-  const loadHisData = useCallback(async () => {
-    try {
-      const [m, s] = await Promise.all([api.get('/inventory/his-mapping'), api.get('/catalogs/services')])
-      setHisMappings(m.data); setServices(s.data)
-    } catch {}
-  }, [])
-
-  const loadLots = useCallback(async () => {
-    try { const r = await api.get('/inventory/lots'); setLots(r.data) } catch {}
-  }, [])
-
-  const loadReport = useCallback(async (type) => {
-    setLoading(true)
-    try {
-      const params = {}
-      if (dateFrom) params.dateFrom = dateFrom
-      if (dateTo) params.dateTo = dateTo
-      let r
-      if (type === 'import') r = await api.get('/inventory/reports/import', { params })
-      else if (type === 'export') r = await api.get('/inventory/reports/export', { params })
-      else if (type === 'balance') r = await api.get('/inventory/reports/balance', { params })
-      else if (type === 'stock') r = await api.get('/inventory/reports/stock', { params })
-      else if (type === 'card') r = { data: null }
-      setReportData(r.data)
-    } catch {}
-    setLoading(false)
-  }, [dateFrom, dateTo])
-
-  useEffect(() => { loadBase() }, [loadBase])
-  useEffect(() => { if (tab === 'import') loadImportTxs(); if (tab === 'export') loadExportTxs() }, [tab])
-  useEffect(() => { if (tab === 'hangHoa' && hangHoaSub === 'his') loadHisData() }, [tab, hangHoaSub])
-  useEffect(() => { if (tab === 'kho' && khoSub === 'lots') loadLots() }, [tab, khoSub])
-  useEffect(() => { if (tab === 'reports') loadReport(reportSub) }, [tab, reportSub, loadReport])
-
-  const handleConfirmTx = async (id) => {
-    if (!confirm('Xác nhận phiếu? Tồn kho sẽ được cập nhật.')) return
-    try { await api.put(`/inventory/transactions/${id}/confirm`); tab === 'import' ? loadImportTxs() : loadExportTxs(); loadBase() }
-    catch (err) { alert(err.response?.data?.error || 'Lỗi') }
+  if (bootError) {
+    return <div className="p-8"><div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">{bootError}</div></div>
   }
-  const handleCancelTx = async (id) => {
-    if (!confirm('Hủy phiếu này?')) return
-    try { await api.put(`/inventory/transactions/${id}/cancel`); tab === 'import' ? loadImportTxs() : loadExportTxs() }
-    catch (err) { alert(err.response?.data?.error || 'Lỗi') }
+  if (!warehouses.length) {
+    return <div className="p-8 text-gray-500 text-sm">Đang tải kho...</div>
   }
-  const handleDeleteMapping = async (id) => {
-    if (!confirm('Xóa mapping này?')) return
-    try { await api.delete(`/inventory/his-mapping/${id}`); loadHisData() } catch {}
+  if (!supervisor && !activeWh) {
+    return <div className="p-8"><div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-800">Bạn chưa được gán kho nào. Liên hệ quản trị viên.</div></div>
   }
 
-  const filteredSupplies = supplies.filter(s => {
-    if (filterQ && !s.name.toLowerCase().includes(filterQ.toLowerCase()) && !s.code.toLowerCase().includes(filterQ.toLowerCase())) return false
-    if (filterCat && s.categoryId !== filterCat) return false
-    return true
-  })
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-[1600px] mx-auto p-6">
+        <Header
+          activeWh={activeWh}
+          auth={auth}
+          supervisor={supervisor}
+          warehouses={warehouses}
+          onSwitch={setActiveWhId}
+          activeWhId={activeWhId}
+        />
 
-  const TABS = [
-    { key: 'import', label: 'Phiếu nhập kho', icon: '📥' },
-    { key: 'export', label: 'Phiếu xuất kho', icon: '📤' },
-    { key: 'hangHoa', label: 'Hàng hóa', icon: '📦' },
-    { key: 'suppliers', label: 'Nhà cung cấp', icon: '🏭' },
-    { key: 'kho', label: 'Kho', icon: '🏬' },
-    { key: 'reports', label: 'Báo cáo', icon: '📊' },
-  ]
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <TabBtn active={tab === 'overview'} onClick={() => setTab('overview')}>Tổng quan</TabBtn>
+          <TabBtn active={tab === 'stock'} onClick={() => setTab('stock')}>Tồn kho</TabBtn>
+          <TabBtn active={tab === 'transactions'} onClick={() => setTab('transactions')}>Giao dịch</TabBtn>
+          <TabBtn active={tab === 'stocktake'} onClick={() => setTab('stocktake')}>Kiểm kê</TabBtn>
+          <TabBtn active={tab === 'catalog'} onClick={() => setTab('catalog')}>Danh mục</TabBtn>
+          {supervisor && <TabBtn active={tab === 'matrix'} onClick={() => setTab('matrix')}>Tổng hợp chuỗi</TabBtn>}
+        </div>
 
-  // ── Render transaction table ───────────────────────────
-  const renderTxTable = (txs, type) => (
-    <div className="bg-white rounded-lg border overflow-hidden overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead><tr className="bg-gray-50 text-gray-600 text-left">
-          <th className="px-3 py-3">Số phiếu</th><th className="px-3 py-3">Ngày lập</th>
-          <th className="px-3 py-3">Mã kho</th><th className="px-3 py-3">Tên kho</th>
-          <th className="px-3 py-3">Chi nhánh</th><th className="px-3 py-3">Kỳ KT</th>
-          {type === 'import' && <th className="px-3 py-3">NCC</th>}
-          <th className="px-3 py-3 text-right">Trước thuế</th><th className="px-3 py-3 text-right">VAT</th>
-          <th className="px-3 py-3 text-right">CK</th><th className="px-3 py-3 text-right">Tổng tiền</th>
-          <th className="px-3 py-3 text-center">SL dòng</th><th className="px-3 py-3">Trạng thái</th>
-          <th className="px-3 py-3">Người tạo</th><th className="px-3 py-3"></th>
-        </tr></thead>
-        <tbody>{loading ? <tr><td colSpan={15} className="px-4 py-8 text-center text-gray-400">Đang tải...</td></tr>
-          : txs.length === 0 ? <tr><td colSpan={15} className="px-4 py-8 text-center text-gray-400">Chưa có phiếu</td></tr>
-          : txs.map(tx => (
-          <tr key={tx._id} className="border-t hover:bg-blue-50/50">
-            <td className="px-3 py-2.5 font-medium text-blue-600 whitespace-nowrap">{tx.transactionNumber}</td>
-            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{tx.createdAt?.slice(0, 10)}</td>
-            <td className="px-3 py-2.5 font-mono text-xs">{tx.warehouseCode || '-'}</td>
-            <td className="px-3 py-2.5">{tx.warehouseName || '-'}</td>
-            <td className="px-3 py-2.5">{tx.site || '-'}</td>
-            <td className="px-3 py-2.5 text-gray-500">{tx.accountingPeriod || '-'}</td>
-            {type === 'import' && <td className="px-3 py-2.5">{tx.supplierName || '-'}</td>}
-            <td className="px-3 py-2.5 text-right">{fmtMoney(tx.totalAmountBeforeTax || 0)}</td>
-            <td className="px-3 py-2.5 text-right text-blue-600">{fmtMoney(tx.totalVat || 0)}</td>
-            <td className="px-3 py-2.5 text-right text-orange-600">{fmtMoney(tx.totalDiscount || 0)}</td>
-            <td className="px-3 py-2.5 text-right font-medium">{fmtMoney(tx.totalAmount)}</td>
-            <td className="px-3 py-2.5 text-center">{tx.items?.length || 0}</td>
-            <td className="px-3 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${ST_CLS[tx.status]}`}>{ST_LBL[tx.status]}</span></td>
-            <td className="px-3 py-2.5 text-gray-500">{tx.createdBy}</td>
-            <td className="px-3 py-2.5 flex gap-2">
-              {tx.status === 'draft' && <>
-                <button onClick={() => handleConfirmTx(tx._id)} className="text-green-600 hover:text-green-800 text-xs">Xác nhận</button>
-                <button onClick={() => handleCancelTx(tx._id)} className="text-red-500 hover:text-red-700 text-xs">Hủy</button>
-              </>}
-            </td>
-          </tr>
-        ))}</tbody>
-      </table>
+        {tab === 'overview' && <OverviewTab whParam={whParam} activeWh={activeWh} supervisor={supervisor} onNavigate={setTab} />}
+        {tab === 'stock' && <StockTab whParam={whParam} supervisor={supervisor} activeWh={activeWh} />}
+        {tab === 'transactions' && <TransactionsTab whParam={whParam} warehouses={warehouses} activeWh={activeWh} supervisor={supervisor} />}
+        {tab === 'stocktake' && <StocktakeTab whParam={whParam} warehouses={warehouses} activeWh={activeWh} supervisor={supervisor} />}
+        {tab === 'catalog' && <CatalogTab />}
+        {tab === 'matrix' && supervisor && <MatrixTab warehouses={warehouses} />}
+      </div>
     </div>
   )
+}
+
+// ─── Header ────────────────────────────────────────────────────────────────
+function Header({ activeWh, auth, supervisor, warehouses, onSwitch, activeWhId }) {
+  // nv_kho: no switcher at all (scope is implicit). supervisor: "All (N) / warehouse..."
+  const title = activeWh ? `Kho — ${activeWh.name}` : (supervisor ? 'Tổng hợp chuỗi' : 'Kho')
+  const subtitle = `${new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })} · ${auth?.displayName || auth?.username || ''}`
+  return (
+    <div className="mb-5 flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900">{title}</h1>
+        <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>
+      </div>
+      {supervisor && (
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-500">Phạm vi</label>
+          <select
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={activeWhId || ''}
+            onChange={e => onSwitch(e.target.value || null)}
+          >
+            <option value="">Tất cả kho ({warehouses.length})</option>
+            {warehouses.map(w => (
+              <option key={w._id} value={w._id}>{w.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  1. TỔNG QUAN
+// ═══════════════════════════════════════════════════════════════════════════
+function OverviewTab({ whParam, activeWh, supervisor, onNavigate }) {
+  const [alerts, setAlerts] = useState(null)
+  const [activity, setActivity] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    Promise.all([
+      api.get(`/inventory/alerts${whParam}`),
+      api.get(`/inventory/activity-today${whParam}`),
+    ]).then(([a, b]) => {
+      if (!alive) return
+      setAlerts(a.data); setActivity(b.data); setLoading(false)
+    }).catch(() => alive && setLoading(false))
+    return () => { alive = false }
+  }, [whParam])
+
+  if (loading) return <SkeletonBlock />
+  if (!alerts) return null
+
+  const tiles = [
+    { key: 'expiring',  label: 'Sắp hết hạn',   n: alerts.expiringSoon.count30, sub: 'lô ≤ 30 ngày', cls: alerts.expiringSoon.count30 > 0 ? 'text-amber-700' : 'text-gray-300' },
+    { key: 'belowmin',  label: 'Dưới định mức', n: alerts.belowMinimum.count,    sub: 'vật tư',       cls: alerts.belowMinimum.count > 0 ? 'text-amber-700' : 'text-gray-300' },
+    { key: 'transfers', label: 'Cần nhận đến',  n: alerts.pendingTransfers.count, sub: 'lệnh chuyển', cls: alerts.pendingTransfers.count > 0 ? 'text-blue-700' : 'text-gray-300' },
+    { key: 'variance',  label: 'Sai khác định mức', n: alerts.autoDeductVariance.count, sub: 'ca hôm nay', cls: alerts.autoDeductVariance.count > 0 ? 'text-red-700' : 'text-gray-300' },
+  ]
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-bold text-gray-800">Quản lý Kho</h2>
-
-      {/* Main tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg flex-wrap">
-        {TABS.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === t.key ? 'bg-white shadow font-medium text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>
-            <span className="mr-1">{t.icon}</span>{t.label}
-          </button>
+      {/* 4 tiles */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {tiles.map(t => (
+          <Card key={t.key} className="p-4">
+            <div className="text-xs text-gray-500">{t.label}</div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <div className={`text-3xl font-medium ${t.cls}`}>{t.n}</div>
+              <div className="text-xs text-gray-500">{t.sub}</div>
+            </div>
+          </Card>
         ))}
       </div>
 
-      {/* ════════════ PHIEU NHAP KHO ════════════ */}
-      {tab === 'import' && (
-        <>
-          <div className="flex justify-end"><button onClick={() => setShowTxModal('import')} className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700">+ Tạo phiếu nhập</button></div>
-          {renderTxTable(importTxs, 'import')}
-        </>
-      )}
-
-      {/* ════════════ PHIEU XUAT KHO ════════════ */}
-      {tab === 'export' && (
-        <>
-          <div className="flex justify-end"><button onClick={() => setShowTxModal('export')} className="px-3 py-1.5 text-sm bg-orange-600 text-white rounded hover:bg-orange-700">+ Tạo phiếu xuất</button></div>
-          {renderTxTable(exportTxs, 'export')}
-        </>
-      )}
-
-      {/* ════════════ HANG HOA (3 sub-tabs) ════════════ */}
-      {tab === 'hangHoa' && (
-        <>
-          <div className="flex items-center justify-between">
-            <div className="flex gap-1 border-b">
-              {[{ key: 'supplies', label: 'Hàng hóa' }, { key: 'categories', label: 'Nhóm hàng hóa' }, { key: 'his', label: 'Hàng hóa HIS' }].map(s => (
-                <button key={s.key} onClick={() => setHangHoaSub(s.key)}
-                  className={`px-4 py-2 text-sm border-b-2 transition-colors ${hangHoaSub === s.key ? 'border-blue-600 text-blue-700 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              {hangHoaSub === 'supplies' && canEdit && <button onClick={() => setEditModal({ type: 'supply', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm hàng hóa</button>}
-              {hangHoaSub === 'categories' && canEdit && <button onClick={() => setEditModal({ type: 'category', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm nhóm</button>}
-              {hangHoaSub === 'his' && canEdit && <button onClick={() => setShowHisModal(true)} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm định mức</button>}
-            </div>
+      {/* Cần xử lý */}
+      <Card className="p-5">
+        <div className="flex items-baseline justify-between mb-3">
+          <div className="font-semibold text-gray-900">Cần xử lý</div>
+          <div className="text-xs text-gray-400">
+            {alerts.pendingTransfers.count + alerts.autoDeductVariance.count} mục đang chờ
           </div>
+        </div>
+        <div className="divide-y divide-gray-100">
+          {alerts.pendingTransfers.transfers.map(t => (
+            <ActionRow key={t._id}
+              dot="blue"
+              title={`Nhận hàng ${t.counterpartyWarehouseName || ''} · ${t.transactionNumber}`}
+              hint={`${(t.items || []).length} dòng VT`}
+              time={fmtDate(t.createdAt)}
+              action="Nhận →"
+            />
+          ))}
+          {alerts.autoDeductVariance.transactions.map(t => (
+            <ActionRow key={t._id}
+              dot="red"
+              title={`Sai khác định mức · ${t.transactionNumber}`}
+              hint={t.reason || ''}
+              time={fmtDate(t.createdAt)}
+              action="Xác nhận →"
+            />
+          ))}
+          {alerts.pendingTransfers.count === 0 && alerts.autoDeductVariance.count === 0 && (
+            <div className="text-sm text-gray-400 py-6 text-center">Không có mục nào cần xử lý. ✨</div>
+          )}
+        </div>
+      </Card>
 
-          {/* Supplies list */}
-          {hangHoaSub === 'supplies' && (
-            <>
-              <div className="flex gap-3 items-center">
-                <input className="border rounded px-3 py-1.5 text-sm w-56" placeholder="Tìm hàng hóa..." value={filterQ} onChange={e => setFilterQ(e.target.value)} />
-                <select className="border rounded px-3 py-1.5 text-sm" value={filterCat} onChange={e => setFilterCat(e.target.value)}>
-                  <option value="">Tất cả nhóm</option>{categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                </select>
+      {/* Sắp hết hạn + Dưới định mức */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <Card className="p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <div className="font-semibold text-gray-900">Sắp hết hạn</div>
+            <div className="text-xs text-gray-400">FEFO priority</div>
+          </div>
+          {alerts.expiringSoon.lots.length === 0 ? (
+            <div className="text-sm text-gray-400 py-6 text-center">Không có lô sắp hết hạn trong 60 ngày tới.</div>
+          ) : (
+            <div className="space-y-3">
+              {alerts.expiringSoon.lots.map(lot => {
+                const days = daysUntil(lot.expiryDate)
+                const cls = days <= 10 ? 'text-red-700' : days <= 30 ? 'text-amber-700' : 'text-gray-600'
+                return (
+                  <div key={lot._id} className="flex justify-between items-start">
+                    <div>
+                      <div className="text-sm text-gray-900">{lot.supplyId}</div>
+                      <div className="text-xs text-gray-500">Lô {lot.lotNumber} · {lot.currentQuantity} còn lại</div>
+                    </div>
+                    <div className={`text-sm font-medium ${cls}`}>{days != null ? `${days} ngày` : '—'}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-baseline justify-between mb-3">
+            <div className="font-semibold text-gray-900">Dưới định mức</div>
+            <div className="text-xs text-gray-400">reorder threshold</div>
+          </div>
+          {alerts.belowMinimum.supplies.length === 0 ? (
+            <div className="text-sm text-gray-400 py-6 text-center">Không có vật tư dưới định mức.</div>
+          ) : (
+            <div className="space-y-3">
+              {alerts.belowMinimum.supplies.map(s => {
+                const ratio = s.qty / (s.minimumStock || 1)
+                const cls = ratio < 0.3 ? 'text-red-700' : 'text-amber-700'
+                return (
+                  <div key={s.supplyId} className="flex justify-between items-start">
+                    <div>
+                      <div className="text-sm text-gray-900">{s.name}</div>
+                      <div className="text-xs text-gray-500">{s.code}</div>
+                    </div>
+                    <div className={`text-sm font-medium ${cls}`}>{s.qty} / {s.minimumStock}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Hoạt động hôm nay */}
+      {activity && (
+        <Card className="p-4">
+          <div className="flex items-baseline justify-between">
+            <div>
+              <div className="text-xs text-gray-500">Hoạt động hôm nay</div>
+              <div className="text-sm text-gray-900 mt-1">
+                {activity.counts.import || 0} phiếu nhập · {activity.counts.export || 0} phiếu xuất · {activity.counts.auto_deduct || 0} ca quét · {activity.counts.transfer_in + activity.counts.transfer_out || 0} điều chuyển
               </div>
-              <div className="bg-white rounded-lg border overflow-hidden">
-                <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
-                  <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Tên</th><th className="px-4 py-3">Nhóm</th><th className="px-4 py-3">ĐVT</th>
-                  <th className="px-4 py-3">Quy cách</th><th className="px-4 py-3 text-right">SL CĐ</th>
-                  <th className="px-4 py-3 text-right">Tồn kho</th><th className="px-4 py-3 text-right">Tối thiểu</th><th className="px-4 py-3">Chi nhánh</th><th className="px-4 py-3"></th>
-                </tr></thead><tbody>
-                  {filteredSupplies.length === 0 ? <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">Chưa có hàng hóa</td></tr>
-                  : filteredSupplies.map(s => (
-                    <tr key={s._id} className={`border-t hover:bg-blue-50/50 ${s.currentStock <= s.minimumStock ? 'bg-red-50/50' : ''}`}>
-                      <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{s.code}</td>
-                      <td className="px-4 py-2.5 font-medium">{s.name}</td>
-                      <td className="px-4 py-2.5 text-gray-500">{categories.find(c => c._id === s.categoryId)?.name || '-'}</td>
-                      <td className="px-4 py-2.5">{s.unit}</td>
-                      <td className="px-4 py-2.5 text-gray-500">{s.packagingSpec || '-'}</td>
-                      <td className="px-4 py-2.5 text-right text-gray-500">{s.conversionRate || 1}</td>
-                      <td className={`px-4 py-2.5 text-right font-medium ${s.currentStock <= s.minimumStock ? 'text-red-600' : 'text-green-600'}`}>{s.currentStock}</td>
-                      <td className="px-4 py-2.5 text-right text-gray-500">{s.minimumStock}</td>
-                      <td className="px-4 py-2.5 text-gray-500">{s.site || '-'}</td>
-                      <td className="px-4 py-2.5 flex gap-2">
-                        <button onClick={() => setShowStockCard(s)} className="text-blue-500 hover:text-blue-700 text-xs">Thẻ kho</button>
-                        {canEdit && <button onClick={() => setEditModal({ type: 'supply', record: s })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody></table>
-              </div>
-            </>
-          )}
-
-          {/* Categories */}
-          {hangHoaSub === 'categories' && (
-            <div className="bg-white rounded-lg border overflow-hidden">
-              <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
-                <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Tên nhóm</th><th className="px-4 py-3">Trạng thái</th><th className="px-4 py-3"></th>
-              </tr></thead><tbody>
-                {categories.length === 0 ? <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">Chưa có nhóm</td></tr>
-                : categories.map(c => (
-                  <tr key={c._id} className="border-t hover:bg-blue-50/50">
-                    <td className="px-4 py-2.5 font-mono text-xs">{c.code}</td>
-                    <td className="px-4 py-2.5 font-medium">{c.name}</td>
-                    <td className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${c.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{c.status === 'active' ? 'Hoạt động' : 'Ngưng'}</span></td>
-                    <td className="px-4 py-2.5">{canEdit && <button onClick={() => setEditModal({ type: 'category', record: c })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td>
-                  </tr>
-                ))}
-              </tbody></table>
             </div>
-          )}
-
-          {/* HIS Mapping */}
-          {hangHoaSub === 'his' && (
-            <div className="bg-white rounded-lg border overflow-hidden">
-              <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
-                <th className="px-4 py-3">Mã DV</th><th className="px-4 py-3">Tên dịch vụ</th><th className="px-4 py-3">Mã VT</th><th className="px-4 py-3">Tên vật tư</th>
-                <th className="px-4 py-3 text-right">SL tiêu hao</th><th className="px-4 py-3">ĐVT</th><th className="px-4 py-3"></th>
-              </tr></thead><tbody>
-                {hisMappings.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Chưa có định mức. Thêm để tự động trừ kho khi thực hiện dịch vụ.</td></tr>
-                : hisMappings.map(m => (
-                  <tr key={m._id} className="border-t hover:bg-blue-50/50">
-                    <td className="px-4 py-2.5 font-mono text-xs">{m.serviceCode}</td>
-                    <td className="px-4 py-2.5">{m.serviceName}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs">{m.supplyCode}</td>
-                    <td className="px-4 py-2.5">{m.supplyName}</td>
-                    <td className="px-4 py-2.5 text-right font-medium">{m.quantity}</td>
-                    <td className="px-4 py-2.5 text-gray-500">{m.unit}</td>
-                    <td className="px-4 py-2.5">{canEdit && <button onClick={() => handleDeleteMapping(m._id)} className="text-red-500 hover:text-red-700 text-xs">Xóa</button>}</td>
-                  </tr>
-                ))}
-              </tbody></table>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ════════════ NHA CUNG CAP ════════════ */}
-      {tab === 'suppliers' && (
-        <>
-          {canEdit && <div className="flex justify-end"><button onClick={() => setEditModal({ type: 'supplier', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm NCC</button></div>}
-          <div className="bg-white rounded-lg border overflow-hidden">
-            <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
-              <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Tên NCC</th><th className="px-4 py-3">Liên hệ</th><th className="px-4 py-3">SĐT</th>
-              <th className="px-4 py-3">Email</th><th className="px-4 py-3">MST</th><th className="px-4 py-3">Trạng thái</th><th className="px-4 py-3"></th>
-            </tr></thead><tbody>
-              {suppliers.length === 0 ? <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Chưa có NCC</td></tr>
-              : suppliers.map(s => (
-                <tr key={s._id} className="border-t hover:bg-blue-50/50">
-                  <td className="px-4 py-2.5 font-mono text-xs">{s.code}</td>
-                  <td className="px-4 py-2.5 font-medium">{s.name}</td>
-                  <td className="px-4 py-2.5">{s.contactPerson || '-'}</td>
-                  <td className="px-4 py-2.5">{s.phone || '-'}</td>
-                  <td className="px-4 py-2.5 text-gray-500">{s.email || '-'}</td>
-                  <td className="px-4 py-2.5 text-gray-500">{s.taxCode || '-'}</td>
-                  <td className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${s.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{s.status === 'active' ? 'Hoạt động' : 'Ngưng'}</span></td>
-                  <td className="px-4 py-2.5">{canEdit && <button onClick={() => setEditModal({ type: 'supplier', record: s })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td>
-                </tr>
-              ))}
-            </tbody></table>
+            <button onClick={() => onNavigate('transactions')} className="text-sm text-blue-600 hover:underline">Nhật ký đầy đủ →</button>
           </div>
-        </>
+        </Card>
       )}
+    </div>
+  )
+}
 
-      {/* ════════════ KHO (3 sub-tabs) ════════════ */}
-      {tab === 'kho' && (
-        <>
-          <div className="flex items-center justify-between">
-            <div className="flex gap-1 border-b">
-              {[{ key: 'warehouses', label: 'Kho hàng' }, { key: 'lots', label: 'Kho theo lô' }, { key: 'info', label: 'Thông tin kho' }, { key: 'cancelReasons', label: 'Lý do hủy' }].map(s => (
-                <button key={s.key} onClick={() => setKhoSub(s.key)}
-                  className={`px-4 py-2 text-sm border-b-2 transition-colors ${khoSub === s.key ? 'border-blue-600 text-blue-700 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
-            {khoSub === 'warehouses' && canEdit && <button onClick={() => setEditModal({ type: 'warehouse', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm kho</button>}
-            {khoSub === 'cancelReasons' && canEdit && <button onClick={() => setEditModal({ type: 'cancelReason', record: null })} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">+ Thêm lý do</button>}
+function ActionRow({ dot, title, hint, time, action }) {
+  const dotCls = { blue: 'bg-blue-500', red: 'bg-red-500', amber: 'bg-amber-500', green: 'bg-green-500' }[dot] || 'bg-gray-400'
+  return (
+    <div className="flex items-center py-3 gap-3">
+      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotCls}`} />
+      <div className="flex-1 min-w-0">
+        <div className="text-sm text-gray-900 truncate">{title}</div>
+        {hint && <div className="text-xs text-gray-500 truncate">{hint}</div>}
+      </div>
+      <div className="text-xs text-gray-400 shrink-0">{time}</div>
+      <button className="text-xs text-blue-600 hover:underline shrink-0">{action}</button>
+    </div>
+  )
+}
+
+const SkeletonBlock = () => (
+  <div className="space-y-3 animate-pulse">
+    <div className="grid grid-cols-4 gap-3">
+      {[0, 1, 2, 3].map(i => <div key={i} className="h-24 bg-white rounded-xl border border-gray-200" />)}
+    </div>
+    <div className="h-40 bg-white rounded-xl border border-gray-200" />
+  </div>
+)
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  2. TỒN KHO
+// ═══════════════════════════════════════════════════════════════════════════
+function StockTab({ whParam }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [q, setQ] = useState('')
+  const [belowMin, setBelowMin] = useState(false)
+  const [drawerSupplyId, setDrawerSupplyId] = useState(null)
+  const [categories, setCategories] = useState([])
+  const [categoryId, setCategoryId] = useState('')
+
+  useEffect(() => { api.get('/inventory/categories').then(({ data }) => setCategories(data || [])) }, [])
+
+  const load = useCallback(() => {
+    setLoading(true)
+    const qs = new URLSearchParams()
+    if (whParam) qs.set('warehouseId', whParam.replace('?warehouseId=', ''))
+    if (q) qs.set('q', q)
+    if (belowMin) qs.set('belowMin', 'true')
+    if (categoryId) qs.set('categoryId', categoryId)
+    api.get(`/inventory/stock?${qs}`).then(({ data }) => {
+      setRows(data.rows || []); setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [whParam, q, belowMin, categoryId])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <div className="space-y-3">
+      <Card className="p-3 flex items-center gap-2 flex-wrap">
+        <input
+          className="flex-1 min-w-[240px] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="Tìm vật tư theo tên hoặc mã..."
+          value={q} onChange={e => setQ(e.target.value)}
+        />
+        <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+          <option value="">Tất cả nhóm VT</option>
+          {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+        </select>
+        <label className="flex items-center gap-2 text-sm text-gray-700 px-2">
+          <input type="checkbox" checked={belowMin} onChange={e => setBelowMin(e.target.checked)} />
+          Chỉ hiển thị dưới định mức
+        </label>
+      </Card>
+
+      <Card>
+        <div className="grid grid-cols-[1fr_100px_100px_140px_80px] gap-3 px-4 py-3 text-xs text-gray-500 border-b border-gray-100">
+          <div>Vật tư</div>
+          <div className="text-right">Tồn</div>
+          <div className="text-right">Định mức</div>
+          <div className="text-right">HSD gần nhất</div>
+          <div className="text-right">Số lô</div>
+        </div>
+        {loading ? (
+          <div className="p-6 text-center text-gray-400 text-sm">Đang tải...</div>
+        ) : rows.length === 0 ? (
+          <div className="p-6 text-center text-gray-400 text-sm">Không có vật tư nào.</div>
+        ) : (
+          rows.map(r => {
+            const days = daysUntil(r.nearestExpiry)
+            const expiryCls = days == null ? 'text-gray-400' : days <= 10 ? 'text-red-700' : days <= 30 ? 'text-amber-700' : 'text-gray-700'
+            return (
+              <button
+                key={r.supply._id}
+                onClick={() => setDrawerSupplyId(r.supply._id)}
+                className="w-full grid grid-cols-[1fr_100px_100px_140px_80px] gap-3 px-4 py-3 text-sm border-b border-gray-50 hover:bg-gray-50 text-left"
+              >
+                <div>
+                  <div className="text-gray-900">{r.supply.name}</div>
+                  <div className="text-xs text-gray-500">{r.supply.code} · {r.supply.unit}</div>
+                </div>
+                <div className="text-right tabular-nums text-gray-900">{r.qty}</div>
+                <div className={`text-right tabular-nums ${r.belowMin ? 'text-red-700 font-medium' : 'text-gray-500'}`}>{r.supply.minimumStock || '—'}</div>
+                <div className={`text-right text-xs ${expiryCls}`}>
+                  {r.nearestExpiry ? `${fmtDate(r.nearestExpiry)} ${days != null ? `(${days}d)` : ''}` : '—'}
+                </div>
+                <div className="text-right tabular-nums text-gray-500">{r.lotCount}</div>
+              </button>
+            )
+          })
+        )}
+      </Card>
+
+      {drawerSupplyId && (
+        <LotDrawer supplyId={drawerSupplyId} whParam={whParam} onClose={() => setDrawerSupplyId(null)} />
+      )}
+    </div>
+  )
+}
+
+function LotDrawer({ supplyId, whParam, onClose }) {
+  const [lots, setLots] = useState([])
+  const [card, setCard] = useState(null)
+
+  useEffect(() => {
+    api.get(`/inventory/lots${whParam}${whParam ? '&' : '?'}supplyId=${supplyId}`).then(({ data }) => setLots(data || []))
+    api.get(`/inventory/reports/card/${supplyId}${whParam}`).then(({ data }) => setCard(data))
+  }, [supplyId, whParam])
+
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end bg-black/40" onClick={onClose}>
+      <div className="w-full max-w-xl bg-white h-full overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="border-b border-gray-100 px-6 py-4 flex justify-between items-center sticky top-0 bg-white">
+          <div>
+            <div className="text-xs text-gray-500">{card?.supply?.code}</div>
+            <div className="font-semibold text-gray-900">{card?.supply?.name || 'Đang tải...'}</div>
           </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+        </div>
 
-          {/* Warehouses */}
-          {khoSub === 'warehouses' && (
-            <div className="bg-white rounded-lg border overflow-hidden">
-              <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
-                <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Tên kho</th><th className="px-4 py-3">Chi nhánh</th><th className="px-4 py-3">Quản lý</th><th className="px-4 py-3">SĐT</th><th className="px-4 py-3">Trạng thái</th><th className="px-4 py-3"></th>
-              </tr></thead><tbody>
-                {warehouses.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Chưa có kho</td></tr>
-                : warehouses.map(w => (
-                  <tr key={w._id} className="border-t hover:bg-blue-50/50">
-                    <td className="px-4 py-2.5 font-mono text-xs">{w.code}</td>
-                    <td className="px-4 py-2.5 font-medium">{w.name}</td>
-                    <td className="px-4 py-2.5">{w.site || '-'}</td>
-                    <td className="px-4 py-2.5">{w.manager || '-'}</td>
-                    <td className="px-4 py-2.5">{w.phone || '-'}</td>
-                    <td className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${w.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{w.status === 'active' ? 'Hoạt động' : 'Ngưng'}</span></td>
-                    <td className="px-4 py-2.5">{canEdit && <button onClick={() => setEditModal({ type: 'warehouse', record: w })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td>
-                  </tr>
-                ))}
-              </tbody></table>
-            </div>
-          )}
-
-          {/* Lots */}
-          {khoSub === 'lots' && (
-            <div className="bg-white rounded-lg border overflow-hidden overflow-x-auto">
-              <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
-                <th className="px-4 py-3">Mã lô</th><th className="px-4 py-3">Vật tư</th><th className="px-4 py-3">Kho</th><th className="px-4 py-3">Chi nhánh</th>
-                <th className="px-4 py-3">Ngày SX</th><th className="px-4 py-3">Hạn SD</th>
-                <th className="px-4 py-3 text-right">SL ban đầu</th><th className="px-4 py-3 text-right">SL hiện tại</th>
-                <th className="px-4 py-3 text-right">Đơn giá</th><th className="px-4 py-3">Trạng thái</th>
-              </tr></thead><tbody>
-                {lots.length === 0 ? <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">Chưa có lô hàng</td></tr>
-                : lots.map(l => {
-                  const spl = supplies.find(s => s._id === l.supplyId)
-                  const wh = warehouses.find(w => w._id === l.warehouseId)
-                  const isExpiring = l.expiryDate && l.expiryDate <= new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)
+        <div className="p-6 space-y-5">
+          <div>
+            <div className="text-sm font-medium text-gray-900 mb-2">Các lô (FEFO)</div>
+            {lots.length === 0 ? (
+              <div className="text-sm text-gray-400 py-4 text-center border border-dashed border-gray-200 rounded-lg">Không có lô nào trong kho.</div>
+            ) : (
+              <div className="border border-gray-100 rounded-lg divide-y divide-gray-50">
+                {lots.map(lot => {
+                  const days = daysUntil(lot.expiryDate)
+                  const cls = lot.status === 'depleted' || lot.status === 'expired' ? 'opacity-60' : ''
                   return (
-                    <tr key={l._id} className={`border-t hover:bg-blue-50/50 ${isExpiring ? 'bg-orange-50/50' : ''}`}>
-                      <td className="px-4 py-2.5 font-mono text-xs">{l.lotNumber}</td>
-                      <td className="px-4 py-2.5">{spl?.name || l.supplyId}</td>
-                      <td className="px-4 py-2.5 text-gray-500">{wh?.name || '-'}</td>
-                      <td className="px-4 py-2.5">{l.site || '-'}</td>
-                      <td className="px-4 py-2.5 text-gray-500">{l.manufacturingDate || '-'}</td>
-                      <td className={`px-4 py-2.5 ${isExpiring ? 'text-orange-600 font-medium' : 'text-gray-500'}`}>{l.expiryDate || '-'}</td>
-                      <td className="px-4 py-2.5 text-right">{l.initialQuantity}</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{l.currentQuantity}</td>
-                      <td className="px-4 py-2.5 text-right">{fmtMoney(l.unitPrice)}</td>
-                      <td className="px-4 py-2.5"><span className={`px-1.5 py-0.5 rounded text-xs ${l.status === 'available' ? 'bg-green-100 text-green-700' : l.status === 'expired' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{l.status === 'available' ? 'Còn hàng' : l.status === 'expired' ? 'Hết hạn' : 'Đã hết'}</span></td>
-                    </tr>
+                    <div key={lot._id} className={`px-4 py-3 text-sm ${cls}`}>
+                      <div className="flex justify-between">
+                        <div className="font-medium text-gray-900">Lô {lot.lotNumber}</div>
+                        <div className="tabular-nums">{lot.currentQuantity} / {lot.initialQuantity}</div>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1 flex justify-between">
+                        <span>HSD {fmtDate(lot.expiryDate)}{days != null ? ` (${days}d)` : ''}</span>
+                        <span>{lot.status}</span>
+                      </div>
+                    </div>
                   )
                 })}
-              </tbody></table>
-            </div>
-          )}
-
-          {/* Info - stock summary */}
-          {khoSub === 'info' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-blue-50 rounded-lg p-4"><div className="text-xs text-blue-600 font-medium">Tổng mặt hàng</div><div className="text-2xl font-bold text-blue-700 mt-1">{supplies.length}</div></div>
-                <div className="bg-red-50 rounded-lg p-4"><div className="text-xs text-red-600 font-medium">Dưới mức tối thiểu</div><div className="text-2xl font-bold text-red-700 mt-1">{supplies.filter(s => s.currentStock <= s.minimumStock).length}</div></div>
-                <div className="bg-green-50 rounded-lg p-4"><div className="text-xs text-green-600 font-medium">Nhà cung cấp</div><div className="text-2xl font-bold text-green-700 mt-1">{suppliers.length}</div></div>
               </div>
-              <div className="bg-white rounded-lg border p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Hàng hóa dưới mức tối thiểu</h3>
-                {supplies.filter(s => s.currentStock <= s.minimumStock).length === 0 ? <p className="text-gray-400 text-sm">Tất cả hàng hóa đều đủ tồn kho</p> :
-                <table className="w-full text-sm"><thead><tr className="bg-red-50 text-red-700"><th className="text-left px-3 py-2">Mã</th><th className="text-left px-3 py-2">Tên</th><th className="text-right px-3 py-2">Tồn</th><th className="text-right px-3 py-2">Tối thiểu</th><th className="text-right px-3 py-2">Thiếu</th></tr></thead>
-                <tbody>{supplies.filter(s => s.currentStock <= s.minimumStock).map(s => (
-                  <tr key={s._id} className="border-t"><td className="px-3 py-1.5 font-mono text-xs">{s.code}</td><td className="px-3 py-1.5">{s.name}</td>
-                  <td className="px-3 py-1.5 text-right text-red-600 font-medium">{s.currentStock}</td><td className="px-3 py-1.5 text-right">{s.minimumStock}</td>
-                  <td className="px-3 py-1.5 text-right text-red-600 font-semibold">{s.minimumStock - s.currentStock}</td></tr>
-                ))}</tbody></table>}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Cancel reasons */}
-          {khoSub === 'cancelReasons' && (
-            <>
-              <div className="flex gap-4">
-                {['import', 'export'].map(t => (
-                  <div key={t} className="flex-1 bg-white rounded-lg border overflow-hidden">
-                    <div className="px-4 py-2 bg-gray-50 border-b font-medium text-sm text-gray-700">{t === 'import' ? 'Lý do hủy - Phiếu nhập' : 'Lý do hủy - Phiếu xuất'}</div>
-                    <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600"><th className="text-left px-4 py-2">Mã</th><th className="text-left px-4 py-2">Lý do</th><th className="px-4 py-2"></th></tr></thead>
-                    <tbody>{cancelReasons.filter(r => r.type === t).length === 0 ? <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-400 text-xs">Chưa có</td></tr>
-                    : cancelReasons.filter(r => r.type === t).map(r => (
-                      <tr key={r._id} className="border-t"><td className="px-4 py-1.5 font-mono text-xs">{r.code}</td><td className="px-4 py-1.5">{r.name}</td>
-                      <td className="px-4 py-1.5">{canEdit && <button onClick={() => setEditModal({ type: 'cancelReason', record: r })} className="text-gray-500 hover:text-gray-700 text-xs">Sửa</button>}</td></tr>
-                    ))}</tbody></table>
+          <div>
+            <div className="text-sm font-medium text-gray-900 mb-2">Sổ kho</div>
+            <div className="text-xs text-gray-500 mb-2">Tồn hiện tại: <span className="font-medium text-gray-900">{card?.currentBalance ?? 0}</span></div>
+            {card?.entries?.length ? (
+              <div className="border border-gray-100 rounded-lg overflow-hidden">
+                <div className="grid grid-cols-[80px_1fr_60px_60px_60px] px-3 py-2 bg-gray-50 text-xs text-gray-500">
+                  <div>Ngày</div><div>Phiếu</div><div className="text-right">Nhập</div><div className="text-right">Xuất</div><div className="text-right">Tồn</div>
+                </div>
+                {card.entries.slice(-20).reverse().map((e, i) => (
+                  <div key={i} className="grid grid-cols-[80px_1fr_60px_60px_60px] px-3 py-1.5 text-xs border-t border-gray-50">
+                    <div className="text-gray-600">{e.date}</div>
+                    <div className="text-gray-900 truncate">{e.transactionNumber} <span className="text-gray-400">{TX_TYPES[e.type] || e.type}</span></div>
+                    <div className="text-right text-teal-700">{e.inQty || ''}</div>
+                    <div className="text-right text-orange-700">{e.outQty || ''}</div>
+                    <div className="text-right tabular-nums text-gray-900">{e.balance}</div>
                   </div>
                 ))}
               </div>
-            </>
-          )}
-        </>
-      )}
+            ) : (
+              <div className="text-sm text-gray-400 py-4 text-center border border-dashed border-gray-200 rounded-lg">Chưa có giao dịch.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-      {/* ════════════ BAO CAO (5 sub-tabs) ════════════ */}
-      {tab === 'reports' && (
-        <>
-          <div className="flex items-center justify-between">
-            <div className="flex gap-1 border-b">
-              {[{ key: 'import', label: 'BC nhập' }, { key: 'export', label: 'BC xuất' }, { key: 'balance', label: 'BC xuất nhập tồn' }, { key: 'stock', label: 'BC tồn' }, { key: 'card', label: 'Thẻ kho' }].map(s => (
-                <button key={s.key} onClick={() => setReportSub(s.key)}
-                  className={`px-4 py-2 text-sm border-b-2 transition-colors ${reportSub === s.key ? 'border-blue-600 text-blue-700 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                  {s.label}
-                </button>
+// ═══════════════════════════════════════════════════════════════════════════
+//  3. GIAO DỊCH
+// ═══════════════════════════════════════════════════════════════════════════
+function TransactionsTab({ whParam, warehouses, activeWh, supervisor }) {
+  const [txs, setTxs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [type, setType] = useState('')
+  const [status, setStatus] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [detailId, setDetailId] = useState(null)
+  const [createMenuOpen, setCreateMenuOpen] = useState(false)
+  const [createKind, setCreateKind] = useState(null) // 'import' | 'export' | 'adjustment' | 'transfer'
+
+  const load = useCallback(() => {
+    setLoading(true)
+    const qs = new URLSearchParams()
+    if (whParam) qs.set('warehouseId', whParam.replace('?warehouseId=', ''))
+    if (type) qs.set('type', type)
+    if (status) qs.set('status', status)
+    if (dateFrom) qs.set('dateFrom', dateFrom)
+    if (dateTo) qs.set('dateTo', dateTo)
+    api.get(`/inventory/transactions?${qs}`).then(({ data }) => {
+      setTxs(data || []); setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [whParam, type, status, dateFrom, dateTo])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Card className="p-3 flex items-center gap-2 flex-wrap flex-1 min-w-[300px]">
+          <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" value={type} onChange={e => setType(e.target.value)}>
+            <option value="">Tất cả loại</option>
+            {Object.entries(TX_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" value={status} onChange={e => setStatus(e.target.value)}>
+            <option value="">Tất cả trạng thái</option>
+            {Object.entries(ST_LBL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <input type="date" className="border border-gray-300 rounded-lg px-3 py-2 text-sm" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+          <span className="text-xs text-gray-400">→</span>
+          <input type="date" className="border border-gray-300 rounded-lg px-3 py-2 text-sm" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+        </Card>
+        <div className="relative">
+          <button
+            onClick={() => setCreateMenuOpen(v => !v)}
+            disabled={!activeWh}
+            className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            title={!activeWh ? 'Chọn một kho để tạo phiếu' : ''}
+          >
+            + Tạo giao dịch ▾
+          </button>
+          {createMenuOpen && (
+            <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 min-w-[180px]">
+              {[
+                ['import', 'Nhập kho'],
+                ['export', 'Xuất kho'],
+                ['transfer', 'Điều chuyển'],
+                ['adjustment', 'Điều chỉnh'],
+              ].map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => { setCreateKind(k); setCreateMenuOpen(false) }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                >{label}</button>
               ))}
             </div>
-            {reportSub !== 'card' && <div className="flex gap-2 items-center text-sm">
-              <input type="date" className="border rounded px-2 py-1 text-xs" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-              <span className="text-gray-400">-</span>
-              <input type="date" className="border rounded px-2 py-1 text-xs" value={dateTo} onChange={e => setDateTo(e.target.value)} />
-              <button onClick={() => loadReport(reportSub)} className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">Xem</button>
-            </div>}
-          </div>
-
-          {/* Import report */}
-          {reportSub === 'import' && reportData && (
-            <div className="space-y-3">
-              <div className="flex gap-4"><div className="bg-green-50 rounded-lg p-4"><div className="text-xs text-green-600">Tổng nhập</div><div className="text-xl font-bold text-green-700">{fmtMoney(reportData.total)}</div></div>
-              <div className="bg-blue-50 rounded-lg p-4"><div className="text-xs text-blue-600">Số phiếu</div><div className="text-xl font-bold text-blue-700">{reportData.count}</div></div></div>
-              {renderTxTable(reportData.transactions || [], 'import')}
-            </div>
           )}
+        </div>
+      </div>
 
-          {/* Export report */}
-          {reportSub === 'export' && reportData && (
-            <div className="space-y-3">
-              <div className="flex gap-4"><div className="bg-orange-50 rounded-lg p-4"><div className="text-xs text-orange-600">Tổng xuất</div><div className="text-xl font-bold text-orange-700">{fmtMoney(reportData.total)}</div></div>
-              <div className="bg-blue-50 rounded-lg p-4"><div className="text-xs text-blue-600">Số phiếu</div><div className="text-xl font-bold text-blue-700">{reportData.count}</div></div></div>
-              {renderTxTable(reportData.transactions || [], 'export')}
-            </div>
-          )}
-
-          {/* Balance report */}
-          {reportSub === 'balance' && reportData && (
-            <div className="bg-white rounded-lg border overflow-hidden">
-              <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
-                <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Tên hàng hóa</th><th className="px-4 py-3">ĐVT</th>
-                <th className="px-4 py-3 text-right">SL nhập</th><th className="px-4 py-3 text-right">Tiền nhập</th>
-                <th className="px-4 py-3 text-right">SL xuất</th><th className="px-4 py-3 text-right">Tiền xuất</th>
-                <th className="px-4 py-3 text-right">Tồn kho</th>
-              </tr></thead><tbody>
-                {(Array.isArray(reportData) ? reportData : []).length === 0 ? <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Không có dữ liệu</td></tr>
-                : (Array.isArray(reportData) ? reportData : []).map(r => (
-                  <tr key={r.supplyId} className="border-t hover:bg-blue-50/50">
-                    <td className="px-4 py-2 font-mono text-xs">{r.code}</td><td className="px-4 py-2">{r.name}</td><td className="px-4 py-2">{r.unit}</td>
-                    <td className="px-4 py-2 text-right text-green-600">{r.totalIn}</td><td className="px-4 py-2 text-right text-green-600">{fmtMoney(r.totalInAmount)}</td>
-                    <td className="px-4 py-2 text-right text-orange-600">{r.totalOut}</td><td className="px-4 py-2 text-right text-orange-600">{fmtMoney(r.totalOutAmount)}</td>
-                    <td className="px-4 py-2 text-right font-semibold">{r.currentStock}</td>
-                  </tr>
-                ))}
-              </tbody></table>
-            </div>
-          )}
-
-          {/* Stock report */}
-          {reportSub === 'stock' && reportData && (
-            <div className="space-y-3">
-              <div className="flex gap-4">
-                <div className="bg-blue-50 rounded-lg p-4"><div className="text-xs text-blue-600">Tổng mặt hàng</div><div className="text-xl font-bold text-blue-700">{reportData.supplies?.length || 0}</div></div>
-                <div className="bg-red-50 rounded-lg p-4"><div className="text-xs text-red-600">Dưới tối thiểu</div><div className="text-xl font-bold text-red-700">{reportData.lowStockCount || 0}</div></div>
+      <Card>
+        <div className="grid grid-cols-[130px_1fr_140px_100px_120px_90px] gap-3 px-4 py-3 text-xs text-gray-500 border-b border-gray-100">
+          <div>Ngày</div>
+          <div>Số phiếu / ghi chú</div>
+          <div>Loại</div>
+          <div>Dòng VT</div>
+          <div className="text-right">Tổng tiền</div>
+          <div className="text-right">Trạng thái</div>
+        </div>
+        {loading ? (
+          <div className="p-6 text-center text-gray-400 text-sm">Đang tải...</div>
+        ) : txs.length === 0 ? (
+          <div className="p-6 text-center text-gray-400 text-sm">Chưa có giao dịch nào.</div>
+        ) : (
+          txs.map(t => (
+            <button
+              key={t._id}
+              onClick={() => setDetailId(t._id)}
+              className="w-full grid grid-cols-[130px_1fr_140px_100px_120px_90px] gap-3 px-4 py-3 text-sm border-b border-gray-50 hover:bg-gray-50 text-left"
+            >
+              <div className="text-gray-500 text-xs">{fmtDate(t.createdAt)}</div>
+              <div>
+                <div className="text-gray-900 truncate">{t.transactionNumber}{supervisor ? ` · ${t.warehouseName || ''}` : ''}</div>
+                <div className="text-xs text-gray-500 truncate">{t.reason || t.supplierName || t.counterpartyWarehouseName || '—'}</div>
               </div>
-              <div className="bg-white rounded-lg border overflow-hidden">
-                <table className="w-full text-sm"><thead><tr className="bg-gray-50 text-gray-600 text-left">
-                  <th className="px-4 py-3">Mã</th><th className="px-4 py-3">Tên</th><th className="px-4 py-3">ĐVT</th>
-                  <th className="px-4 py-3 text-right">Tồn kho</th><th className="px-4 py-3 text-right">Tối thiểu</th><th className="px-4 py-3">Chi nhánh</th>
-                </tr></thead><tbody>
-                  {(reportData.supplies || []).map(s => (
-                    <tr key={s._id} className={`border-t ${s.currentStock <= s.minimumStock ? 'bg-red-50' : ''}`}>
-                      <td className="px-4 py-2 font-mono text-xs">{s.code}</td><td className="px-4 py-2">{s.name}</td><td className="px-4 py-2">{s.unit}</td>
-                      <td className={`px-4 py-2 text-right font-medium ${s.currentStock <= s.minimumStock ? 'text-red-600' : ''}`}>{s.currentStock}</td>
-                      <td className="px-4 py-2 text-right text-gray-500">{s.minimumStock}</td>
-                      <td className="px-4 py-2 text-gray-500">{s.site || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody></table>
-              </div>
-            </div>
-          )}
+              <div><Pill className={TX_CLS[t.type] || 'bg-gray-50 border-gray-200'}>{TX_TYPES[t.type] || t.type}</Pill></div>
+              <div className="text-gray-500 tabular-nums">{(t.items || []).length}</div>
+              <div className="text-right tabular-nums text-gray-900">{fmtMoney(t.totalAmount)}</div>
+              <div className="text-right"><Pill className={ST_CLS[t.status]}>{ST_LBL[t.status]}</Pill></div>
+            </button>
+          ))
+        )}
+      </Card>
 
-          {/* Stock card */}
-          {reportSub === 'card' && (
-            <div className="bg-white rounded-lg border p-4">
-              <p className="text-sm text-gray-600 mb-3">Chọn hàng hóa để xem thẻ kho:</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {supplies.map(s => (
-                  <button key={s._id} onClick={() => setShowStockCard(s)}
-                    className="text-left px-3 py-2 border rounded hover:bg-blue-50 text-sm">
-                    <div className="font-medium">{s.name}</div>
-                    <div className="text-xs text-gray-400">{s.code} | Tồn: {s.currentStock} {s.unit}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+      {detailId && <TransactionDetailDrawer id={detailId} onClose={() => setDetailId(null)} onChanged={load} />}
+      {createKind && (
+        <CreateTransactionModal
+          kind={createKind}
+          warehouse={activeWh}
+          warehouses={warehouses}
+          onClose={() => setCreateKind(null)}
+          onSaved={() => { setCreateKind(null); load() }}
+        />
       )}
+    </div>
+  )
+}
 
-      {/* ════════════ MODALS ════════════ */}
-      {showTxModal && <TransactionModal type={showTxModal} supplies={supplies} suppliers={suppliers} warehouses={warehouses} cancelReasons={cancelReasons} userDept={auth.department} onClose={() => setShowTxModal(null)} onSaved={() => { setShowTxModal(null); tab === 'import' ? loadImportTxs() : loadExportTxs(); loadBase() }} />}
-      {showStockCard && <StockCardModal supply={showStockCard} onClose={() => setShowStockCard(null)} />}
-      {showHisModal && <HisMappingModal services={services} supplies={supplies} onClose={() => setShowHisModal(false)} onSaved={() => { setShowHisModal(false); loadHisData() }} />}
+function TransactionDetailDrawer({ id, onClose, onChanged }) {
+  const [tx, setTx] = useState(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { api.get(`/inventory/transactions/${id}`).then(({ data }) => setTx(data)) }, [id])
+  const confirm = async () => {
+    if (!window.confirm('Xác nhận phiếu này? Sẽ cập nhật tồn kho ngay.')) return
+    setBusy(true)
+    try { await api.put(`/inventory/transactions/${id}/confirm`); onChanged(); onClose() }
+    catch (e) { alert(e.response?.data?.error || 'Lỗi'); setBusy(false) }
+  }
+  const cancel = async () => {
+    if (!window.confirm('Hủy phiếu này?')) return
+    setBusy(true)
+    try { await api.put(`/inventory/transactions/${id}/cancel`); onChanged(); onClose() }
+    catch (e) { alert(e.response?.data?.error || 'Lỗi'); setBusy(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end bg-black/40" onClick={onClose}>
+      <div className="w-full max-w-2xl bg-white h-full overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="border-b border-gray-100 px-6 py-4 flex justify-between items-center sticky top-0 bg-white">
+          <div>
+            <div className="text-xs text-gray-500">{tx ? TX_TYPES[tx.type] : ''}</div>
+            <div className="font-semibold text-gray-900">{tx?.transactionNumber || 'Đang tải...'}</div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+        </div>
+        {tx && (
+          <div className="p-6 space-y-5">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <Field label="Kho">{tx.warehouseName}</Field>
+              {tx.counterpartyWarehouseName && <Field label="Kho đối ứng">{tx.counterpartyWarehouseName}</Field>}
+              {tx.supplierName && <Field label="Nhà cung cấp">{tx.supplierName}</Field>}
+              <Field label="Trạng thái"><Pill className={ST_CLS[tx.status]}>{ST_LBL[tx.status]}</Pill></Field>
+              <Field label="Tạo bởi">{tx.createdBy} · {fmtDate(tx.createdAt)}</Field>
+              {tx.confirmedBy && <Field label="Xác nhận bởi">{tx.confirmedBy} · {fmtDate(tx.confirmedAt)}</Field>}
+              {tx.reason && <Field label="Lý do" full>{tx.reason}</Field>}
+              {tx.notes && <Field label="Ghi chú" full>{tx.notes}</Field>}
+            </div>
 
-      {/* Generic edit modals */}
-      {editModal?.type === 'supplier' && <CrudModal title={editModal.record?._id ? 'Sửa NCC' : 'Thêm NCC'}
-        fields={[{ key: 'name', label: 'Tên NCC', required: true }, { key: 'code', label: 'Mã' }, { key: 'contactPerson', label: 'Người liên hệ' }, { key: 'phone', label: 'SĐT' }, { key: 'email', label: 'Email' }, { key: 'taxCode', label: 'MST' }, { key: 'address', label: 'Địa chỉ', wide: true }]}
-        record={editModal.record} onClose={() => setEditModal(null)}
-        onSave={async (form) => { if (editModal.record?._id) await api.put(`/inventory/suppliers/${editModal.record._id}`, form); else await api.post('/inventory/suppliers', form); setEditModal(null); loadBase() }} />}
+            <div>
+              <div className="text-sm font-medium text-gray-900 mb-2">Dòng vật tư ({tx.items.length})</div>
+              <div className="border border-gray-100 rounded-lg overflow-hidden">
+                <div className="grid grid-cols-[1fr_90px_70px_100px] px-3 py-2 bg-gray-50 text-xs text-gray-500">
+                  <div>Vật tư</div><div>Số lô</div><div className="text-right">SL</div><div className="text-right">Tổng</div>
+                </div>
+                {tx.items.map((it, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_90px_70px_100px] px-3 py-2 text-sm border-t border-gray-50">
+                    <div>
+                      <div className="text-gray-900">{it.supplyName}</div>
+                      <div className="text-xs text-gray-500">{it.supplyCode} · {it.unit}</div>
+                      {it.notes && <div className="text-xs text-amber-700 mt-0.5">{it.notes}</div>}
+                    </div>
+                    <div className="text-xs text-gray-600">{it.lotNumber || '—'}</div>
+                    <div className="text-right tabular-nums">{it.quantity}</div>
+                    <div className="text-right tabular-nums">{fmtMoney(it.amount)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-      {editModal?.type === 'supply' && <CrudModal title={editModal.record?._id ? 'Sửa hàng hóa' : 'Thêm hàng hóa'}
-        fields={[{ key: 'name', label: 'Tên', required: true }, { key: 'code', label: 'Mã' },
-          { key: 'categoryId', label: 'Nhóm', type: 'select', options: categories.map(c => ({ value: c._id, label: c.name })) },
-          { key: 'unit', label: 'ĐVT' }, { key: 'packagingSpec', label: 'Quy cách đóng gói' }, { key: 'conversionRate', label: 'SL chuyển đổi (1 gói = N đơn vị)', type: 'number' },
-          { key: 'minimumStock', label: 'Tồn tối thiểu', type: 'number' }, { key: 'site', label: 'Chi nhánh' }]}
-        record={editModal.record} onClose={() => setEditModal(null)}
-        onSave={async (form) => { if (editModal.record?._id) await api.put(`/inventory/supplies/${editModal.record._id}`, form); else await api.post('/inventory/supplies', form); setEditModal(null); loadBase() }} />}
+            {tx.status === 'draft' && (
+              <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
+                <button onClick={cancel} disabled={busy} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy phiếu</button>
+                <button onClick={confirm} disabled={busy} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Xác nhận</button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+const Field = ({ label, children, full }) => (
+  <div className={full ? 'col-span-2' : ''}>
+    <div className="text-xs text-gray-500">{label}</div>
+    <div className="text-gray-900 mt-0.5">{children}</div>
+  </div>
+)
 
-      {editModal?.type === 'category' && <CrudModal title={editModal.record?._id ? 'Sửa nhóm' : 'Thêm nhóm'}
-        fields={[{ key: 'name', label: 'Tên nhóm', required: true }, { key: 'code', label: 'Mã' }]}
-        record={editModal.record} onClose={() => setEditModal(null)}
-        onSave={async (form) => { if (editModal.record?._id) await api.put(`/inventory/categories/${editModal.record._id}`, form); else await api.post('/inventory/categories', form); setEditModal(null); loadBase() }} />}
+// ─── Create Transaction Modal (Nhập / Xuất / Điều chỉnh / Điều chuyển) ─────
+function CreateTransactionModal({ kind, warehouse, warehouses, onClose, onSaved }) {
+  const isImport = kind === 'import'
+  const isExport = kind === 'export'
+  const isTransfer = kind === 'transfer'
+  const isAdjustment = kind === 'adjustment'
 
-      {editModal?.type === 'warehouse' && <CrudModal title={editModal.record?._id ? 'Sửa kho' : 'Thêm kho'}
-        fields={[{ key: 'name', label: 'Tên kho', required: true }, { key: 'code', label: 'Mã' }, { key: 'site', label: 'Chi nhánh' }, { key: 'manager', label: 'Quản lý' }, { key: 'phone', label: 'SĐT' }, { key: 'address', label: 'Địa chỉ', wide: true }, { key: 'description', label: 'Mô tả', wide: true }]}
-        record={editModal.record} onClose={() => setEditModal(null)}
-        onSave={async (form) => { if (editModal.record?._id) await api.put(`/inventory/warehouses/${editModal.record._id}`, form); else await api.post('/inventory/warehouses', form); setEditModal(null); loadBase() }} />}
+  const [supplies, setSupplies] = useState([])
+  const [suppliers, setSuppliers] = useState([])
+  const [supplierId, setSupplierId] = useState('')
+  const [reasonCode, setReasonCode] = useState(REASON_PRESETS[kind]?.[0]?.code || '')
+  const [toWhId, setToWhId] = useState('')
+  const [notes, setNotes] = useState('')
+  const [items, setItems] = useState([emptyLine()])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
-      {editModal?.type === 'cancelReason' && <CrudModal title={editModal.record?._id ? 'Sửa lý do' : 'Thêm lý do hủy'}
-        fields={[{ key: 'name', label: 'Lý do', required: true }, { key: 'code', label: 'Mã' }, { key: 'type', label: 'Loại', type: 'select', options: [{ value: 'import', label: 'Phiếu nhập' }, { value: 'export', label: 'Phiếu xuất' }] }]}
-        record={editModal.record} onClose={() => setEditModal(null)}
-        onSave={async (form) => { if (editModal.record?._id) await api.put(`/inventory/cancel-reasons/${editModal.record._id}`, form); else await api.post('/inventory/cancel-reasons', form); setEditModal(null); loadBase() }} />}
+  useEffect(() => {
+    api.get('/inventory/supplies?status=active').then(({ data }) => setSupplies(data || []))
+    if (isImport) api.get('/inventory/suppliers?status=active').then(({ data }) => setSuppliers(data || []))
+  }, [isImport])
+
+  function emptyLine() {
+    return { supplyId: '', supplyName: '', supplyCode: '', unit: '', packagingSpec: '', quantity: 1, lotNumber: '', expiryDate: '', manufacturingDate: '', purchasePrice: 0, vatRate: 0, notes: '' }
+  }
+  const updateItem = (i, patch) => setItems(p => p.map((it, idx) => idx === i ? { ...it, ...patch } : it))
+  const pickSupply = (i, supplyId) => {
+    const s = supplies.find(x => x._id === supplyId)
+    updateItem(i, { supplyId, supplyName: s?.name || '', supplyCode: s?.code || '', unit: s?.unit || '' })
+  }
+
+  const titleMap = { import: 'Phiếu nhập kho', export: 'Phiếu xuất kho', adjustment: 'Phiếu điều chỉnh', transfer: 'Phiếu điều chuyển' }
+  const canSave = items.every(it => it.supplyId && Number(it.quantity)) &&
+    (!isImport || supplierId) &&
+    (!isTransfer || toWhId) &&
+    ((isExport || isAdjustment) ? !!reasonCode : true)
+
+  const save = async () => {
+    setSaving(true); setError('')
+    try {
+      if (isTransfer) {
+        await api.post('/inventory/transfers', {
+          fromWarehouseId: warehouse._id,
+          toWarehouseId: toWhId,
+          items,
+          notes,
+        })
+      } else {
+        await api.post('/inventory/transactions', {
+          type: kind,
+          warehouseId: warehouse._id,
+          items,
+          supplierId,
+          supplierName: suppliers.find(s => s._id === supplierId)?.name || '',
+          reasonCode,
+          reason: REASON_PRESETS[kind]?.find(r => r.code === reasonCode)?.name || '',
+          notes,
+          accountingPeriod: (() => {
+            const d = new Date()
+            return `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+          })(),
+        })
+      }
+      onSaved()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Lỗi lưu phiếu')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white">
+          <div>
+            <div className="font-semibold text-gray-900">{titleMap[kind]}</div>
+            <div className="text-xs text-gray-500 mt-0.5">{warehouse?.name} · {new Date().toLocaleDateString('vi-VN')}</div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>}
+
+          <Card className="p-4">
+            <div className="text-xs text-gray-500 mb-3">Thông tin chung</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {isImport && (
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-xs text-gray-500 mb-1">Nhà cung cấp *</label>
+                  <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" value={supplierId} onChange={e => setSupplierId(e.target.value)}>
+                    <option value="">-- Chọn NCC --</option>
+                    {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {(isExport || isAdjustment) && (
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-xs text-gray-500 mb-1">Lý do *</label>
+                  <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" value={reasonCode} onChange={e => setReasonCode(e.target.value)}>
+                    {REASON_PRESETS[kind].map(r => <option key={r.code} value={r.code}>{r.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {isTransfer && (
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-xs text-gray-500 mb-1">Kho đích *</label>
+                  <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" value={toWhId} onChange={e => setToWhId(e.target.value)}>
+                    <option value="">-- Chọn kho --</option>
+                    {warehouses.filter(w => w._id !== warehouse._id).map(w => (
+                      <option key={w._id} value={w._id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="col-span-2 md:col-span-2">
+                <label className="block text-xs text-gray-500 mb-1">Ghi chú</label>
+                <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" value={notes} onChange={e => setNotes(e.target.value)} />
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex justify-between items-center mb-3">
+              <div className="text-sm font-medium text-gray-900">Danh sách vật tư</div>
+              <div className="text-xs text-gray-500">{items.length} dòng</div>
+            </div>
+            <div className="space-y-2">
+              {items.map((it, i) => (
+                <div key={i} className="grid grid-cols-[1fr_100px_100px_100px_80px_30px] gap-2 items-start">
+                  <div>
+                    <select className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white" value={it.supplyId} onChange={e => pickSupply(i, e.target.value)}>
+                      <option value="">-- Chọn vật tư --</option>
+                      {supplies.map(s => <option key={s._id} value={s._id}>{s.name} ({s.code})</option>)}
+                    </select>
+                  </div>
+                  <input
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                    placeholder="Số lô"
+                    value={it.lotNumber} onChange={e => updateItem(i, { lotNumber: e.target.value })}
+                  />
+                  <input
+                    type="month"
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+                    placeholder="HSD"
+                    value={it.expiryDate} onChange={e => updateItem(i, { expiryDate: e.target.value })}
+                    disabled={!isImport}
+                  />
+                  <input
+                    type="number"
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right"
+                    placeholder="SL"
+                    value={it.quantity} onChange={e => updateItem(i, { quantity: +e.target.value })}
+                  />
+                  <input
+                    type="number"
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-right"
+                    placeholder="Đơn giá"
+                    value={it.purchasePrice} onChange={e => updateItem(i, { purchasePrice: +e.target.value })}
+                    disabled={!isImport}
+                  />
+                  <button onClick={() => setItems(p => p.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-red-600 text-lg">×</button>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setItems(p => [...p, emptyLine()])} className="text-sm text-blue-600 hover:underline mt-3">+ Thêm dòng</button>
+          </Card>
+        </div>
+
+        <div className="px-6 py-3 border-t border-gray-100 flex justify-end gap-2 sticky bottom-0 bg-white">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy</button>
+          <button onClick={save} disabled={!canSave || saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
+            {saving ? 'Đang lưu...' : 'Lưu phiếu'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  4. KIỂM KÊ
+// ═══════════════════════════════════════════════════════════════════════════
+function StocktakeTab({ whParam, warehouses, activeWh }) {
+  const [sessions, setSessions] = useState([])
+  const [activeSessionId, setActiveSessionId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [newOpen, setNewOpen] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    api.get(`/inventory/stocktakes${whParam}`).then(({ data }) => { setSessions(data || []); setLoading(false) }).catch(() => setLoading(false))
+  }, [whParam])
+
+  useEffect(() => { load() }, [load])
+
+  if (activeSessionId) {
+    return <StocktakeSession id={activeSessionId} onClose={() => { setActiveSessionId(null); load() }} />
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <button
+          onClick={() => setNewOpen(true)}
+          disabled={!activeWh}
+          className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-40"
+        >+ Bắt đầu kiểm kê mới</button>
+      </div>
+
+      <Card>
+        <div className="grid grid-cols-[1fr_120px_100px_120px_120px] px-4 py-3 text-xs text-gray-500 border-b border-gray-100">
+          <div>Tên / Số phiên</div>
+          <div>Ngày bắt đầu</div>
+          <div>Số dòng</div>
+          <div>Trạng thái</div>
+          <div className="text-right">Người tạo</div>
+        </div>
+        {loading ? (
+          <div className="p-6 text-center text-gray-400 text-sm">Đang tải...</div>
+        ) : sessions.length === 0 ? (
+          <div className="p-6 text-center text-gray-400 text-sm">Chưa có phiên kiểm kê nào.</div>
+        ) : (
+          sessions.map(s => (
+            <button key={s._id} onClick={() => setActiveSessionId(s._id)}
+              className="w-full grid grid-cols-[1fr_120px_100px_120px_120px] px-4 py-3 text-sm border-b border-gray-50 hover:bg-gray-50 text-left">
+              <div>
+                <div className="text-gray-900">{s.name}</div>
+                <div className="text-xs text-gray-500">{s.sessionNumber}</div>
+              </div>
+              <div className="text-gray-600 text-xs">{fmtDate(s.startedAt)}</div>
+              <div className="text-gray-600 text-xs">{(s.items || []).length} VT</div>
+              <div><Pill className={stocktakeStatusCls(s.status)}>{stocktakeStatusLbl(s.status)}</Pill></div>
+              <div className="text-right text-gray-500 text-xs">{s.startedBy}</div>
+            </button>
+          ))
+        )}
+      </Card>
+
+      {newOpen && (
+        <StocktakeNewModal
+          warehouse={activeWh}
+          onClose={() => setNewOpen(false)}
+          onCreated={(id) => { setNewOpen(false); setActiveSessionId(id); load() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function stocktakeStatusCls(s) {
+  return {
+    open: 'bg-amber-50 text-amber-700 border-amber-200',
+    submitted: 'bg-blue-50 text-blue-700 border-blue-200',
+    approved: 'bg-teal-50 text-teal-700 border-teal-200',
+    applied: 'bg-green-50 text-green-700 border-green-200',
+    cancelled: 'bg-gray-50 text-gray-500 border-gray-200',
+  }[s] || 'bg-gray-50 text-gray-700 border-gray-200'
+}
+function stocktakeStatusLbl(s) {
+  return ({ open: 'Đang đếm', submitted: 'Đã nộp', approved: 'Đã duyệt', applied: 'Đã áp dụng', cancelled: 'Đã hủy' })[s] || s
+}
+
+function StocktakeNewModal({ warehouse, onClose, onCreated }) {
+  const [name, setName] = useState(`Kiểm kê ${new Date().toISOString().slice(0, 7)}`)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const start = async () => {
+    setSaving(true); setErr('')
+    try {
+      const { data } = await api.post('/inventory/stocktakes', { warehouseId: warehouse._id, name, scope: 'all' })
+      onCreated(data._id)
+    } catch (e) { setErr(e.response?.data?.error || 'Lỗi'); setSaving(false) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+        <div className="font-semibold text-gray-900 mb-4">Bắt đầu kiểm kê mới</div>
+        {err && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-3">{err}</div>}
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Tên phiên</label>
+            <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" value={name} onChange={e => setName(e.target.value)} />
+          </div>
+          <div className="text-xs text-gray-500">Kho: <span className="font-medium text-gray-900">{warehouse?.name}</span></div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Hủy</button>
+          <button onClick={start} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Bắt đầu</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StocktakeSession({ id, onClose }) {
+  const [session, setSession] = useState(null)
+  const [dirty, setDirty] = useState({}) // { supplyId: { actualQty, reasonCode } }
+  const [q, setQ] = useState('')
+  const [onlyDiff, setOnlyDiff] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(() => {
+    api.get(`/inventory/stocktakes/${id}`).then(({ data }) => setSession(data))
+  }, [id])
+  useEffect(() => { load() }, [load])
+
+  if (!session) return <div className="p-8 text-gray-500 text-sm">Đang tải...</div>
+
+  const applyDirty = (items) => items.map(it => {
+    const d = dirty[it.supplyId]
+    if (!d) return it
+    const actualQty = d.actualQty !== undefined ? d.actualQty : it.actualQty
+    const variance = actualQty != null ? (actualQty - it.systemQty) : 0
+    return { ...it, actualQty, reasonCode: d.reasonCode !== undefined ? d.reasonCode : it.reasonCode, variance }
+  })
+  const items = applyDirty(session.items).filter(it => {
+    if (onlyDiff && it.variance === 0) return false
+    if (q && !(it.supplyName.toLowerCase().includes(q.toLowerCase()) || (it.supplyCode || '').toLowerCase().includes(q.toLowerCase()))) return false
+    return true
+  })
+  const counted = applyDirty(session.items).filter(it => it.actualQty != null).length
+  const varying = applyDirty(session.items).filter(it => (it.actualQty != null) && it.variance !== 0).length
+  const readOnly = session.status !== 'open'
+
+  const setActual = (supplyId, v) => setDirty(d => ({ ...d, [supplyId]: { ...(d[supplyId] || {}), actualQty: v } }))
+  const setReason = (supplyId, v) => setDirty(d => ({ ...d, [supplyId]: { ...(d[supplyId] || {}), reasonCode: v } }))
+
+  const save = async (andSubmit = false) => {
+    setBusy(true)
+    try {
+      if (Object.keys(dirty).length > 0) {
+        await api.put(`/inventory/stocktakes/${id}/counts`, { updates: dirty })
+        setDirty({})
+      }
+      if (andSubmit) await api.put(`/inventory/stocktakes/${id}/submit`)
+      await load()
+    } catch (e) { alert(e.response?.data?.error || 'Lỗi') }
+    setBusy(false)
+  }
+  const approve = async () => {
+    if (!window.confirm('Duyệt phiên kiểm kê? Sẽ tạo phiếu điều chỉnh cho các chênh lệch.')) return
+    setBusy(true)
+    try {
+      const { data } = await api.put(`/inventory/stocktakes/${id}/approve`)
+      alert(`Đã duyệt. Tạo ${data.adjustmentCount} phiếu điều chỉnh.`)
+      await load()
+    } catch (e) { alert(e.response?.data?.error || 'Lỗi') }
+    setBusy(false)
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-800">← Quay lại</button>
+            <h2 className="text-lg font-semibold text-gray-900">{session.name}</h2>
+            <Pill className={stocktakeStatusCls(session.status)}>{stocktakeStatusLbl(session.status)}</Pill>
+          </div>
+          <div className="text-xs text-gray-500 mt-1">{session.warehouseName} · bắt đầu {fmtDate(session.startedAt)} · {session.startedBy}</div>
+        </div>
+        <div className="flex gap-2">
+          {session.status === 'open' && (
+            <>
+              <button onClick={() => save(false)} disabled={busy} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">Lưu nháp</button>
+              <button onClick={() => save(true)} disabled={busy} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Nộp ({session.items.length - counted} còn lại)</button>
+            </>
+          )}
+          {session.status === 'submitted' && (
+            <button onClick={approve} disabled={busy} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Duyệt & áp dụng</button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="p-4"><div className="text-xs text-gray-500">Đã đếm</div><div className="mt-2 text-3xl font-medium">{counted} <span className="text-xs text-gray-500 font-normal">/ {session.items.length}</span></div></Card>
+        <Card className="p-4"><div className="text-xs text-gray-500">Có chênh lệch</div><div className={`mt-2 text-3xl font-medium ${varying ? 'text-amber-700' : 'text-gray-300'}`}>{varying}</div></Card>
+        <Card className="p-4"><div className="text-xs text-gray-500">Còn lại</div><div className="mt-2 text-3xl font-medium">{session.items.length - counted}</div></Card>
+      </div>
+
+      <Card className="p-3 flex gap-2 flex-wrap">
+        <input className="flex-1 min-w-[240px] border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Tìm vật tư..." value={q} onChange={e => setQ(e.target.value)} />
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={onlyDiff} onChange={e => setOnlyDiff(e.target.checked)} /> Chỉ chênh lệch</label>
+      </Card>
+
+      <Card>
+        <div className="grid grid-cols-[1fr_80px_140px_80px_160px] gap-3 px-4 py-3 text-xs text-gray-500 border-b border-gray-100">
+          <div>Vật tư</div><div className="text-center">Tồn HT</div><div className="text-center">Đã đếm</div><div className="text-center">Chênh</div><div>Lý do</div>
+        </div>
+        {items.map(it => {
+          const variance = it.actualQty != null ? (it.actualQty - it.systemQty) : 0
+          const varCls = variance > 0 ? 'text-blue-700' : variance < 0 ? 'text-red-700' : 'text-gray-400'
+          const needReason = variance !== 0 && !it.reasonCode
+          return (
+            <div key={it.supplyId} className="grid grid-cols-[1fr_80px_140px_80px_160px] gap-3 px-4 py-3 text-sm border-b border-gray-50 items-center">
+              <div>
+                <div className="text-gray-900">{it.supplyName}</div>
+                <div className="text-xs text-gray-500">{it.supplyCode}</div>
+              </div>
+              <div className="text-center tabular-nums">{it.systemQty}</div>
+              <div className="flex items-center justify-center gap-1">
+                <button
+                  disabled={readOnly}
+                  onClick={() => setActual(it.supplyId, Math.max(0, (it.actualQty ?? it.systemQty) - 1))}
+                  className="w-7 h-7 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                >−</button>
+                <input
+                  disabled={readOnly}
+                  type="number" min="0"
+                  value={it.actualQty ?? ''}
+                  placeholder="—"
+                  onChange={e => setActual(it.supplyId, e.target.value === '' ? null : +e.target.value)}
+                  className="w-16 border border-gray-300 rounded px-1 py-1 text-sm text-center disabled:bg-gray-50"
+                />
+                <button
+                  disabled={readOnly}
+                  onClick={() => setActual(it.supplyId, (it.actualQty ?? it.systemQty) + 1)}
+                  className="w-7 h-7 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                >+</button>
+              </div>
+              <div className={`text-center tabular-nums font-medium ${varCls}`}>{variance > 0 ? `+${variance}` : variance || '—'}</div>
+              <div>
+                {variance !== 0 ? (
+                  <select
+                    disabled={readOnly}
+                    value={it.reasonCode || ''}
+                    onChange={e => setReason(it.supplyId, e.target.value)}
+                    className={`w-full border rounded px-2 py-1 text-sm bg-white disabled:bg-gray-50 ${needReason ? 'border-amber-400' : 'border-gray-300'}`}
+                  >
+                    <option value="">Chọn lý do...</option>
+                    {REASON_PRESETS.stocktake.map(r => <option key={r.code} value={r.code}>{r.name}</option>)}
+                  </select>
+                ) : <span className="text-gray-300 text-xs">—</span>}
+              </div>
+            </div>
+          )
+        })}
+      </Card>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  5. DANH MỤC  (admin-editable, read-only for nv_kho)
+// ═══════════════════════════════════════════════════════════════════════════
+function CatalogTab() {
+  const { hasPerm } = useAuth()
+  const canEdit = hasPerm ? hasPerm('inventory.manage') : true
+  const [sub, setSub] = useState('supplies')
+  return (
+    <div className="space-y-3">
+      <Card className="p-2 flex gap-1 flex-wrap">
+        {[['supplies', 'Vật tư'], ['categories', 'Nhóm VT'], ['suppliers', 'Nhà cung cấp'], ['mapping', 'Định mức dịch vụ']].map(([k, label]) => (
+          <button key={k} onClick={() => setSub(k)} className={`px-3 py-1.5 rounded-full text-sm ${sub === k ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>{label}</button>
+        ))}
+      </Card>
+      {sub === 'supplies' && <CatalogList endpoint="supplies" cols={[['code', 'Mã'], ['name', 'Tên'], ['unit', 'Đơn vị'], ['minimumStock', 'Định mức']]} canEdit={canEdit} />}
+      {sub === 'categories' && <CatalogList endpoint="categories" cols={[['code', 'Mã'], ['name', 'Tên']]} canEdit={canEdit} />}
+      {sub === 'suppliers' && <CatalogList endpoint="suppliers" cols={[['code', 'Mã'], ['name', 'Tên'], ['phone', 'SĐT'], ['taxCode', 'MST']]} canEdit={canEdit} />}
+      {sub === 'mapping' && <CatalogList endpoint="his-mapping" cols={[['serviceName', 'Dịch vụ'], ['supplyName', 'Vật tư'], ['quantity', 'SL']]} canEdit={canEdit} />}
+    </div>
+  )
+}
+function CatalogList({ endpoint, cols, canEdit }) {
+  const [rows, setRows] = useState([])
+  useEffect(() => { api.get(`/inventory/${endpoint}`).then(({ data }) => setRows(data || [])) }, [endpoint])
+  return (
+    <Card>
+      <div className="grid gap-2 px-4 py-3 text-xs text-gray-500 border-b border-gray-100" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
+        {cols.map(c => <div key={c[0]}>{c[1]}</div>)}
+      </div>
+      {rows.length === 0 ? (
+        <div className="p-6 text-center text-gray-400 text-sm">Không có dữ liệu.</div>
+      ) : rows.map(r => (
+        <div key={r._id} className="grid gap-2 px-4 py-2 text-sm border-b border-gray-50" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
+          {cols.map(c => <div key={c[0]} className="text-gray-900 truncate">{r[c[0]] ?? '—'}</div>)}
+        </div>
+      ))}
+      {!canEdit && <div className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">Chỉ xem. Chỉnh sửa ở Danh mục → Quản trị.</div>}
+    </Card>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  6. TỔNG HỢP CHUỖI  (supervisor only)
+// ═══════════════════════════════════════════════════════════════════════════
+function MatrixTab({ warehouses }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [q, setQ] = useState('')
+  const [belowMinOnly, setBelowMinOnly] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    const qs = new URLSearchParams()
+    if (q) qs.set('q', q)
+    if (belowMinOnly) qs.set('belowMin', 'true')
+    api.get(`/inventory/stock/matrix?${qs}`).then(({ data }) => { setData(data); setLoading(false) }).catch(() => setLoading(false))
+  }, [q, belowMinOnly])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <div className="space-y-3">
+      <Card className="p-3 flex items-center gap-2 flex-wrap">
+        <input className="flex-1 min-w-[240px] border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Tìm vật tư..." value={q} onChange={e => setQ(e.target.value)} />
+        <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={belowMinOnly} onChange={e => setBelowMinOnly(e.target.checked)} /> Chỉ dưới định mức</label>
+      </Card>
+
+      <Card className="overflow-x-auto">
+        {loading ? (
+          <div className="p-6 text-center text-gray-400 text-sm">Đang tải...</div>
+        ) : !data || !data.rows.length ? (
+          <div className="p-6 text-center text-gray-400 text-sm">Không có dữ liệu.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-gray-500 border-b border-gray-100">
+                <th className="text-left px-4 py-3">Vật tư</th>
+                {data.warehouses.map(w => (
+                  <th key={w._id} className="text-center px-3 py-3 tabular-nums font-normal">{w.code || w.name}</th>
+                ))}
+                <th className="text-right px-4 py-3 font-normal">Tổng</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.map(r => {
+                const totalBelowMin = r.cells.every(c => c.belowMin)
+                return (
+                  <tr key={r.supply._id} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <div className="text-gray-900">{r.supply.name}</div>
+                      <div className="text-xs text-gray-500">{r.supply.code} · min {r.supply.minimumStock}/kho</div>
+                    </td>
+                    {r.cells.map(c => {
+                      const cls = c.belowMin ? 'text-red-700 font-medium' : 'text-gray-700'
+                      return <td key={c.warehouseId} className={`text-center px-3 py-3 tabular-nums ${cls}`}>{c.qty || '—'}</td>
+                    })}
+                    <td className={`text-right px-4 py-3 tabular-nums ${totalBelowMin ? 'text-amber-700' : 'text-gray-500'}`}>{r.total}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </Card>
     </div>
   )
 }

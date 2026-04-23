@@ -110,7 +110,6 @@ async function run() {
       conversionRate: 1,
       minimumStock: Math.max(10, Math.floor(s.initStock * 0.1)),
       currentStock: s.initStock,
-      site: '',
       supplierId: '',
       status: 'active',
       updatedAt: now(),
@@ -160,8 +159,8 @@ async function run() {
       const doc = {
         ...lot,
         supplyId: supplyId(s.code),
-        site: '',
-        warehouseId: '',
+        site: 'DEPT-HN',
+        warehouseId: 'WH-HN',
         importTransactionId: '',
         unitPrice: 0,
         status: 'available',

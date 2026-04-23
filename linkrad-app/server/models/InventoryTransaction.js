@@ -5,33 +5,45 @@ const txItemSchema = new mongoose.Schema({
   supplyName: String,
   supplyCode: String,
   unit: String,
-  packagingSpec: String,              // Quy cách đóng gói
+  packagingSpec: String,
+  lotId: String,                       // set on export-type txs to record which lot was consumed
   lotNumber: String,
-  manufacturingDate: String,          // Ngày sản xuất
+  manufacturingDate: String,
   expiryDate: String,
-  quantity: Number,                    // SL (packages)
-  conversionQuantity: { type: Number, default: 0 },  // SL chuyển đổi (base units)
-  purchasePrice: { type: Number, default: 0 },        // Giá mua (per package)
-  unitPrice: { type: Number, default: 0 },             // Giá từng đơn vị (per base unit)
-  amountBeforeTax: { type: Number, default: 0 },       // Tổng tiền trước thuế
-  vatRate: { type: Number, default: 0 },                // VAT %
-  vatAmount: { type: Number, default: 0 },              // Tiền VAT
-  amountAfterTax: { type: Number, default: 0 },         // Tổng tiền sau thuế
-  discountPercent: { type: Number, default: 0 },        // Chiết khấu %
-  discountAmount: { type: Number, default: 0 },         // Tiền chiết khấu
-  amount: { type: Number, default: 0 },                 // Tổng tiền (final)
-  notes: String,                                         // Ghi chú
+  quantity: Number,
+  conversionQuantity: { type: Number, default: 0 },
+  purchasePrice: { type: Number, default: 0 },
+  unitPrice: { type: Number, default: 0 },
+  amountBeforeTax: { type: Number, default: 0 },
+  vatRate: { type: Number, default: 0 },
+  vatAmount: { type: Number, default: 0 },
+  amountAfterTax: { type: Number, default: 0 },
+  discountPercent: { type: Number, default: 0 },
+  discountAmount: { type: Number, default: 0 },
+  amount: { type: Number, default: 0 },
+  notes: String,
 }, { _id: false })
 
+// type semantics:
+//   import       — from external supplier into warehouseId (creates lots)
+//   export       — out of warehouseId to external (discard, trả NCC, etc.) (FIFO deduct)
+//   auto_deduct  — system-generated from KTV scan completion (FIFO deduct)
+//   adjustment   — manual count correction (+/-); spawned by kiểm kê approval or ad-hoc
+//   transfer_out — leaving warehouseId, destined for counterpartyWarehouseId
+//   transfer_in  — arriving into warehouseId from counterpartyWarehouseId
+// Every transfer is a pair linked by transferId.
 const inventoryTransactionSchema = new mongoose.Schema({
   _id: String,
   transactionNumber: String,
-  type: { type: String, enum: ['import', 'export', 'adjustment', 'auto_deduct'] },
-  site: String,
-  warehouseId: String,
+  type: { type: String, enum: ['import', 'export', 'adjustment', 'auto_deduct', 'transfer_out', 'transfer_in'] },
+  warehouseId: { type: String, required: true },
   warehouseName: String,
   warehouseCode: String,
-  accountingPeriod: String,           // Kỳ kế toán (e.g. "04/2026")
+  site: String,                              // legacy echo: warehouse's site at time of write
+  counterpartyWarehouseId: String,           // transfer only: the other end
+  counterpartyWarehouseName: String,
+  transferId: String,                        // shared by both legs of a transfer
+  accountingPeriod: String,
   items: [txItemSchema],
   totalAmountBeforeTax: { type: Number, default: 0 },
   totalVat: { type: Number, default: 0 },
@@ -39,10 +51,13 @@ const inventoryTransactionSchema = new mongoose.Schema({
   totalAmount: { type: Number, default: 0 },
   supplierId: String,
   supplierName: String,
+  reasonCode: String,
   reason: String,
   notes: String,
   relatedServiceOrderId: String,
   relatedVisitId: String,
+  relatedStudyId: String,                    // auto_deduct back-reference
+  stocktakeSessionId: String,                // adjustment from kiểm kê
   status: { type: String, enum: ['draft', 'confirmed', 'cancelled'], default: 'draft' },
   confirmedBy: String,
   confirmedAt: String,
@@ -50,5 +65,8 @@ const inventoryTransactionSchema = new mongoose.Schema({
   createdAt: String,
   updatedAt: String,
 }, { _id: false })
+
+inventoryTransactionSchema.index({ warehouseId: 1, createdAt: -1 })
+inventoryTransactionSchema.index({ transferId: 1 })
 
 module.exports = mongoose.model('InventoryTransaction', inventoryTransactionSchema)

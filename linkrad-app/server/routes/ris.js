@@ -77,32 +77,83 @@ async function computeStandardConsumables(study) {
   return Object.values(byId)
 }
 
-// Create an auto_deduct InventoryTransaction + decrement stock (FIFO lots).
-// Returns the transaction _id, or null if nothing to deduct.
+// Create an auto_deduct InventoryTransaction + decrement stock (FIFO lots) from
+// the branch warehouse at study.site. Soft-fails on insufficient stock: the
+// transaction still records the actual qty used, but flags shortfall in
+// reasonCode='variance' + per-item notes so nv_kho can see it on the landing.
+// Returns the transaction _id, or null if nothing to deduct or no warehouse.
 async function autoDeductConsumables(study, user) {
   if (study.consumablesDeductedAt) return null
   const items = (study.consumables || []).filter(c => Number(c.actualQty) > 0)
   if (!items.length) return null
+
+  const Warehouse = require('../models/Warehouse')
+  const wh = study.site ? await Warehouse.findOne({ site: study.site, status: 'active' }).lean() : null
+  if (!wh) {
+    // No warehouse configured for this site — skip the deduct but don't block.
+    return null
+  }
+
   const nowIso = new Date().toISOString()
   const txId = `TX-${Date.now()}-${crypto.randomUUID().slice(0, 4)}`
-  const mapped = items.map(it => ({
-    supplyId: it.supplyId,
-    supplyCode: it.supplyCode,
-    supplyName: it.supplyName,
-    unit: it.unit,
-    quantity: Number(it.actualQty) || 0,
-    notes: it.notes || '',
-  }))
+
+  const mapped = []
+  let anyVariance = false
+  for (const it of items) {
+    const qty = Number(it.actualQty) || 0
+    let remaining = qty
+    const lots = await InventoryLot.find({
+      warehouseId: wh._id,
+      supplyId: it.supplyId,
+      status: 'available',
+      currentQuantity: { $gt: 0 },
+    }).sort({ expiryDate: 1, createdAt: 1 })
+    let firstLotId = ''
+    for (const lot of lots) {
+      if (remaining <= 0) break
+      const take = Math.min(lot.currentQuantity, remaining)
+      lot.currentQuantity -= take
+      if (lot.currentQuantity <= 0) lot.status = 'depleted'
+      await lot.save()
+      remaining -= take
+      if (!firstLotId) firstLotId = lot._id
+    }
+    const shortfall = Math.max(0, remaining)
+    if (shortfall > 0) anyVariance = true
+    mapped.push({
+      supplyId: it.supplyId,
+      supplyCode: it.supplyCode,
+      supplyName: it.supplyName,
+      unit: it.unit,
+      lotId: firstLotId,
+      quantity: qty,
+      notes: shortfall > 0 ? `Thiếu ${shortfall} ${it.unit || ''} so với yêu cầu (soft-fail)` : (it.notes || ''),
+    })
+
+    const supply = await Supply.findById(it.supplyId)
+    if (supply) {
+      supply.currentStock = Math.max(0, (supply.currentStock || 0) - (qty - shortfall))
+      supply.updatedAt = nowIso
+      await supply.save()
+    }
+  }
+
   const tx = new InventoryTransaction({
     _id: txId,
     transactionNumber: `AD-${Date.now().toString().slice(-8)}`,
     type: 'auto_deduct',
-    site: study.site || '',
-    warehouseId: '',
+    warehouseId: wh._id,
+    warehouseName: wh.name,
+    warehouseCode: wh.code,
+    site: wh.site || study.site || '',
     accountingPeriod: nowIso.slice(0, 7),
     items: mapped,
-    reason: `Tự động trừ kho: ca chụp ${study._id}`,
+    reasonCode: anyVariance ? 'variance' : '',
+    reason: anyVariance
+      ? `Tự động trừ kho (có sai khác): ca chụp ${study._id}`
+      : `Tự động trừ kho: ca chụp ${study._id}`,
     relatedServiceOrderId: study._id,
+    relatedStudyId: study._id,
     status: 'confirmed',
     confirmedBy: user.username,
     confirmedAt: nowIso,
@@ -111,28 +162,6 @@ async function autoDeductConsumables(study, user) {
     updatedAt: nowIso,
   })
   await tx.save()
-  for (const item of mapped) {
-    const supply = await Supply.findById(item.supplyId)
-    if (!supply) continue
-    supply.currentStock = Math.max(0, (supply.currentStock || 0) - item.quantity)
-    let remaining = item.quantity
-    const lots = await InventoryLot.find({
-      supplyId: item.supplyId,
-      site: study.site || supply.site,
-      status: 'available',
-      currentQuantity: { $gt: 0 },
-    }).sort({ createdAt: 1 })
-    for (const lot of lots) {
-      if (remaining <= 0) break
-      const deduct = Math.min(lot.currentQuantity, remaining)
-      lot.currentQuantity -= deduct
-      if (lot.currentQuantity <= 0) lot.status = 'depleted'
-      await lot.save()
-      remaining -= deduct
-    }
-    supply.updatedAt = nowIso
-    await supply.save()
-  }
   return txId
 }
 

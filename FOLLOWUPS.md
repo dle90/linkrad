@@ -172,8 +172,46 @@ The infrastructure from Phase 2 (snapshotted `effectiveSalespersonId` per invoic
 - **z-index audit** — expand overlay uses `z-50`; haven't verified it doesn't collide with NotificationBell dropdown, Cmd+K palette, or any toast layer.
 - **`.env` still points Orthanc + OHIF at prod Railway.** Local docker-compose at [linkrad-app/pacs/](linkrad-app/pacs/) runs fine but is unused by the app. Wire `ORTHANC_URL=http://localhost:8042` + `OHIF_URL=http://localhost:3000` if local-only dev is ever needed.
 
-## Next session queue (set 2026-04-22)
+## Kho / Inventory — warehouse-scoped rewrite (2026-04-23)
 
-- **UIUX pass on Inventory, Danh mục, HR & phân quyền, Reports, Dashboard** — match the bg-gray-50 page + white rounded-xl cards + pill tabs + blue-600 primary house style already on Đăng ký / Billing / Ca đọc. Dashboard especially will likely need a Claude Design export.
+**Shipped (Pass 1):**
+
+- **Data model reshaped around Warehouse.** `InventoryLot.warehouseId` and `InventoryTransaction.warehouseId` are now the authoritative location fields; `site` remains as a legacy echo. `Supply.site` was dropped; `Supply.currentStock` kept as a deprecated cache (writes still happen for back-compat; reads should prefer live aggregation). Schema at [Warehouse.js](linkrad-app/server/models/Warehouse.js), [InventoryLot.js](linkrad-app/server/models/InventoryLot.js), [InventoryTransaction.js](linkrad-app/server/models/InventoryTransaction.js), [StocktakeSession.js](linkrad-app/server/models/StocktakeSession.js).
+- **Kho tổng = regular warehouse with `site: null`** (no type flag) — multiple allowed for regional grouping later; optional `region` field on Warehouse is future-facing but already in schema.
+- **Scope resolver** at [lib/warehouseScope.js](linkrad-app/server/lib/warehouseScope.js). Every `GET` in inventory routes now goes through `withWarehouseScope()`: admin/giamdoc/truongphong with no `?warehouseId=` get `mode:'all'` across their accessible set; nv_kho / non-supervisor resolves to their single warehouse; any other case returns 400 asking to pick one. `?warehouseId=X` is validated against entitlement; foreign warehouse → 403.
+- **Migration script** at [scripts/migrate-warehouse-model.js](linkrad-app/server/scripts/migrate-warehouse-model.js). Dry-run confirms: creates 12 branch warehouses (one per active branch Department) + 1 Kho Tổng, backfills warehouseId from legacy `site` on existing lots/txs. Idempotent; safe to re-run. **Not yet run against prod** — needs go-ahead.
+- **Auto-deduct** now resolves warehouse via `Warehouse.findOne({ site: study.site })` and is **soft-fail**: on insufficient stock it deducts what's available, tags the tx with `reasonCode:'variance'` + per-item notes describing the shortfall, and does NOT block the study's `pending_read` transition. The "Sai khác định mức" landing tile surfaces these. See [ris.js:82](linkrad-app/server/routes/ris.js:82).
+- **New endpoints** in [routes/inventory.js](linkrad-app/server/routes/inventory.js): `GET /warehouses/accessible` (list + supervisor flag), `GET /stock` (live aggregation, supply rows), `GET /stock/matrix` (supervisor cross-warehouse), `GET /alerts` + `GET /activity-today` (landing dashboard), `POST /transfers` (creates linked transfer_out + transfer_in pair with shared `transferId`), `POST/GET/PUT /stocktakes*` (session lifecycle: open → submitted → approved → applied; approval auto-spawns & confirms adjustment tx per variance line).
+- **FIFO deduction** centralised in `fifoDeduct({warehouseId, supplyId, quantity})` — sorted by `expiryDate asc, createdAt asc`. Used by `confirm` on export/auto_deduct/transfer_out/adjustment-negative.
+- **Transaction types expanded** to `import / export / adjustment / auto_deduct / transfer_out / transfer_in`. Transfer pair carries `transferId` + `counterpartyWarehouseId` on each leg; both start `status:'draft'`, confirm independently (Pass 1 has no in-transit state).
+- **Frontend IA rewritten** at [Inventory.jsx](linkrad-app/client/src/pages/Inventory.jsx) (~950 lines). 5 tabs for nv_kho (**Tổng quan · Tồn kho · Giao dịch · Kiểm kê · Danh mục**) + **Tổng hợp chuỗi** for supervisor/admin. Header: no warehouse switcher for nv_kho (scope is implicit per pushback 1); supervisor/admin gets a "Tất cả kho (N) / chọn kho" dropdown — that switcher's *presence itself* signals expanded scope. Vite build passes.
+- **Pattern reuse**: reason-code picker (`REASON_PRESETS`) used in manual xuất, adjustment, and stocktake variance; FEFO lot drawer opens from Tồn kho rows; confirmation drawer for txs with per-line variance notes visible.
+- **Seed script** ([seed-consumables-mock.js](linkrad-app/server/scripts/seed-consumables-mock.js)) now writes `warehouseId: 'WH-HN'` + `site: 'DEPT-HN'` on seeded lots and drops the obsolete `site: ''` on Supply. Re-run after migration to attach the 30 existing SEED-MOCK lots.
+
+**Deferred — Pass 2:**
+
+- **Transfer lifecycle (in-transit / receive with variance)** — currently both legs go to `draft` and are confirmed independently. Needs: `status: 'in_transit'` on the dest leg after source confirms, a "Nhận hàng" flow where destination acknowledges actual qty (may differ from sent qty) with an auto-spawned adjustment for the delta, and the "Cần nhận đến" landing tile wired to click-through. Sketch in section 6 of warehouse-design-sketches.html mentions this state diagram.
+- **Auto-deduct variance confirmation screen** — the tile shows a count; there's no dedicated "review this variance" drawer yet. Claude Design called this out as the next screen worth drawing (clinical/operational/catalog mental models colliding). Currently nv_kho has to open the transaction in Giao dịch.
+- **Supervisor "Đề xuất điều chuyển" inline CTA** in the matrix — when a row has surplus@A vs deficit@B, the sketch proposes an inline blue CTA to pre-fill a transfer. Not wired; needs a heuristic (`surplus ≥ min * 2` AND `deficit < min`) + a deep-link into the transfer modal.
+- **Line-item inline validation in create forms** — nhập form in the sketch shows per-row HSD warning ("HSD chỉ còn 44 ngày — xác nhận nhập?") and xuất shows FEFO-override warning + insufficient-stock hard error. Current modal is a simpler grid without row-level validation slots.
+- **Confirmation screen with before/after stock** — promised in section 7 "Shared patterns." Not built; confirm is a single click with a `window.confirm` blocker.
+- **Tablet layout + offline queue for kiểm kê** — Claude Design section 5 calls these out. Current implementation is desktop-only and online-only; `dirty` state is in-memory and lost on refresh.
+- **Print slip** per phiếu (Nhập/Xuất/Điều chuyển) — no print template yet.
+- **Lot-number uniqueness index** — schema has `(supplyId, warehouseId)` + expiry index, but not a unique constraint on `(supplyId, warehouseId, lotNumber)`. Add once we're confident no legacy dupes exist.
+- **`Supply.currentStock` deprecation removal** — field + all its writes are still in the code. Remove in a second-pass cleanup after a week of operation to ensure no consumer regressed to reading the cached value.
+- **Expired-lot auto-flip** — lot.status is still manually set; nothing flips `available → expired` when `expiryDate < today`. Add a daily cron or on-read lazy flip.
+- **Cài đặt (admin)** tab — not built. Warehouse CRUD lives at existing `/inventory/warehouses` endpoints; needs a UI to manage them without direct DB.
+- **Permission-denied UX on foreign warehouse URL** — Claude Design spec says "literal message with button back to their kho, not silent redirect." Not implemented; current behavior is a generic error page.
+- **Matrix partial-data column header** — sketch shows "cập nhật 2 giờ trước" when a warehouse is stale. We don't track per-warehouse freshness yet.
+- **Deferred migration step**: drop the `Employee` collection once confirmed empty on prod Atlas. Separate follow-up from earlier; not warehouse-related but noted during this session's model review.
+
+**Open decisions worth flagging before Pass 2 starts:**
+
+- **Reorder-point per warehouse**: `Supply.minimumStock` is a global default applied at every warehouse in the matrix. If a clinic wants different thresholds per site (e.g. HN handles more CT, needs more contrast), we'd add a `SupplyWarehouseConfig { supplyId, warehouseId, minimumStock }` collection. Defer until someone asks.
+- **Auto-release on transfer timeout**: if a transfer_out is issued but the dest never confirms receipt, stock is stuck. Decide a policy (auto-confirm after N days? auto-cancel? dashboard alert?).
+
+## Next session queue (set 2026-04-22, updated 2026-04-23)
+
+- **UIUX pass on Danh mục, HR & phân quyền, Reports, Dashboard** (Inventory now done in 2026-04-23 pass) — match the bg-gray-50 page + white rounded-xl cards + pill tabs + blue-600 primary house style. Dashboard especially will likely need a Claude Design export.
 - **Danh mục ↔ workflow wiring audit** — walk every Danh mục list page and verify there's a live back-link to where those items are consumed (Services → registration picker, Referral doctors → referral picker, etc.). Flag any orphan catalogs for cleanup.
 - **`/` route still points at the old Dashboard** — `App.jsx` root redirect predates phase-1. Check what it should route to per role (`/dashboard/clinical` vs `/dashboard/ops` vs `/dashboard/finance`) and fix.
