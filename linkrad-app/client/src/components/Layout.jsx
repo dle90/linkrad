@@ -9,79 +9,77 @@ import { REPORT_GROUPS, REPORT_TO_GROUP, TOP_LEVEL as REPORT_TOP_LEVEL } from '.
 
 const NAV = [
   {
-    group: 'Tiếp đón',
+    group: 'HIS',
+    children: [
+      {
+        group: 'Tiếp đón',
+        items: [
+          { path: '/registration', label: 'Đăng ký',   icon: '🏥', workflowOnly: true },
+          { path: '/billing',      label: 'Phiếu thu', icon: '💳', workflowOnly: true },
+        ]
+      },
+      {
+        group: 'Vận hành',
+        items: [
+          { path: '/inventory', label: 'Quản lý kho', icon: '📦', workflowOnly: true },
+        ]
+      },
+      { catalogTree: true, group: 'Danh mục' },
+      { reportTree: true,  group: 'Báo cáo' },
+      {
+        group: 'Quản lý',
+        items: [
+          { path: '/audit-log', label: 'Nhật ký hệ thống', icon: '📜', perm: 'audit.view' },
+        ]
+      },
+    ]
+  },
+  {
+    group: 'RIS-PACS',
     items: [
-      { path: '/registration', label: 'Đăng ký',   icon: '🏥', workflowOnly: true },
-      { path: '/billing',      label: 'Phiếu thu', icon: '💳', workflowOnly: true },
+      { path: '/ris', label: 'Ca chụp', icon: '🩻', workflowOnly: true },
     ]
   },
   {
     group: 'Chẩn đoán hình ảnh',
     items: [
-      { path: '/ris',             label: 'Ca chụp', icon: '🩻', workflowOnly: true },
-      { path: '/teleradiology',   label: 'Ca đọc',  icon: '🖥️', workflowOnly: true },
+      { path: '/teleradiology', label: 'Ca đọc', icon: '🖥️', workflowOnly: true },
     ]
   },
   {
-    group: 'Vận hành',
-    items: [
-      { path: '/inventory', label: 'Quản lý kho', icon: '📦', workflowOnly: true },
-    ]
-  },
-  {
-    // Rendered by <CatalogTree> below — the whole Danh mục navigation is a
-    // collapsible tree driven by the shared CATALOG_GROUPS config, with each
-    // group and its catalogs expandable per Notion/Linear-style admin IA.
-    catalogTree: true,
-    group: 'Danh mục',
-  },
-  {
-    // Rendered by <ReportTree> below — 4 top-level entries (Tổng Quan leaf
-    // + 3 persona groups Lâm sàng / Vận Hành / Tài Chính) collapsible, same
-    // pattern as CatalogTree. Replaces the old Dashboard + Báo cáo groups
-    // and the 15 individual report sidebar links.
-    reportTree: true,
-    group: 'Báo cáo',
-  },
-  {
-    group: 'Quản lý',
-    items: [
-      { path: '/audit-log', label: 'Nhật ký hệ thống', icon: '📜', perm: 'audit.view' },
-    ]
-  },
-  {
-    group: 'Tài chính',
-    perm: 'financials.view',
-    items: [
-      { path: '/actuals',   label: 'Nhập số liệu',          icon: '✏️', perm: 'financials.manage' },
-      { path: '/pl',        label: 'Kết quả kinh doanh',    icon: '📋', perm: 'financials.view' },
-      { path: '/cf',        label: 'Dòng tiền',             icon: '💰', perm: 'financials.view' },
-      { path: '/bs',        label: 'Bảng cân đối kế toán',  icon: '⚖️', perm: 'financials.view' },
-      { path: '/breakeven', label: 'Điểm hòa vốn',          icon: '📈', perm: 'financials.view' },
-    ]
-  },
-  {
-    group: 'CRM',
-    items: [
-      { path: '/crm',        label: 'Phân tích KH',  icon: '👥' },
-      { path: '/kpi-sales',  label: 'KPI Sales',     icon: '🎯' },
-      { path: '/marketing',  label: 'Marketing',     icon: '📣' }
+    group: 'Phân hệ phụ trợ',
+    children: [
+      {
+        group: 'Tài chính',
+        perm: 'financials.view',
+        items: [
+          { path: '/actuals',   label: 'Nhập số liệu',          icon: '✏️', perm: 'financials.manage' },
+          { path: '/pl',        label: 'Kết quả kinh doanh',    icon: '📋', perm: 'financials.view' },
+          { path: '/cf',        label: 'Dòng tiền',             icon: '💰', perm: 'financials.view' },
+          { path: '/bs',        label: 'Bảng cân đối kế toán',  icon: '⚖️', perm: 'financials.view' },
+          { path: '/breakeven', label: 'Điểm hòa vốn',          icon: '📈', perm: 'financials.view' },
+        ]
+      },
+      {
+        group: 'CRM',
+        items: [
+          { path: '/crm',       label: 'Phân tích KH', icon: '👥' },
+          { path: '/kpi-sales', label: 'KPI Sales',    icon: '🎯' },
+          { path: '/marketing', label: 'Marketing',    icon: '📣' }
+        ]
+      },
     ]
   },
   {
     group: 'Inactive',
+    defaultCollapsed: true,
     items: [
       { path: '/workflow',        label: 'Công việc',          icon: '✅', workflowOnly: true },
       { path: '/telerad-reading', label: 'Ca đọc — Của tôi',   icon: '🔬', workflowOnly: true },
       { path: '/telerad-admin',   label: 'Ca đọc — Phân công', icon: '📋', adminOnly: true },
-    ]
-  },
-  {
-    group: 'Tổng Quan (Cũ)',
-    items: [
-      { path: '/today', label: 'Hôm nay (live)', icon: '📡', workflowOnly: true },
-      { path: '/',      label: 'Dashboard',      icon: '📊' },
-      { path: '/sites', label: 'Danh sách Site', icon: '📍' },
+      { path: '/today',           label: 'Hôm nay (live)',     icon: '📡', workflowOnly: true },
+      { path: '/',                label: 'Dashboard',          icon: '📊' },
+      { path: '/sites',           label: 'Danh sách Site',     icon: '📍' },
     ]
   },
 ]
@@ -134,7 +132,7 @@ function loadCachedCounts() {
   } catch { return {} }
 }
 
-function CatalogTree({ hasPerm }) {
+function CatalogTree({ hasPerm, indent = 0 }) {
   const location = useLocation()
   const counts = useCatalogCounts()
 
@@ -188,7 +186,8 @@ function CatalogTree({ hasPerm }) {
             <button
               type="button"
               onClick={() => toggleGroup(g.key)}
-              className={`w-full flex items-center px-4 py-1.5 text-sm transition-colors ${isActiveGroup ? 'text-white' : 'text-blue-200 hover:text-white hover:bg-blue-800'}`}
+              className={`w-full flex items-center pr-4 py-1.5 text-sm transition-colors ${isActiveGroup ? 'text-white' : 'text-blue-200 hover:text-white hover:bg-blue-800'}`}
+              style={{ paddingLeft: `${16 + indent}px` }}
             >
               <span className="mr-1.5 text-[10px] w-3 inline-block opacity-70">{isOpen ? '▾' : '▸'}</span>
               <span className="flex-1 text-left font-medium">{g.label}</span>
@@ -201,7 +200,8 @@ function CatalogTree({ hasPerm }) {
                 <NavLink
                   key={it.key}
                   to={`/catalogs/${it.key}`}
-                  className={`flex items-center pl-9 pr-4 py-1.5 text-sm transition-colors ${isActive ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300' : 'text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+                  className={`flex items-center pr-4 py-1.5 text-sm transition-colors ${isActive ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300' : 'text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+                  style={{ paddingLeft: `${36 + indent}px` }}
                 >
                   <span className="mr-2 text-xs">{it.icon}</span>
                   <span className="flex-1 truncate">{it.label}</span>
@@ -224,7 +224,7 @@ function CatalogTree({ hasPerm }) {
 // differs enough (has a leaf at top level) that sharing was awkward.
 const REPORT_TREE_LS_KEY = 'linkrad_report_tree_expanded'
 
-function ReportTree({ hasPerm, isFinancialsUser }) {
+function ReportTree({ hasPerm, isFinancialsUser, indent = 0 }) {
   const location = useLocation()
 
   const activeKey = (() => {
@@ -269,7 +269,8 @@ function ReportTree({ hasPerm, isFinancialsUser }) {
       {/* Top-level: Tổng Quan leaf */}
       <NavLink
         to={`/reports/${REPORT_TOP_LEVEL.key}`}
-        className={`flex items-center px-4 py-1.5 text-sm transition-colors ${isActiveTopLevel ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300' : 'text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+        className={`flex items-center pr-4 py-1.5 text-sm transition-colors ${isActiveTopLevel ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300' : 'text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+        style={{ paddingLeft: `${16 + indent}px` }}
       >
         <span className="mr-2 text-xs">{REPORT_TOP_LEVEL.icon}</span>
         <span className="flex-1 truncate">{REPORT_TOP_LEVEL.label}</span>
@@ -283,7 +284,8 @@ function ReportTree({ hasPerm, isFinancialsUser }) {
             <button
               type="button"
               onClick={() => toggleGroup(g.key)}
-              className={`w-full flex items-center px-4 py-1.5 text-sm transition-colors ${isActiveGroup ? 'text-white' : 'text-blue-200 hover:text-white hover:bg-blue-800'}`}
+              className={`w-full flex items-center pr-4 py-1.5 text-sm transition-colors ${isActiveGroup ? 'text-white' : 'text-blue-200 hover:text-white hover:bg-blue-800'}`}
+              style={{ paddingLeft: `${16 + indent}px` }}
             >
               <span className="mr-1.5 text-[10px] w-3 inline-block opacity-70">{isOpen ? '▾' : '▸'}</span>
               <span className="flex-1 text-left font-medium">{g.label}</span>
@@ -294,7 +296,8 @@ function ReportTree({ hasPerm, isFinancialsUser }) {
                 <NavLink
                   key={it.key}
                   to={`/reports/${it.key}`}
-                  className={`flex items-center pl-9 pr-4 py-1.5 text-sm transition-colors ${isActive ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300' : 'text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+                  className={`flex items-center pr-4 py-1.5 text-sm transition-colors ${isActive ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300' : 'text-blue-200 hover:bg-blue-800 hover:text-white'}`}
+                  style={{ paddingLeft: `${36 + indent}px` }}
                 >
                   <span className="mr-2 text-xs">{it.icon}</span>
                   <span className="flex-1 truncate">{it.label}</span>
@@ -315,7 +318,18 @@ export default function Layout({ children }) {
   const isFinancialsUser = hasPerm('financials.view') || auth?.role === 'giamdoc'
   const isWorkflowUser = auth?.role && auth.role !== 'guest'
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
-  const [collapsed, setCollapsed] = React.useState({})
+  const [collapsed, setCollapsed] = React.useState(() => {
+    const init = {}
+    const walk = (nodes, parentKey) => {
+      for (const n of nodes) {
+        const key = `${parentKey}/${n.group}`
+        if (n.defaultCollapsed) init[key] = true
+        if (n.children) walk(n.children, key)
+      }
+    }
+    walk(NAV, '')
+    return init
+  })
   const toggleSub = (key) => setCollapsed(c => ({ ...c, [key]: !c[key] }))
   const filterItems = (items) => items.filter(item => {
     if (item.perm && !hasPerm(item.perm)) return false
@@ -324,23 +338,71 @@ export default function Layout({ children }) {
     if (item.workflowOnly && !isWorkflowUser) return false
     return true
   })
-  const renderLink = (item, nested = false) => (
+  const renderLink = (item, depth) => (
     <NavLink
       key={item.path}
       to={item.path}
       end={item.path === '/'}
       className={({ isActive }) =>
-        `flex items-center ${nested ? 'pl-9 pr-4' : 'px-4'} py-2 text-sm transition-colors duration-150 ${
+        `flex items-center pr-4 py-2 text-sm transition-colors duration-150 ${
           isActive
             ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300'
             : 'text-blue-200 hover:bg-blue-800 hover:text-white'
         }`
       }
+      style={{ paddingLeft: `${16 + depth * 14}px` }}
     >
       <span className="mr-2 text-xs">{item.icon}</span>
       {item.label}
     </NavLink>
   )
+  const renderNode = (section, depth, parentKey) => {
+    if (section.perm && !hasPerm(section.perm)) return null
+    if (section.financialsOnly && !isFinancialsUser) return null
+    if (section.workflowOnly && !isWorkflowUser) return null
+    if (section.adminOnly && !isAdmin) return null
+    const key = `${parentKey}/${section.group}`
+    const isTop = depth === 0
+
+    let content = null
+    if (section.catalogTree) {
+      if (!isWorkflowUser) return null
+      content = <CatalogTree hasPerm={hasPerm} indent={depth * 14} />
+    } else if (section.reportTree) {
+      if (!isWorkflowUser) return null
+      content = <ReportTree hasPerm={hasPerm} isFinancialsUser={isFinancialsUser} indent={depth * 14} />
+    } else if (section.children) {
+      const rendered = section.children
+        .map(c => renderNode(c, depth + 1, key))
+        .filter(Boolean)
+      if (rendered.length === 0) return null
+      content = rendered
+    } else {
+      const visibleItems = filterItems(section.items || [])
+      if (visibleItems.length === 0) return null
+      content = visibleItems.map(item => renderLink(item, depth + 1))
+    }
+
+    const isOpen = collapsed[key] === undefined ? !section.defaultCollapsed : !collapsed[key]
+    const headerClass = isTop
+      ? 'w-full flex items-center py-1 text-blue-400 text-xs font-semibold uppercase tracking-wider hover:text-blue-200 transition-colors'
+      : 'w-full flex items-center py-1.5 text-xs text-blue-300 hover:text-white hover:bg-blue-800 transition-colors'
+
+    return (
+      <div key={key} className={isTop ? 'mb-2' : ''}>
+        <button
+          type="button"
+          onClick={() => toggleSub(key)}
+          className={headerClass}
+          style={{ paddingLeft: `${16 + depth * 14}px`, paddingRight: '16px' }}
+        >
+          <span className="mr-1.5 text-[10px] w-3 inline-block">{isOpen ? '▾' : '▸'}</span>
+          <span className={isTop ? '' : 'font-medium'}>{section.group}</span>
+        </button>
+        {isOpen && content}
+      </div>
+    )
+  }
 
   const handleLogout = async () => {
     try { await logoutUser() } catch {}
@@ -358,76 +420,7 @@ export default function Layout({ children }) {
 
         {/* Navigation */}
         <nav className="flex-1 py-4">
-          {NAV.map((section) => {
-            if (section.financialsOnly && !isFinancialsUser) return null
-            if (section.perm && !hasPerm(section.perm)) return null
-
-            if (section.catalogTree) {
-              if (!isWorkflowUser) return null
-              return (
-                <div key={section.group} className="mb-2">
-                  <div className="px-4 py-1 text-blue-400 text-xs font-semibold uppercase tracking-wider">
-                    {section.group}
-                  </div>
-                  <CatalogTree hasPerm={hasPerm} />
-                </div>
-              )
-            }
-
-            if (section.reportTree) {
-              if (!isWorkflowUser) return null
-              return (
-                <div key={section.group} className="mb-2">
-                  <div className="px-4 py-1 text-blue-400 text-xs font-semibold uppercase tracking-wider">
-                    {section.group}
-                  </div>
-                  <ReportTree hasPerm={hasPerm} isFinancialsUser={isFinancialsUser} />
-                </div>
-              )
-            }
-
-            if (section.subgroups) {
-              const visibleSubs = section.subgroups
-                .map(sg => ({ ...sg, items: filterItems(sg.items) }))
-                .filter(sg => sg.items.length > 0)
-              if (visibleSubs.length === 0) return null
-              return (
-                <div key={section.group} className="mb-2">
-                  <div className="px-4 py-1 text-blue-400 text-xs font-semibold uppercase tracking-wider">
-                    {section.group}
-                  </div>
-                  {visibleSubs.map(sg => {
-                    const key = `${section.group}:${sg.title}`
-                    const isOpen = !collapsed[key]
-                    return (
-                      <div key={sg.title}>
-                        <button
-                          type="button"
-                          onClick={() => toggleSub(key)}
-                          className="w-full flex items-center px-4 py-1.5 text-xs text-blue-300 hover:text-white hover:bg-blue-800 transition-colors"
-                        >
-                          <span className="mr-1.5 text-[10px] w-3 inline-block">{isOpen ? '▾' : '▸'}</span>
-                          <span className="font-medium">{sg.title}</span>
-                        </button>
-                        {isOpen && sg.items.map(item => renderLink(item, true))}
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            }
-
-            const visibleItems = filterItems(section.items)
-            if (visibleItems.length === 0) return null
-            return (
-              <div key={section.group} className="mb-2">
-                <div className="px-4 py-1 text-blue-400 text-xs font-semibold uppercase tracking-wider">
-                  {section.group}
-                </div>
-                {visibleItems.map(item => renderLink(item))}
-              </div>
-            )
-          })}
+          {NAV.map(section => renderNode(section, 0, ''))}
         </nav>
 
         {/* User info + logout */}
