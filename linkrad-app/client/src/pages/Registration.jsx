@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import api from '../api'
 import { useAuth } from '../context/AuthContext'
+import { AcceptDialog, RejectDialog, ReferralDetailDrawer } from '../components/PartnerReferralDrawer'
 
 const GENDERS = { M: 'Nam', F: 'Nữ', other: 'Khác' }
 
@@ -301,11 +302,48 @@ function HeaderStepper({ active, userName, date }) {
 
 // ── Left rail: Hôm nay ───────────────────────────────────────────────────────
 
-function TodayRail({ patients, filter, onFilterChange, selectedId, onSelect }) {
+// Pending partner referrals surface as virtual rows in the rail with an orange
+// "Đối tác gửi" tag. Patients whose phone matches an accepted referral keep the
+// tag in a blue/cyan variant so staff see the source downstream. Rows are sorted
+// pending-first (freshest triage on top), then real patients by createdAt desc.
+function TodayRail({ patients, pendingReferrals, partnerPhones, filter, onFilterChange, selectedKey, onSelect }) {
   const list = useMemo(() => {
-    if (filter === 'today') return patients.filter(p => isToday(p.createdAt))
-    return patients
-  }, [patients, filter])
+    const patientRows = patients
+      .filter(p => filter !== 'today' || isToday(p.createdAt))
+      .map(p => ({
+        _kind: 'patient',
+        key: `P:${p._id}`,
+        id: p._id,
+        payload: p,
+        name: p.name,
+        phone: p.phone,
+        patientId: p.patientId,
+        ts: p.createdAt,
+        fromPartner: !!(p.phone && partnerPhones.get(p.phone)),
+        facilityName: p.phone ? partnerPhones.get(p.phone) : '',
+      }))
+    const referralRows = pendingReferrals.map(r => ({
+      _kind: 'referral',
+      key: `R:${r._id}`,
+      id: r._id,
+      payload: r,
+      name: r.patientName,
+      phone: r.patientPhone,
+      patientId: '',
+      ts: r.createdAt,
+      facilityName: r.facilityName,
+      fromPartner: true,
+      pending: true,
+    }))
+    // Pending referrals on top, then patients — both within their section sorted newest first
+    return [
+      ...referralRows.sort((a, b) => (b.ts || '').localeCompare(a.ts || '')),
+      ...patientRows.sort((a, b) => (b.ts || '').localeCompare(a.ts || '')),
+    ]
+  }, [patients, pendingReferrals, partnerPhones, filter])
+
+  const pendingCount = pendingReferrals.length
+  const patientCount = list.length - pendingCount
 
   return (
     <div className="w-80 flex-shrink-0 flex flex-col bg-white border-r border-gray-200">
@@ -324,28 +362,46 @@ function TodayRail({ patients, filter, onFilterChange, selectedId, onSelect }) {
             ))}
           </div>
         </div>
-        <div className="text-xs text-gray-400 font-mono">{list.length} bệnh nhân</div>
+        <div className="text-xs text-gray-400 font-mono">
+          {patientCount} bệnh nhân
+          {pendingCount > 0 && <span className="text-orange-600 ml-1">· {pendingCount} chuyển gửi chờ</span>}
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
         {list.length === 0 && (
           <div className="text-xs text-gray-400 text-center py-6">Chưa có bệnh nhân nào</div>
         )}
-        {list.map(p => (
-          <button key={p._id} onClick={() => onSelect(p)}
-            className={`w-full text-left px-2.5 py-2 rounded-lg border transition-colors
-              ${selectedId === p._id
-                ? 'bg-blue-50 border-blue-400 shadow-sm'
-                : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
-            <div className="flex justify-between items-baseline gap-2">
-              <div className="font-semibold text-sm text-gray-800 truncate">{p.name}</div>
-              <div className="text-xs text-gray-400 font-mono flex-shrink-0">{fmtTime(p.createdAt)}</div>
-            </div>
-            <div className="flex justify-between items-center gap-2 mt-0.5">
-              <div className="text-xs text-gray-500 truncate">{p.phone || '—'}</div>
-              <div className="text-xs text-gray-400 font-mono flex-shrink-0">{p.patientId}</div>
-            </div>
-          </button>
-        ))}
+        {list.map(row => {
+          const selected = selectedKey === row.key
+          const borderCls = row.pending
+            ? (selected ? 'bg-orange-50 border-orange-400 shadow-sm' : 'bg-orange-50/40 border-orange-200 hover:bg-orange-50')
+            : (selected ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-50')
+          return (
+            <button key={row.key} onClick={() => onSelect(row)}
+              className={`w-full text-left px-2.5 py-2 rounded-lg border transition-colors ${borderCls}`}>
+              <div className="flex justify-between items-baseline gap-2">
+                <div className="font-semibold text-sm text-gray-800 truncate">{row.name}</div>
+                <div className="text-xs text-gray-400 font-mono flex-shrink-0">{fmtTime(row.ts)}</div>
+              </div>
+              <div className="flex justify-between items-center gap-2 mt-0.5">
+                <div className="text-xs text-gray-500 truncate">{row.phone || '—'}</div>
+                <div className="text-xs text-gray-400 font-mono flex-shrink-0">{row.patientId}</div>
+              </div>
+              {row.fromPartner && (
+                <div className="mt-1">
+                  <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium
+                    ${row.pending
+                      ? 'bg-orange-100 text-orange-800 border border-orange-300'
+                      : 'bg-cyan-50 text-cyan-800 border border-cyan-200'}`}
+                    title={row.facilityName || 'Từ đối tác'}>
+                    📨 {row.pending ? 'Đối tác gửi' : 'Từ đối tác'}
+                    {row.facilityName && <span className="truncate max-w-[140px]"> · {row.facilityName}</span>}
+                  </span>
+                </div>
+              )}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -510,10 +566,41 @@ function FormView({ patient, prefill, onCancel, onSaved }) {
   const [err, setErr] = useState('')
   const [sources, setSources] = useState([])
   const [referralOptions, setReferralOptions] = useState({ doctor: [], facility: [], salesperson: [] })
+  const [linkedReferral, setLinkedReferral] = useState(null)
 
   useEffect(() => {
     api.get('/catalogs/customer-sources').then(r => setSources(r.data || [])).catch(() => setSources([]))
   }, [])
+
+  // Detect inbound partner referral: when the patient/phone on this form matches
+  // a pending or appointment_created PartnerReferral, show a banner offering to
+  // copy the facility into Nguồn KH + referral fields in one click.
+  useEffect(() => {
+    if (!form.phone) { setLinkedReferral(null); return }
+    let cancelled = false
+    api.get('/partner-admin/referrals').then(r => {
+      if (cancelled) return
+      const match = (r.data || [])
+        .filter(x => x.patientPhone === form.phone &&
+                     (x.status === 'pending' || x.status === 'appointment_created'))
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+      setLinkedReferral(match[0] || null)
+    }).catch(() => setLinkedReferral(null))
+    return () => { cancelled = true }
+  }, [form.phone, patient?._id])
+
+  const applyReferralToForm = (r) => {
+    setForm(f => ({
+      ...f,
+      sourceCode: 'GIOITHIEU',
+      sourceName: 'Được giới thiệu',
+      referralType: 'facility',
+      referralId: r.facilityId,
+      referralName: r.facilityName || '',
+      clinicalInfo: f.clinicalInfo || r.clinicalInfo || '',
+    }))
+    setErr('')
+  }
 
   const currentSource = sources.find(s => s.code === form.sourceCode) || null
   const showReferralPicker = !!currentSource?.requiresReferralPartner
@@ -596,6 +683,45 @@ function FormView({ patient, prefill, onCancel, onSaved }) {
       <p className="text-xs text-gray-500 mb-4">Chỉ 5 trường bắt buộc · mọi thứ khác có thể điền sau</p>
 
       {err && <div className="mb-3 px-3 py-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">{err}</div>}
+
+      {linkedReferral && (
+        <div className="mb-4 max-w-5xl bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+          <div className="text-xl">📨</div>
+          <div className="flex-1 text-sm">
+            <div className="font-semibold text-amber-900">
+              Chuyển gửi từ đối tác
+              <span className={`ml-2 text-xs px-2 py-0.5 rounded-full font-medium ${
+                linkedReferral.status === 'pending'
+                  ? 'bg-yellow-200 text-yellow-800'
+                  : 'bg-cyan-200 text-cyan-800'
+              }`}>
+                {linkedReferral.status === 'pending' ? 'Chờ xử lý' : 'Đã tạo lịch'}
+              </span>
+            </div>
+            <div className="mt-1 text-amber-900">
+              <b>{linkedReferral.facilityName || '—'}</b>
+              {linkedReferral.partnerDisplayName && <> — {linkedReferral.partnerDisplayName}</>}
+            </div>
+            <div className="mt-0.5 text-xs text-amber-800">
+              Yêu cầu: <b>{linkedReferral.requestedServiceName || linkedReferral.modality || '—'}</b>
+              {linkedReferral.site && <> · Chi nhánh: <b>{linkedReferral.site}</b></>}
+              {linkedReferral.clinicalInfo && <> · Lâm sàng: {linkedReferral.clinicalInfo}</>}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 flex-shrink-0">
+            {form.sourceCode !== 'GIOITHIEU' || form.referralId !== linkedReferral.facilityId ? (
+              <button type="button" onClick={() => applyReferralToForm(linkedReferral)}
+                className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap">
+                Áp dụng nguồn giới thiệu
+              </button>
+            ) : (
+              <span className="text-xs text-green-700 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg whitespace-nowrap">
+                ✓ Đã gán
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white border border-gray-200 rounded-xl p-5 max-w-5xl shadow-sm">
         {/* Essentials */}
@@ -996,9 +1122,19 @@ export default function Registration() {
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [formPrefill, setFormPrefill] = useState(null)
 
-  // Left rail
+  // Left rail — merges real patients + pending partner referrals
   const [todayList, setTodayList] = useState([])
+  const [pendingReferrals, setPendingReferrals] = useState([])
+  // phone → facilityName for already-accepted referrals (drives the "Từ đối tác" tag
+  // on existing patient rows so staff still see the source after registration).
+  const [partnerPhones, setPartnerPhones] = useState(new Map())
   const [railFilter, setRailFilter] = useState('today')
+
+  // Referral-drawer state (only active when user clicks a pending-referral row)
+  const [selectedReferral, setSelectedReferral] = useState(null)
+  const [acceptTarget, setAcceptTarget] = useState(null)
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [toast, setToast] = useState('')
 
   // Search
   const [query, setQuery] = useState('')
@@ -1011,8 +1147,20 @@ export default function Registration() {
   // Load today rail (covers both 'today' and 'all' filters — client slices)
   const loadRail = useCallback(async () => {
     try {
-      const r = await api.get('/registration/patients', { params: { limit: 60 } })
-      setTodayList(r.data || [])
+      const [patientsRes, referralsRes] = await Promise.all([
+        api.get('/registration/patients', { params: { limit: 60 } }),
+        api.get('/partner-admin/referrals').catch(() => ({ data: [] })),
+      ])
+      setTodayList(patientsRes.data || [])
+      const refs = referralsRes.data || []
+      setPendingReferrals(refs.filter(r => r.status === 'pending'))
+      const m = new Map()
+      for (const r of refs) {
+        if (r.status === 'appointment_created' || r.status === 'completed') {
+          if (r.patientPhone) m.set(r.patientPhone, r.facilityName || 'Đối tác')
+        }
+      }
+      setPartnerPhones(m)
     } catch {}
   }, [])
   useEffect(() => { loadRail() }, [loadRail])
@@ -1045,6 +1193,29 @@ export default function Registration() {
     setSelectedPatient(p)
     setFormPrefill(null)
     setView('services')
+  }
+
+  // Rail click handler — patient rows enter the normal flow; pending-referral rows
+  // open a dedicated drawer (Accept creates the Appointment and reloads the rail).
+  const onRailSelect = (row) => {
+    if (row._kind === 'referral') {
+      setSelectedReferral(row.payload)
+    } else {
+      pickPatient(row.payload)
+    }
+  }
+
+  const onAcceptDone = (result) => {
+    setAcceptTarget(null); setSelectedReferral(null)
+    setToast(`Đã tạo lịch hẹn — ${result.appointment.patientName} (${new Date(result.appointment.scheduledAt).toLocaleString('vi-VN')})`)
+    loadRail()
+    setTimeout(() => setToast(''), 5000)
+  }
+  const onRejectDone = () => {
+    setRejectTarget(null); setSelectedReferral(null)
+    setToast('Đã từ chối chuyển gửi')
+    loadRail()
+    setTimeout(() => setToast(''), 3000)
   }
 
   const createNew = (mode) => {
@@ -1108,10 +1279,12 @@ export default function Registration() {
       <div className="flex-1 flex min-h-0">
         <TodayRail
           patients={todayList}
+          pendingReferrals={pendingReferrals}
+          partnerPhones={partnerPhones}
           filter={railFilter}
           onFilterChange={setRailFilter}
-          selectedId={selectedPatient?._id}
-          onSelect={pickPatient}
+          selectedKey={selectedReferral ? `R:${selectedReferral._id}` : (selectedPatient ? `P:${selectedPatient._id}` : null)}
+          onSelect={onRailSelect}
         />
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           {view === 'search' && (
@@ -1143,6 +1316,26 @@ export default function Registration() {
           )}
         </div>
       </div>
+
+      {selectedReferral && (
+        <ReferralDetailDrawer
+          referral={selectedReferral}
+          onClose={() => setSelectedReferral(null)}
+          onAccept={setAcceptTarget}
+          onReject={setRejectTarget}
+        />
+      )}
+      {acceptTarget && (
+        <AcceptDialog referral={acceptTarget} onClose={() => setAcceptTarget(null)} onDone={onAcceptDone} />
+      )}
+      {rejectTarget && (
+        <RejectDialog referral={rejectTarget} onClose={() => setRejectTarget(null)} onDone={onRejectDone} />
+      )}
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-gray-900 text-white text-sm px-4 py-2 rounded-lg shadow-lg z-[70]">
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
