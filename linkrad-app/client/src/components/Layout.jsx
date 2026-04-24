@@ -68,6 +68,14 @@ const NAV = [
           { path: '/marketing', label: 'Marketing',    icon: '📣' }
         ]
       },
+      {
+        group: 'Cổng công khai',
+        items: [
+          { path: '/booking',        label: 'Đặt lịch khám',  icon: '📅', external: true },
+          { path: '/patient-login',  label: 'Cổng bệnh nhân', icon: '🧑',  external: true },
+          { path: '/partner-login',  label: 'Cổng đối tác',   icon: '🤝', external: true },
+        ]
+      },
     ]
   },
   {
@@ -338,24 +346,42 @@ export default function Layout({ children }) {
     if (item.workflowOnly && !isWorkflowUser) return false
     return true
   })
-  const renderLink = (item, depth) => (
-    <NavLink
-      key={item.path}
-      to={item.path}
-      end={item.path === '/'}
-      className={({ isActive }) =>
-        `flex items-center pr-4 py-2 text-sm transition-colors duration-150 ${
-          isActive
-            ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300'
-            : 'text-blue-200 hover:bg-blue-800 hover:text-white'
-        }`
-      }
-      style={{ paddingLeft: `${16 + depth * 14}px` }}
-    >
-      <span className="mr-2 text-xs">{item.icon}</span>
-      {item.label}
-    </NavLink>
-  )
+  const renderLink = (item, depth) => {
+    if (item.external) {
+      return (
+        <a
+          key={item.path}
+          href={item.path}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center pr-4 py-2 text-sm transition-colors duration-150 text-blue-200 hover:bg-blue-800 hover:text-white"
+          style={{ paddingLeft: `${16 + depth * 14}px` }}
+        >
+          <span className="mr-2 text-xs">{item.icon}</span>
+          <span className="flex-1">{item.label}</span>
+          <span className="text-[10px] opacity-60 ml-2">↗</span>
+        </a>
+      )
+    }
+    return (
+      <NavLink
+        key={item.path}
+        to={item.path}
+        end={item.path === '/'}
+        className={({ isActive }) =>
+          `flex items-center pr-4 py-2 text-sm transition-colors duration-150 ${
+            isActive
+              ? 'bg-blue-700 text-white font-medium border-r-2 border-blue-300'
+              : 'text-blue-200 hover:bg-blue-800 hover:text-white'
+          }`
+        }
+        style={{ paddingLeft: `${16 + depth * 14}px` }}
+      >
+        <span className="mr-2 text-xs">{item.icon}</span>
+        {item.label}
+      </NavLink>
+    )
+  }
   const renderNode = (section, depth, parentKey) => {
     if (section.perm && !hasPerm(section.perm)) return null
     if (section.financialsOnly && !isFinancialsUser) return null

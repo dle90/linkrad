@@ -3,9 +3,14 @@ import axios from 'axios'
 
 const api = axios.create({ baseURL: '/api' })
 
+const DEMO_ACCOUNTS = [
+  { username: 'partner_ndh', password: 'partner123', name: 'BV Nhi Đồng Hải Phòng' },
+  { username: 'partner_tm',  password: 'partner123', name: 'PK Tâm Minh' },
+]
+
 export default function PartnerLogin() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
+  const [username, setUsername] = useState(DEMO_ACCOUNTS[0].username)
+  const [password, setPassword] = useState(DEMO_ACCOUNTS[0].password)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -73,6 +78,26 @@ export default function PartnerLogin() {
 
         <div className="mt-6 text-xs text-gray-400 text-center">
           Dành cho đối tác bệnh viện / phòng khám
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1.5">Tài khoản demo</div>
+          <div className="flex flex-wrap gap-1">
+            {DEMO_ACCOUNTS.map(a => {
+              const selected = a.username === username
+              return (
+                <button
+                  key={a.username}
+                  type="button"
+                  onClick={() => { setUsername(a.username); setPassword(a.password); setError('') }}
+                  className={`text-[10px] px-2 py-1 rounded border transition-colors ${selected ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50 text-gray-600'}`}
+                  title={`${a.username} • ${a.password}`}
+                >
+                  {a.name}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
     </div>
