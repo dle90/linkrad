@@ -39,7 +39,13 @@
       "Bash(curl -s \"https://api.github.com/repos/dle90/linkrad\")",
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(f\\\\\"private={d.get\\('private','?'\\)} visibility={d.get\\('visibility','?'\\)}\\\\\"\\)\")",
       "Bash(git rm *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s -I \"https://linkrad-production-2fde.up.railway.app/wado/studies/123.147691040530748.1864223362884946/series/1.2.840.113619.1.120260504092508048001930/instances/1.2.840.113619.1.120260504092817817001950/frames/1\" -H \"Accept: image/jpeg\")",
+      "Bash(curl -s -I \"https://linkrad-ohif-production.up.railway.app/wado/studies/123.147691040530748.1864223362884946/series/1.2.840.113619.1.120260504092508048001930/instances/1.2.840.113619.1.120260504092817817001950/frames/1\" -H \"Accept: image/jpeg\")",
+      "Bash(curl -s -I \"https://linkrad-ohif-production.up.railway.app/wado/studies/123.147691040530748.1864223362884946/series/1.2.840.113619.1.120260504092508048001930/instances/1.2.840.113619.1.120260504092817817001950/frames/1\" -H \"Accept: multipart/related; type=application/octet-stream\")",
+      "Bash(curl -s -D - -o /dev/null \"https://linkrad-ohif-production.up.railway.app/wado/studies/123.147691040530748.1864223362884946/series/1.2.840.113619.1.120260504092508048001930/instances/1.2.840.113619.1.120260504092817817001950/frames/1\" -H \"Accept: multipart/related; type=application/octet-stream\")",
+      "Bash(curl -s -D - -o /dev/null \"https://linkrad-production-2fde.up.railway.app/wado/studies/123.147691040530748.1864223362884946/series/1.2.840.113619.1.120260504092508048001930/instances/1.2.840.113619.1.120260504092817817001950/frames/1\" -H \"Accept: multipart/related; type=application/octet-stream\")",
+      "Bash(curl -s -D - -o /dev/null \"https://linkrad-production-2fde.up.railway.app/wado/studies/123.147691040530748.1864223362884946/series/1.2.840.113619.1.120260504092508048001930/instances/1.2.840.113619.1.120260504092817817001950/frames/1\" -H \"Origin: https://linkrad-ohif-production.up.railway.app\" -H \"Accept: multipart/related; type=application/octet-stream\")"
     ]
   }
 }
