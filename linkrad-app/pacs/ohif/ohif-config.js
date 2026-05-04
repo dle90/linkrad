@@ -83,20 +83,27 @@ window.config = {
     { commandName: 'setWindowLevel', commandOptions: { window: '320', level: '160' }, label: 'W/L Preset 4 (320/160)', keys: ['5'], context: 'CORNERSTONE', isEditable: true },
     { commandName: 'setWindowLevel', commandOptions: { window: '640', level: '320' }, label: 'W/L Preset 5 (640/320)', keys: ['6'], context: 'CORNERSTONE', isEditable: true },
 
-    // Measurement tool hotkeys matching legacy viewer
-    { commandName: 'setToolActive', commandOptions: { toolName: 'Angle' },              label: 'Angle',                keys: ['a'], isEditable: true },
-    { commandName: 'setToolActive', commandOptions: { toolName: 'CobbAngle' },          label: 'Cobb Angle',           keys: ['shift+c'], isEditable: true },
-    { commandName: 'setToolActive', commandOptions: { toolName: 'CircleROI' },          label: 'Circle ROI',           keys: ['o'], isEditable: true },
-    { commandName: 'setToolActive', commandOptions: { toolName: 'EllipticalROI' },      label: 'Ellipse ROI',          keys: ['e'], isEditable: true },
-    { commandName: 'setToolActive', commandOptions: { toolName: 'RectangleROI' },       label: 'Rectangle ROI',        keys: ['shift+r'], isEditable: true },
-    { commandName: 'setToolActive', commandOptions: { toolName: 'PlanarFreehandROI' },  label: 'Polygon ROI',          keys: ['p'], isEditable: true },
-    { commandName: 'setToolActive', commandOptions: { toolName: 'SplineROI' },          label: 'Spline ROI',           keys: ['shift+s'], isEditable: true },
-    { commandName: 'setToolActive', commandOptions: { toolName: 'LivewireContour' },    label: 'Livewire',             keys: ['shift+w'], isEditable: true },
-    { commandName: 'setToolActive', commandOptions: { toolName: 'Length' },             label: 'Length',               keys: ['shift+l'], isEditable: true },
-    { commandName: 'setToolActive', commandOptions: { toolName: 'Bidirectional' },      label: 'Bidirectional',        keys: ['b'], isEditable: true },
-    { commandName: 'setToolActive', commandOptions: { toolName: 'ArrowAnnotate' },      label: 'Label / Annotation',   keys: ['t'], isEditable: true },
-    { commandName: 'setToolActive', commandOptions: { toolName: 'Probe' },              label: 'Probe',                keys: ['shift+x'], isEditable: true },
+    // Display-mode tools (legacy lowercase convention — RadiAnt-style)
+    { commandName: 'setToolActive', commandOptions: { toolName: 'WindowLevel' },        label: 'W/L Drag',             keys: ['w'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'Pan' },                label: 'Pan',                  keys: ['p'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'Zoom' },               label: 'Zoom',                 keys: ['z'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'StackScroll' },        label: 'Scroll Image',         keys: ['s'], isEditable: true },
     { commandName: 'setToolActive', commandOptions: { toolName: 'Magnify' },            label: 'Magnify',              keys: ['m'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'Crosshairs' },         label: '3D Cursor',            keys: ['q'], isEditable: true },
+
+    // Measurement tools (legacy lowercase, conflicts moved to Shift+)
+    { commandName: 'setToolActive', commandOptions: { toolName: 'Length' },             label: 'Length',               keys: ['l'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'Angle' },              label: 'Angle',                keys: ['a'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'Bidirectional' },      label: 'Bidirectional',        keys: ['b'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'EllipticalROI' },      label: 'Ellipse ROI',          keys: ['e'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'RectangleROI' },       label: 'Rectangle ROI',        keys: ['r'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'CircleROI' },          label: 'Circle ROI',           keys: ['o'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'ArrowAnnotate' },      label: 'Label / Annotation',   keys: ['t'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'CobbAngle' },          label: 'Cobb Angle',           keys: ['shift+c'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'PlanarFreehandROI' },  label: 'Polygon ROI',          keys: ['shift+g'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'SplineROI' },          label: 'Spline ROI',           keys: ['shift+i'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'LivewireContour' },    label: 'Livewire',             keys: ['shift+w'], isEditable: true },
+    { commandName: 'setToolActive', commandOptions: { toolName: 'Probe' },              label: 'Probe (Pixel value)',  keys: ['shift+x'], isEditable: true },
     { commandName: 'setToolActive', commandOptions: { toolName: 'CalibrationLine' },    label: 'Calibration',          keys: ['shift+k'], isEditable: true },
     { commandName: 'setToolActive', commandOptions: { toolName: 'UltrasoundDirectional' }, label: 'US Directional',     keys: ['shift+u'], isEditable: true },
 
@@ -115,8 +122,8 @@ window.config = {
     { commandName: 'alignImages', commandOptions: { mode: 'lockLeft' },  label: 'Align & Lock Left', keys: ['ctrl+shift+left'],  context: 'CORNERSTONE', isEditable: true },
     { commandName: 'alignImages', commandOptions: { mode: 'lockRight' }, label: 'Align & Lock Right', keys: ['ctrl+shift+right'], context: 'CORNERSTONE', isEditable: true },
 
-    // Series synchronization (granular toggles)
-    { commandName: 'toggleSynchronizer', commandOptions: { type: 'imageSlice' }, label: 'Sync Scroll Position', keys: ['s'], isEditable: true },
+    // Series synchronization (moved from 's' to 'shift+s' so 's' can drive Stack Scroll per legacy)
+    { commandName: 'toggleSynchronizer', commandOptions: { type: 'imageSlice' }, label: 'Sync Scroll Position', keys: ['shift+s'], isEditable: true },
 
     // Cine playback
     { commandName: 'toggleCine', label: 'Toggle Cine', keys: ['shift+p'] },

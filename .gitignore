@@ -5,3 +5,9 @@ dist/
 .mcp.json
 .vscode/
 .playwright-mcp/
+
+# Test artifacts (Playwright debug screenshots + DICOM samples)
+test dicoms/
+ohif-*.png
+inspect-ohif.js
+package-lock.json
