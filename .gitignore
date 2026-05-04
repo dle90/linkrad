@@ -2,9 +2,13 @@ node_modules/
 dist/
 .env
 *.local
+*.local.json
 .mcp.json
 .vscode/
 .playwright-mcp/
+
+# Local Claude permission allowlist (may contain ad-hoc curl commands with secrets)
+.claude/settings.local.json
 
 # Test artifacts (Playwright debug screenshots + DICOM samples)
 test dicoms/

@@ -27,7 +27,19 @@
       "Bash(powershell -Command \"Start-Process node -ArgumentList ''index.js'' -WorkingDirectory ''c:\\\\Users\\\\ducml\\\\Desktop\\\\Claude test 2\\\\linkrad-app\\\\server'' -NoNewWindow\")",
       "Bash(npm install xlsx --save)",
       "Bash(node -e \"const XLSX = require\\(''xlsx''\\); const wb = XLSX.readFile\\(''c:/Users/ducml/Desktop/Claude test 2/LinkRad-Planning_2026_070326.xlsx''\\); console.log\\(''Sheets:'', JSON.stringify\\(wb.SheetNames\\)\\); const ws = wb.Sheets[wb.SheetNames[0]]; const rows = XLSX.utils.sheet_to_json\\(ws, {header:1}\\); console.log\\(''First 25 rows of sheet 0:'', JSON.stringify\\(rows.slice\\(0,25\\)\\)\\)\")",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(curl -s \"https://linkrad-production-2fde.up.railway.app/wado/studies?includefield=PatientName,NumberOfStudyRelatedInstances\" -H \"Accept: application/dicom+json\")",
+      "Bash(python -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -o /dev/null -w \"linkrad-toolbar.js: %{http_code}\\\\n\" https://linkrad-ohif-production.up.railway.app/linkrad-toolbar.js)",
+      "Bash(curl -s -I https://linkrad-ohif-production.up.railway.app/)",
+      "Bash(curl -s https://linkrad-ohif-production.up.railway.app/)",
+      "Bash(railway up *)",
+      "Bash(python -c \"import json,sys; n=json.load\\(sys.stdin\\)['data']['deployment']; print\\(f'OHIF: {n[\\\\\"status\\\\\"]} @ {n[\\\\\"updatedAt\\\\\"]}'\\)\")",
+      "Bash(curl -s \"https://api.github.com/repos/dle90/linkrad\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(f\\\\\"private={d.get\\('private','?'\\)} visibility={d.get\\('visibility','?'\\)}\\\\\"\\)\")",
+      "Bash(git rm *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
