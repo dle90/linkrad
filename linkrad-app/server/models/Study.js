@@ -7,7 +7,7 @@ const studySchema = new mongoose.Schema({
   patientId: String,
   dob: String,
   gender: { type: String, enum: ['M', 'F'] },
-  modality: { type: String, enum: ['CT', 'MRI', 'XR', 'US'] },
+  modality: { type: String, enum: ['CT', 'MRI', 'XR', 'US', 'MG'] },
   bodyPart: String,
   clinicalInfo: String,
   site: String,

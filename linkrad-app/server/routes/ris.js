@@ -292,11 +292,15 @@ router.post('/studies', requireAuth, async (req, res) => {
       site,
       scheduledDate,
       priority,
+      studyUID: providedStudyUID,
     } = req.body
 
     const now = new Date().toISOString()
 
-    const uid = genStudyUID()
+    // Accept caller-provided StudyInstanceUID so records can be linked to existing
+    // DICOM studies in Orthanc (e.g. when retroactively registering imported studies).
+    // Falls back to a freshly generated UID when none is provided.
+    const uid = providedStudyUID || genStudyUID()
     const study = new Study({
       _id: uid,
       studyUID: uid,
