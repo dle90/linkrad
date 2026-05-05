@@ -410,6 +410,85 @@
       .catch(function () { body.textContent = 'Lỗi khi tải ca chụp.'; });
   }
 
+  // ----- QIDO study-list response sanitizer -----
+  // OHIF's getModalities() crashes on `Cannot read properties of undefined
+  // (reading 'length')` when a QIDO /studies response includes an entry whose
+  // `00080061 ModalitiesInStudy` element is present but has no `.Value` field
+  // (e.g. orphan studies built from Secondary Capture only). The crash kills
+  // the StudyBrowser thumbnail render for the whole study panel.
+  // Wrap window.fetch and inject `Value: []` on offending responses.
+  (function patchFetchForQIDO() {
+    if (window._linkradFetchPatched) return;
+    window._linkradFetchPatched = true;
+    var orig = window.fetch.bind(window);
+    window.fetch = function (url, init) {
+      var u = typeof url === 'string' ? url : (url && url.url);
+      var isStudyList = typeof u === 'string' && /\/studies(\?|$)/.test(u) && !/\/series|\/instances/.test(u);
+      if (!isStudyList) return orig(url, init);
+      return orig(url, init).then(function (resp) {
+        if (!resp.ok) return resp;
+        var ctype = resp.headers.get('content-type') || '';
+        if (!/json/.test(ctype)) return resp;
+        return resp.clone().json().then(function (data) {
+          if (!Array.isArray(data)) return resp;
+          var dirty = false;
+          data.forEach(function (s) {
+            if (s && s['00080061'] && !('Value' in s['00080061'])) {
+              s['00080061'].Value = [];
+              dirty = true;
+            }
+          });
+          if (!dirty) return resp;
+          // Rebuild a Response with the cleaned body
+          var headers = new Headers(resp.headers);
+          return new Response(JSON.stringify(data), { status: resp.status, statusText: resp.statusText, headers: headers });
+        }).catch(function () { return resp; });
+      });
+    };
+    console.log('[LinkRad] QIDO fetch sanitizer installed');
+  })();
+
+  // ----- Display-set sanitizer -----
+  // Some series carry no Modality / SeriesDescription (notably Secondary Capture
+  // SOPClassUID 1.2.840.10008.5.1.4.1.1.7 — scout shots, dose reports). The
+  // OHIF v3.8 StudyBrowser crashes on these with "Cannot read properties of
+  // undefined (reading 'length')", which leaves the left-panel thumbnail dock
+  // empty for the whole study. Patch each display set to guarantee Modality is
+  // a string so the thumbnail render path survives.
+  var SC_SOPCLASS = '1.2.840.10008.5.1.4.1.1.7';
+  function sanitizeDisplaySet(ds) {
+    if (!ds) return;
+    if (!ds.Modality || typeof ds.Modality !== 'string') {
+      var sop = (ds.images && ds.images[0] && ds.images[0].SOPClassUID) || ds.SOPClassUID || '';
+      ds.Modality = (sop === SC_SOPCLASS) ? 'OT' : 'OT';
+    }
+    if (typeof ds.SeriesDescription !== 'string') {
+      ds.SeriesDescription = ds.SeriesDescription || '';
+    }
+  }
+  function patchDisplaySetService() {
+    var dss = window.services && window.services.displaySetService;
+    if (!dss || dss._linkradPatched) return false;
+    try {
+      var orig = dss.getActiveDisplaySets && dss.getActiveDisplaySets.bind(dss);
+      if (orig) {
+        dss.getActiveDisplaySets = function () {
+          var list = orig() || [];
+          for (var i = 0; i < list.length; i++) sanitizeDisplaySet(list[i]);
+          return list;
+        };
+      }
+      // Also sanitize whatever's already in the service
+      if (orig) (orig() || []).forEach(sanitizeDisplaySet);
+      dss._linkradPatched = true;
+      console.log('[LinkRad] displaySetService sanitizer installed');
+      return true;
+    } catch (e) {
+      console.warn('[LinkRad] displaySet patch failed', e);
+      return false;
+    }
+  }
+
   // ----- Boot loop: poll until OHIF runtime is ready -----
   var bootAttempts = 0;
   var bootTimer = setInterval(function () {
@@ -421,11 +500,15 @@
       registerCustomCommands();
       buildTimelinePanel();
       refreshTimeline();
+      patchDisplaySetService();
       // Continue trying to attach tools to newly created toolGroups for ~30s
       if (bootAttempts > 150) clearInterval(bootTimer);
     } else if (bootAttempts > 200) {
       clearInterval(bootTimer);
     }
+    // Re-attempt sanitizer install for ~10s — it depends on services being up,
+    // which can land slightly after commandsManager.
+    if (bootAttempts < 50) patchDisplaySetService();
   }, 200);
 
   // Refresh timeline whenever URL changes (study switch)

@@ -36,16 +36,7 @@
     { type: 'btn', id: 'probe',      svg: 'probe',    tip: 'Probe · Đo điểm pixel',     tool: 'Probe' },
     { type: 'btn', id: 'crosshairs', svg: 'cross',    tip: '3D Cursor · Tham chiếu (Q)', tool: 'Crosshairs' },
     { type: 'btn', id: 'wlpresets',  svg: 'sliders',  tip: 'W/L Presets ▾',
-      dropdown: [
-        { label: 'Preset 1 — Não (80/40)',         cmd: 'setWindowLevel', cmdOpts: { window: '80',  level: '40'  } },
-        { label: 'Preset 2 — Trung thất (160/80)', cmd: 'setWindowLevel', cmdOpts: { window: '160', level: '80'  } },
-        { label: 'Preset 3 — Mô mềm (256/128)',    cmd: 'setWindowLevel', cmdOpts: { window: '256', level: '128' } },
-        { label: 'Preset 4 — Bụng (320/160)',      cmd: 'setWindowLevel', cmdOpts: { window: '320', level: '160' } },
-        { label: 'Preset 5 — Xương (640/320)',     cmd: 'setWindowLevel', cmdOpts: { window: '640', level: '320' } },
-        { divider: true },
-        { label: 'Pseudo Color (cycle)',           cmd: 'cyclePseudoColor' },
-      ]
-    },
+      dynamicDropdown: 'wl' },
     { type: 'btn', id: 'reset',      svg: 'reset',    tip: 'Reset · Đặt lại',           cmd: 'resetViewport' },
 
     { type: 'divider' },
@@ -348,6 +339,25 @@
     '  border-radius: 3px; font-size: 9px; font-weight: 700;',
     '  letter-spacing: 0.5px; margin-left: 6px;',
     '}',
+
+    // ---- Volume loading overlay (MPR / 3D feedback) ----
+    '.lr-volume-loading {',
+    '  position: absolute; inset: 0; z-index: 50;',
+    '  display: flex; flex-direction: column; align-items: center; justify-content: center;',
+    '  background: rgba(15, 23, 42, 0.85); color: #e2e8f0;',
+    '  font-family: system-ui, -apple-system, sans-serif;',
+    '  pointer-events: none;',
+    '}',
+    '.lr-volume-spinner {',
+    '  width: 32px; height: 32px; border-radius: 50%;',
+    '  border: 3px solid rgba(90, 204, 230, 0.2);',
+    '  border-top-color: #5acce6;',
+    '  animation: lr-spin 0.8s linear infinite;',
+    '  margin-bottom: 12px;',
+    '}',
+    '.lr-volume-msg { font-size: 13px; font-weight: 600; color: #5acce6; }',
+    '.lr-volume-sub { font-size: 11px; color: #94a3b8; margin-top: 4px; }',
+    '@keyframes lr-spin { to { transform: rotate(360deg); } }',
   ].join('\n');
 
   function injectCSS() {
@@ -364,6 +374,152 @@
   // Modality of currently active study; updated by detectModality()
   var currentModality = null;
   var currentMode = '2d';
+
+  // ============================================================
+  // Modality-aware W/L presets
+  // ============================================================
+  // CT presets are radiology-standard Hounsfield windows. MR/XR/MG use
+  // generic settings since W/L for those is largely encoded in the DICOM
+  // VOI LUT and varies per sequence — the "Mặc định" pill below restores
+  // exactly what's in the source DICOM.
+  var WL_PRESETS_BY_MODALITY = {
+    CT: [
+      { label: 'Phổi',       w: 1500, l: -600 },
+      { label: 'Trung thất', w: 400,  l: 40 },
+      { label: 'Bụng',       w: 400,  l: 50 },
+      { label: 'Xương',      w: 1800, l: 400 },
+      { label: 'Não',        w: 80,   l: 40 },
+      { label: 'CTA',        w: 700,  l: 200 },
+    ],
+    MR: [
+      { label: 'Sáng',       w: 1000, l: 500 },
+      { label: 'Tối',        w: 300,  l: 100 },
+    ],
+    XR: [
+      { label: 'Mềm',        w: 4000, l: 2000 },
+      { label: 'Xương',      w: 2000, l: 800 },
+    ],
+    MG: [
+      { label: 'Mềm',        w: 4000, l: 2000 },
+      { label: 'Tương phản',  w: 1500, l: 1500 },
+    ],
+  };
+  // Aliases — DICOM Modality codes the imaging community uses interchangeably.
+  WL_PRESETS_BY_MODALITY.CR = WL_PRESETS_BY_MODALITY.XR;
+  WL_PRESETS_BY_MODALITY.DX = WL_PRESETS_BY_MODALITY.XR;
+  WL_PRESETS_BY_MODALITY.MRI = WL_PRESETS_BY_MODALITY.MR;
+
+  function getPresetsFor(modality) {
+    return WL_PRESETS_BY_MODALITY[modality] || WL_PRESETS_BY_MODALITY.CT;
+  }
+
+  // Reset the active viewport's colormap to grayscale. Pseudo-color LUTs
+  // applied by cyclePseudoColor persist across W/L preset changes otherwise,
+  // which makes presets after Pseudo Color look "stuck" in color.
+  function clearColormap() {
+    try {
+      var grid = window.services && window.services.viewportGridService && window.services.viewportGridService.getState();
+      var activeId = grid && grid.activeViewportId;
+      if (!activeId) return;
+      var vp = grid.viewports && (grid.viewports.get ? grid.viewports.get(activeId) : grid.viewports[activeId]);
+      var dsUID = vp && vp.displaySetInstanceUIDs && vp.displaySetInstanceUIDs[0];
+      if (!dsUID) return;
+      window.commandsManager.run({
+        commandName: 'setViewportColormap',
+        commandOptions: {
+          viewportId: activeId,
+          displaySetInstanceUID: dsUID,
+          colormap: { name: 'Grayscale' },
+          immediate: true,
+        },
+        context: 'CORNERSTONE',
+      });
+    } catch (e) { /* silent — colormap clearing is best-effort */ }
+  }
+
+  // Apply a W/L preset, first clearing any pseudo-color LUT
+  function applyWLPreset(arg) {
+    clearColormap();
+    if (!arg) return;
+    window.commandsManager.run({
+      commandName: 'setWindowLevel',
+      commandOptions: { window: String(arg.w), level: String(arg.l) },
+      context: 'CORNERSTONE',
+    });
+  }
+
+  // "Mặc định" — restore the WindowCenter / WindowWidth values encoded in
+  // the active display set's DICOM tags (the radiologist's source-of-truth W/L).
+  function restoreDefaultWL() {
+    clearColormap();
+    try {
+      var dss = window.services && window.services.displaySetService;
+      var grid = window.services && window.services.viewportGridService && window.services.viewportGridService.getState();
+      if (!dss || !grid || !grid.activeViewportId) {
+        console.warn('[LinkRad] restoreDefaultWL: no active viewport');
+        return;
+      }
+      var vp = grid.viewports.get ? grid.viewports.get(grid.activeViewportId) : grid.viewports[grid.activeViewportId];
+      var dsUID = vp && vp.displaySetInstanceUIDs && vp.displaySetInstanceUIDs[0];
+      if (!dsUID) return;
+      var ds = dss.getDisplaySetByUID ? dss.getDisplaySetByUID(dsUID) : null;
+      if (!ds) {
+        var all = dss.getActiveDisplaySets() || [];
+        ds = all.find(function (d) { return d.displaySetInstanceUID === dsUID; });
+      }
+      if (!ds) return;
+      var img = ds.images && ds.images[0];
+      var w = img && (img.WindowWidth || (img.metaData && img.metaData.WindowWidth));
+      var l = img && (img.WindowCenter || (img.metaData && img.metaData.WindowCenter));
+      if (Array.isArray(w)) w = w[0];
+      if (Array.isArray(l)) l = l[0];
+      if (w == null || l == null) {
+        // Fall back to OHIF's resetViewport which re-applies VOI LUT
+        window.commandsManager.run({ commandName: 'resetViewport', context: 'CORNERSTONE' });
+        return;
+      }
+      window.commandsManager.run({
+        commandName: 'setWindowLevel',
+        commandOptions: { window: String(w), level: String(l) },
+        context: 'CORNERSTONE',
+      });
+      console.log('[LinkRad] W/L → DICOM default:', w, '/', l);
+    } catch (e) {
+      console.warn('[LinkRad] restoreDefaultWL failed', e);
+    }
+  }
+  // Expose for sidebar pill / toolbar dropdown
+  window._linkradRestoreDefaultWL = restoreDefaultWL;
+
+  function buildWLPresetDropdown() {
+    var items = [{ label: 'Mặc định (DICOM gốc)', fn: 'restoreDefaultWL' }, { divider: true }];
+    var presets = getPresetsFor(currentModality);
+    presets.forEach(function (p) {
+      items.push({
+        label: p.label + ' (' + p.w + ' / ' + p.l + ')',
+        fn: 'applyWLPreset',
+        arg: { w: p.w, l: p.l },
+      });
+    });
+    items.push({ divider: true });
+    items.push({ label: 'Pseudo Color (cycle)', cmd: 'cyclePseudoColor' });
+    return items;
+  }
+
+  function buildWLPresetPills() {
+    var pills = [{ label: 'Mặc định', tip: 'Khôi phục W/L gốc của ảnh DICOM', fn: 'restoreDefaultWL' }];
+    var presets = getPresetsFor(currentModality);
+    presets.forEach(function (p) {
+      pills.push({
+        label: p.label,
+        tip: p.w + ' / ' + p.l,
+        fn: 'applyWLPreset',
+        arg: { w: p.w, l: p.l },
+      });
+    });
+    pills.push({ label: 'Pseudo', tip: 'Pseudo color cycle', cmd: 'cyclePseudoColor' });
+    return pills;
+  }
 
   // Modes available per modality. CT/MR get all three; CR/DX/US get 2D only;
   // MG hides tabs entirely (header label switches to "Mammo Viewer").
@@ -396,17 +552,24 @@
     return wrap;
   }
 
+  // Resolve a dynamicDropdown id → array of menu items at render/click time
+  function resolveDynamicDropdown(id) {
+    if (id === 'wl') return buildWLPresetDropdown();
+    return [];
+  }
+
   function buildButton(item) {
     var b = document.createElement('button');
     b.className = 'lr-btn';
     b.id = 'lr-btn-' + item.id;
     b.dataset.tip = item.tip;
-    if (item.dropdown) b.dataset.hasDropdown = '1';
+    if (item.dropdown || item.dynamicDropdown) b.dataset.hasDropdown = '1';
     if (item.style) b.style.cssText = item.style;
     b.innerHTML = svgIcon(item.svg);
     b.onclick = function (ev) {
       ev.stopPropagation();
       if (item.dropdown) openDropdown(b, item.dropdown);
+      else if (item.dynamicDropdown) openDropdown(b, resolveDynamicDropdown(item.dynamicDropdown));
       else runItem(item);
     };
     return b;
@@ -625,6 +788,46 @@
     'MINIMUM':   'MINIMUM_INTENSITY_BLEND',
     'VOLUME':    'COMPOSITE',  // VR uses composite on a volumeViewport
   };
+
+  // ============================================================
+  // Volume loading overlay (MPR / 3D feedback)
+  // ============================================================
+  // First-load volume conversion (streaming + texture upload) takes 5-15s
+  // for chest CT studies. Without feedback the user thinks MPR/3D is broken
+  // because viewports stay black. Show "Đang dựng khối ảnh…" overlays per
+  // viewport pane; remove when cornerstone fires IMAGE_VOLUME_LOADING_COMPLETED.
+  function showVolumeLoadingOverlay() {
+    var panes = document.querySelectorAll('[data-cy="viewport-pane"]');
+    panes.forEach(function (p) {
+      if (p.querySelector('.lr-volume-loading')) return;
+      var ov = document.createElement('div');
+      ov.className = 'lr-volume-loading';
+      ov.innerHTML = '<div class="lr-volume-spinner"></div>'
+        + '<div class="lr-volume-msg">Đang dựng khối ảnh…</div>'
+        + '<div class="lr-volume-sub">CT/MR khối lớn lần đầu mất 5–15 giây</div>';
+      p.appendChild(ov);
+    });
+  }
+  function hideVolumeLoadingOverlay() {
+    document.querySelectorAll('.lr-volume-loading').forEach(function (n) { n.remove(); });
+  }
+  // Subscribe once to cornerstone volume-load events
+  var _volEventsHooked = false;
+  function hookVolumeLoadEvents() {
+    if (_volEventsHooked) return;
+    var cs = window.cornerstone;
+    var et = cs && cs.eventTarget;
+    var Events = cs && cs.Enums && cs.Enums.Events;
+    if (!et || !Events) return;
+    // IMAGE_VOLUME_LOADING_COMPLETED fires once when all images for a volume are ready
+    var done = function () { hideVolumeLoadingOverlay(); };
+    if (Events.IMAGE_VOLUME_LOADING_COMPLETED) et.addEventListener(Events.IMAGE_VOLUME_LOADING_COMPLETED, done);
+    if (Events.VOLUME_LOADED) et.addEventListener(Events.VOLUME_LOADED, done);
+    // Belt-and-suspenders: hide on first rendered viewport image
+    if (Events.IMAGE_RENDERED) et.addEventListener(Events.IMAGE_RENDERED, done);
+    _volEventsHooked = true;
+    console.log('[LinkRad] volume-load overlay events hooked');
+  }
 
   function eachVolumeViewport(fn) {
     try {
@@ -1042,6 +1245,11 @@
     resetTissue: resetTissue,
     setMammoHanging: function (arg) { setMammoHanging(arg); },
     setMagnifyLevel: function (level) { setMagnifyLevel(level); },
+    restoreDefaultWL: restoreDefaultWL,
+    applyWLPreset: function (arg) { applyWLPreset(arg); },
+    clearColormap: clearColormap,
+    showVolumeLoadingOverlay: showVolumeLoadingOverlay,
+    hideVolumeLoadingOverlay: hideVolumeLoadingOverlay,
   };
 
   // ============================================================
@@ -1068,15 +1276,8 @@
       {
         title: 'W/L Presets',
         type: 'pills',
-        items: [
-          { label: 'P1', tip: '80/40 — Não',         cmd: 'setWindowLevel', cmdOpts: { window: '80',  level: '40'  } },
-          { label: 'P2', tip: '160/80 — Trung thất', cmd: 'setWindowLevel', cmdOpts: { window: '160', level: '80'  } },
-          { label: 'P3', tip: '256/128 — Mô mềm',    cmd: 'setWindowLevel', cmdOpts: { window: '256', level: '128' } },
-          { label: 'P4', tip: '320/160 — Bụng',      cmd: 'setWindowLevel', cmdOpts: { window: '320', level: '160' } },
-          { label: 'P5', tip: '640/320 — Xương',     cmd: 'setWindowLevel', cmdOpts: { window: '640', level: '320' } },
-          { label: 'PC', tip: 'Pseudo color cycle',  cmd: 'cyclePseudoColor' },
-        ],
-        hint: 'Phím tắt: 2–6',
+        dynamicItems: 'wl',
+        hint: 'Mặc định = giữ W/L gốc của DICOM',
       },
       {
         title: 'Bố cục — Chuỗi',
@@ -1113,6 +1314,7 @@
         title: 'Bố cục — MPR',
         type: 'layout',
         items: [
+          { protocol: 'mpr', glyph: 'mpr3', tip: 'Mặc định: 3 viewport (axial / sagittal / coronal)' },
           { rows: 1, cols: 1, tip: '1 viewport' },
           { rows: 1, cols: 3, tip: 'MPR 3-up (axial / sagittal / coronal)' },
           { rows: 2, cols: 2, tip: '2 × 2 (MPR + axial double)' },
@@ -1176,6 +1378,7 @@
         title: 'Bố cục — 3D',
         type: 'layout',
         items: [
+          { protocol: 'main3D', glyph: '1+3', tip: 'Mặc định: 1 viewport 3D lớn + 3 MPR phía dưới' },
           { rows: 1, cols: 1, tip: '3D fullscreen' },
           { rows: 1, cols: 2, tip: '3D + MPR (2-vert)' },
           { rows: 2, cols: 2, tip: '2 × 2 (3D + MPR triplet)' },
@@ -1405,27 +1608,60 @@
     return w;
   }
 
+  // Custom glyph for the 1-big-top + 3-small-bottom main3D layout
+  function layoutGlyphCustom(kind) {
+    if (kind === '1+3') {
+      // 1 wide rect on top, 3 small rects below
+      return '<svg viewBox="0 0 28 28" width="22" height="22">'
+        + '<rect x="2"  y="2"  width="24" height="14" fill="currentColor" opacity="0.6"/>'
+        + '<rect x="2"  y="18" width="7"  height="8"  fill="currentColor" opacity="0.6"/>'
+        + '<rect x="11" y="18" width="7"  height="8"  fill="currentColor" opacity="0.6"/>'
+        + '<rect x="20" y="18" width="6"  height="8"  fill="currentColor" opacity="0.6"/>'
+        + '</svg>';
+    }
+    if (kind === 'mpr3') {
+      // 3 vertical rects (axial / sagittal / coronal)
+      return '<svg viewBox="0 0 28 28" width="22" height="22">'
+        + '<rect x="2"  y="2" width="7" height="24" fill="currentColor" opacity="0.6"/>'
+        + '<rect x="11" y="2" width="7" height="24" fill="currentColor" opacity="0.6"/>'
+        + '<rect x="20" y="2" width="6" height="24" fill="currentColor" opacity="0.6"/>'
+        + '</svg>';
+    }
+    return layoutGlyph(1, 1);
+  }
+
   function buildLayoutRow(items) {
     var row = document.createElement('div');
     row.className = 'lr-layout-row';
     items.forEach(function (it) {
       var b = document.createElement('button');
       b.className = 'lr-layout-btn';
-      b.title = it.tip || (it.rows + 'x' + it.cols);
-      b.innerHTML = layoutGlyph(it.rows, it.cols);
+      var defaultTip = it.protocol ? it.protocol : (it.rows + 'x' + it.cols);
+      b.title = it.tip || defaultTip;
+      b.innerHTML = it.glyph ? layoutGlyphCustom(it.glyph) : layoutGlyph(it.rows, it.cols);
       b.onclick = function () {
         markActiveSibling(b);
         try {
-          window.commandsManager.run({
-            commandName: 'setViewportGridLayout',
-            commandOptions: { numRows: it.rows, numCols: it.cols },
-            context: 'DEFAULT',
-          });
-        } catch (e) { console.warn('[LinkRad sidebar] setViewportGridLayout failed', e); }
+          if (it.protocol) {
+            // Re-apply a hanging protocol (used for "default" layouts that
+            // aren't a uniform rows×cols grid, e.g. main3D = 1 big top + 3 MPR).
+            window.commandsManager.run({
+              commandName: 'setHangingProtocol',
+              commandOptions: { protocolId: it.protocol },
+              context: 'DEFAULT',
+            });
+          } else {
+            window.commandsManager.run({
+              commandName: 'setViewportGridLayout',
+              commandOptions: { numRows: it.rows, numCols: it.cols },
+              context: 'DEFAULT',
+            });
+          }
+        } catch (e) { console.warn('[LinkRad sidebar] layout switch failed', e); }
       };
       row.appendChild(b);
     });
-    // Default-active: 1x1
+    // Default-active: first button
     var first = row.querySelector('.lr-layout-btn');
     if (first) first.classList.add('active');
     return row;
@@ -1481,6 +1717,11 @@
     } catch (e) { console.warn('[LinkRad sidebar] cmd failed', name, e); }
   }
 
+  function resolveDynamicPills(id) {
+    if (id === 'wl') return buildWLPresetPills();
+    return [];
+  }
+
   function buildSection(sec) {
     var wrap = document.createElement('div');
     wrap.className = 'lr-sec';
@@ -1489,7 +1730,8 @@
     t.textContent = sec.title;
     wrap.appendChild(t);
     var body;
-    if (sec.type === 'pills')        body = buildPills(sec.items, sec.cols);
+    var pillItems = sec.dynamicItems ? resolveDynamicPills(sec.dynamicItems) : sec.items;
+    if (sec.type === 'pills')        body = buildPills(pillItems, sec.cols);
     else if (sec.type === 'layout')  body = buildLayoutRow(sec.items);
     else if (sec.type === 'checks')  body = buildChecks(sec.items);
     else if (sec.type === 'cine')    body = buildCine();
@@ -1552,6 +1794,30 @@
       }
     } catch (e) {}
 
+    // Volume-mode safety check: large CT/MR series can crash the browser tab
+    // during volume creation (300+ MB GPU texture upload). Warn first.
+    if (mode === 'mpr' || mode === '3d') {
+      try {
+        var dss = window.services && window.services.displaySetService && window.services.displaySetService.getActiveDisplaySets();
+        var primary = (dss || []).find(function (d) { return d.numImageFrames > 50 || (d.images && d.images.length > 50); });
+        var sliceCount = primary && (primary.numImageFrames || (primary.images && primary.images.length)) || 0;
+        if (sliceCount > 300) {
+          // Estimate volume RAM: slices × 512 × 512 × 2 bytes ≈ MB
+          var est = Math.round((sliceCount * 512 * 512 * 2) / (1024 * 1024));
+          var ok = window.confirm(
+            'Chuỗi này có ' + sliceCount + ' lát cắt (~' + est + ' MB GPU memory).\n' +
+            'Dựng MPR/3D có thể làm trình duyệt crash trên máy có VRAM thấp.\n\n' +
+            'Tiếp tục?'
+          );
+          if (!ok) {
+            console.log('[LinkRad] User cancelled MPR/3D for large volume (' + sliceCount + ' slices)');
+            return;
+          }
+          console.log('[LinkRad] Building volume for', sliceCount, 'slices ≈', est, 'MB');
+        }
+      } catch (e) {}
+    }
+
     currentMode = mode;
     renderToolbar();
     renderSidebar();
@@ -1569,6 +1835,31 @@
       }
     } else {
       console.log('[LinkRad toolbar] mode →', mode, '(no protocol mapping)');
+    }
+
+    // Volume modes: show "Đang dựng khối ảnh…" feedback while cornerstone
+    // streams + uploads the volume texture. Cleared by IMAGE_RENDERED.
+    if (mode === 'mpr' || mode === '3d') {
+      hookVolumeLoadEvents();
+      // Wait one frame so the new viewport panes exist in the DOM
+      setTimeout(showVolumeLoadingOverlay, 100);
+      // Hard cap at 30s in case the events don't fire (e.g. all-stack case)
+      setTimeout(hideVolumeLoadingOverlay, 30000);
+      // Diagnostic: 5s after click, log viewport types so we can tell whether
+      // the React components actually mounted as volume viewports.
+      setTimeout(function () {
+        try {
+          var re = window.cornerstone.getRenderingEngines()[0];
+          var vps = re ? re.getViewports().map(function (v) { return v.id + ':' + v.type; }) : [];
+          var grid = window.services.viewportGridService.getState();
+          var slots = grid.viewports ? Array.from(grid.viewports.values()).map(function (v) {
+            return (v.viewportId || 'no-id') + '=' + (v.viewportOptions && v.viewportOptions.viewportType) + '/ds=' + ((v.displaySetInstanceUIDs || []).length);
+          }) : [];
+          console.log('[LinkRad] post-' + mode + ' viewports:', vps.join(', '), '| slots:', slots.join(', '));
+        } catch (e) {}
+      }, 5000);
+    } else {
+      hideVolumeLoadingOverlay();
     }
 
     // Note iter 11: manually pushing display sets here doesn't actually trigger

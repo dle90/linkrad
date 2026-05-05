@@ -42,7 +42,7 @@ export default function InlineViewer({ studyUID, onUndock, hidden = false, expan
         src={src}
         className="flex-1 w-full border-0 bg-gray-900"
         title="DICOM Viewer"
-        allow="fullscreen; clipboard-read; clipboard-write"
+        allow="fullscreen; clipboard-read; clipboard-write; cross-origin-isolated"
       />
 
       {/* Viewer action buttons — top-right corner */}

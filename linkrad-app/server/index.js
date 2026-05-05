@@ -40,6 +40,17 @@ const PORT = process.env.PORT || 3001
 app.use(cors())
 app.use(express.json({ limit: '20mb' }))
 
+// COOP/COEP headers — required so the OHIF viewer iframe embedded in the
+// reading workspace (cross-origin) can use SharedArrayBuffer. Without this,
+// cornerstone3D's streaming volume loader silently fails and MPR/3D viewports
+// fall back to stack rendering (look identical to 2D). Mirrors the headers
+// already set by the OHIF nginx config and the local Vite dev server.
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp')
+  next()
+})
+
 // Audit middleware: capture writes after body is parsed, before route handlers
 app.use('/api', auditMiddleware)
 

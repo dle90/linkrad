@@ -6,6 +6,14 @@ window.config = {
   modes: [],
   showStudyList: true,
   maxNumberOfWebWorkers: 3,
+  // Throttle parallel image fetches. Defaults are interaction=100 / thumbnail=75 /
+  // prefetch=10 — fine for small studies but on 500+ slice volumetric CT the
+  // simultaneous decode + volume buffer + GPU texture upload can OOM the tab.
+  maxNumRequests: {
+    interaction: 25,
+    thumbnail: 25,
+    prefetch: 5,
+  },
   showWarningMessageForCrossOrigin: false,
   showCPUFallbackMessage: true,
   showLoadingIndicator: true,
