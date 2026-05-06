@@ -387,6 +387,9 @@
     '  color: #475569; cursor: not-allowed; pointer-events: none;',
     '}',
 
+    // (Mammo gap-removal CSS removed — resizing the wrappers triggered
+    // cornerstone canvas refit which wiped our setDisplayArea anchoring.)
+
     // ---- Anatomical orientation cube (A P L R H F) on volume3d viewports ----
     '.lr-orient-cube {',
     '  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);',
@@ -1340,13 +1343,13 @@
   // Series-to-viewport matching (which series goes where) is TODO — needs
   // DICOM tag (ViewPosition / ImageLaterality / TOMO detection) inspection.
   var MAMMO_HANGING = {
-    cc:        { rows: 1, cols: 1, label: 'CC' },
-    mlo:       { rows: 1, cols: 1, label: 'MLO' },
+    cc:        { rows: 1, cols: 2, label: 'CC bilateral (RCC | LCC)' },
+    mlo:       { rows: 1, cols: 2, label: 'MLO bilateral (RMLO | LMLO)' },
     ccmlo4:    { rows: 1, cols: 4, label: 'RCC | LCC | RMLO | LMLO' },
     rccmlo:    { rows: 1, cols: 2, label: 'R CC + MLO' },
     lccmlo:    { rows: 1, cols: 2, label: 'L CC + MLO' },
-    tomocc:    { rows: 1, cols: 1, label: 'TOMO CC',     tomo: true },
-    tomomlo:   { rows: 1, cols: 1, label: 'TOMO MLO',    tomo: true },
+    tomocc:    { rows: 1, cols: 2, label: 'TOMO CC bilateral',  tomo: true },
+    tomomlo:   { rows: 1, cols: 2, label: 'TOMO MLO bilateral', tomo: true },
     tomo4up:   { rows: 1, cols: 4, label: 'TOMO 4-up',   tomo: true },
     tomor:     { rows: 1, cols: 2, label: 'TOMO R',      tomo: true },
     tomol:     { rows: 1, cols: 2, label: 'TOMO L',      tomo: true },
@@ -1561,10 +1564,12 @@
     // Build batch update — one entry per viewport slot we have data for
     var updates = [];
     var empty = [];
+    var slotByVp = {};
     slots.forEach(function (slot, i) {
       var dsUID = map[slot];
       if (dsUID && vpIds[i]) {
         updates.push({ viewportId: vpIds[i], displaySetInstanceUIDs: [dsUID] });
+        slotByVp[vpIds[i]] = slot;
       } else {
         empty.push(slot);
       }
@@ -1579,6 +1584,179 @@
       console.warn('[LinkRad] no setDisplaySetsForViewports available');
     }
     setTimeout(renderMammoOverlays, 400);
+    // Apply mammographer display conventions once viewports remount with the
+    // new display sets. We pass the SLOTS array (not viewport IDs) because
+    // setDisplaySetsForViewports can regenerate viewport IDs — the new IDs
+    // need to be looked up post-mount via positional order in the grid.
+    setTimeout(function () { applyMammoDisplayConventions(slots); }, 700);
+  }
+
+  // Mammo bilateral sync: chest-wall-anchored zoom. We can't use cornerstone's
+  // built-in Zoom tool here — its mousemove handler tracks an initial camera
+  // captured at mousedown and applies cumulative deltas to it, overriding any
+  // mid-drag camera adjustments we make in CAMERA_MODIFIED listeners. So we
+  // install our own pointer-based drag-zoom that:
+  //   1. Computes a new parallelScale from vertical drag delta
+  //   2. Sets focalPoint so the chest wall stays at the canvas inner edge
+  //   3. Applies to all mammo viewports in lockstep
+  // _mammoAnchors[viewportId] = { chestWorldX, isRight, canvasAspect }
+  var _mammoAnchors = {};
+  var _mammoSyncBindings = [];
+  var _mammoSyncIds = [];
+  var _mammoSyncing = false;
+  function captureMammoAnchor(vp, isRight) {
+    if (!vp || !vp.getCamera || !vp.canvas) return null;
+    var cam = vp.getCamera();
+    if (!cam || !cam.focalPoint || cam.parallelScale == null) return null;
+    var aspect = vp.canvas.width / vp.canvas.height;
+    // Half world-width visible = parallelScale * aspect (parallelScale is half-height).
+    // For RCC (chest at canvas right): chestWorldX = focalX + halfWidth.
+    // For LCC (chest at canvas left):  chestWorldX = focalX - halfWidth.
+    var halfWidth = cam.parallelScale * aspect;
+    var chestWorldX = isRight ? (cam.focalPoint[0] + halfWidth) : (cam.focalPoint[0] - halfWidth);
+    return { chestWorldX: chestWorldX, isRight: isRight, aspect: aspect };
+  }
+  function reanchorMammoCamera(vp, anchor, parallelScale) {
+    if (!vp || !anchor || !vp.getCamera || !vp.setCamera) return;
+    var cam = vp.getCamera();
+    if (!cam) return;
+    var halfWidth = parallelScale * anchor.aspect;
+    var newFocalX = anchor.isRight ? (anchor.chestWorldX - halfWidth) : (anchor.chestWorldX + halfWidth);
+    var dx = newFocalX - cam.focalPoint[0];
+    if (Math.abs(dx) < 1e-6 && Math.abs((cam.parallelScale || 0) - parallelScale) < 1e-6) return;
+    vp.setCamera({
+      focalPoint: [newFocalX, cam.focalPoint[1], cam.focalPoint[2]],
+      position: [cam.position[0] + dx, cam.position[1], cam.position[2]],
+      parallelScale: parallelScale,
+    });
+    if (vp.render) vp.render();
+  }
+  function setupMammoZoomSync(vpIds, slotsInOrder) {
+    var cs = window.cornerstone;
+    var re = cs && cs.getRenderingEngines && cs.getRenderingEngines()[0];
+    if (!re) return;
+    // Tear down any previous bindings (mode switch, study switch, etc.)
+    _mammoSyncBindings.forEach(function (b) {
+      try { b.element.removeEventListener('pointerdown', b.onDown, true); } catch (e) {}
+      try { window.removeEventListener('pointermove', b.onMove, true); } catch (e) {}
+      try { window.removeEventListener('pointerup', b.onUp, true); } catch (e) {}
+    });
+    _mammoSyncBindings = [];
+    _mammoSyncIds = vpIds.slice();
+    // Anchor data is just laterality flag — setDisplayArea handles the rest.
+    _mammoAnchors = {};
+    vpIds.forEach(function (id, i) {
+      var slot = slotsInOrder[i];
+      _mammoAnchors[id] = { isRight: slot && slot.charAt(0) === 'R' };
+    });
+
+    // Disable cornerstone tools that would steal pointer events from our
+    // custom drag-zoom: Zoom (we replace it), Crosshairs (cyan reference
+    // line, fires on click), Pan (would fight on right-click).
+    try {
+      var ToolGroupManager = window.cornerstoneTools && window.cornerstoneTools.ToolGroupManager;
+      if (ToolGroupManager) {
+        var tg = ToolGroupManager.getToolGroup('default');
+        if (tg && tg.setToolPassive) {
+          ['Zoom', 'Crosshairs', 'Pan'].forEach(function (n) {
+            try { tg.setToolPassive(n); } catch (e) {}
+          });
+        }
+      }
+    } catch (e) { /* fall through */ }
+
+    // Custom pointer-based drag-zoom + drag-pan
+    vpIds.forEach(function (id) {
+      var vp = re.getViewport(id);
+      if (!vp || !vp.element) return;
+      var dragState = null;
+      var onDown = function (ev) {
+        if (ev.button !== 0 && ev.button !== 2) return;
+        var cam = vp.getCamera && vp.getCamera();
+        if (!cam) return;
+        dragState = {
+          startY: ev.clientY,
+          startX: ev.clientX,
+          startParallelScale: cam.parallelScale,
+          mode: ev.button === 2 ? 'pan' : 'zoom',
+        };
+        console.log('[LinkRad mammo] drag START on', id.slice(0, 8), 'startPS:', cam.parallelScale.toFixed(2));
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation && ev.stopImmediatePropagation();
+      };
+      var onMove = function (ev) {
+        if (!dragState) return;
+        if (dragState.mode === 'zoom') {
+          var dy = ev.clientY - dragState.startY;
+          // Drag down → smaller parallelScale → zoom in.
+          var factor = Math.exp(dy * 0.005);
+          // Sync only zoom (parallelScale) across viewports. Each viewport
+          // pans independently and zooms around its own center. With DICOM
+          // laterality-aware orientation, the chest walls naturally stay
+          // close to the inner divider through zoom.
+          _mammoSyncIds.forEach(function (peerId) {
+            var peerVp = re.getViewport(peerId);
+            if (!peerVp || !peerVp.getCamera || !peerVp.setCamera) return;
+            var c = peerVp.getCamera();
+            var newPS = Math.max(1, Math.min(5000, dragState.startParallelScale * factor));
+            peerVp.setCamera({ parallelScale: newPS });
+            if (peerVp.render) peerVp.render();
+          });
+        }
+      };
+      var onUp = function () { dragState = null; };
+      vp.element.addEventListener('pointerdown', onDown, true);
+      window.addEventListener('pointermove', onMove, true);
+      window.addEventListener('pointerup', onUp, true);
+      // Also disable browser's context menu so right-click drag works for pan
+      vp.element.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+      _mammoSyncBindings.push({ element: vp.element, onDown: onDown, onMove: onMove, onUp: onUp });
+    });
+  }
+
+  // Mammo bilateral display:
+  // 1. Anchor each viewport's chest-wall side to the inner divider via
+  //    setDisplayArea({imagePoint, canvasPoint}). DICOM stores RCC with chest
+  //    wall on image RIGHT (PatientOrientation [P,L]) and LCC on image LEFT
+  //    ([A,R]); we map those points to the inner edge of each canvas. As the
+  //    user zooms or pans, the anchor stays glued — chest walls stay touching
+  //    at the divider.
+  // 2. Bind viewports to a shared zoompan sync so the contralateral tracks.
+  //    With chest walls anchored, sync only needs to copy parallelScale; pan
+  //    naturally falls back to mirrored anchoring per-viewport.
+  function applyMammoDisplayConventions(slotsInOrder) {
+    try {
+      var re = window.cornerstone && window.cornerstone.getRenderingEngines && window.cornerstone.getRenderingEngines()[0];
+      if (!re) return;
+      var renderingEngineId = re.id;
+      var sgs = window.services && window.services.syncGroupService;
+      var SYNC_ID = 'lr-mammo-zoompan';
+      var gs = window.services && window.services.viewportGridService;
+      var grid = gs && gs.getState();
+      var currentVpIds = grid ? viewportsAsArray(grid).map(function (e) { return e.id; }) : [];
+      var synced = 0;
+      // No setDisplayArea: cornerstone's natural fit-to-canvas already places
+      // chest walls at the canvas inner edges thanks to DICOM laterality-
+      // aware PatientOrientation. Trying to override via setDisplayArea ended
+      // up fighting cornerstone's image-load reset.
+      // Custom sync that re-anchors chest walls on every CAMERA_MODIFIED.
+      // Wait one tick so setDisplayArea has settled before capturing anchors.
+      setTimeout(function () {
+        setupMammoZoomSync(
+          currentVpIds.filter(function (id) { return !!id; }),
+          slotsInOrder
+        );
+      }, 50);
+      synced = currentVpIds.length;
+      // Note: previously we resized the viewport wrappers to remove OHIF's
+      // ~10px breathing room between panes ("the snap"), but that resize
+      // forced cornerstone to refit each canvas, wiping our setDisplayArea
+      // anchoring and leaving chest walls drifted. Better to live with the
+      // natural OHIF gap; the chest walls stay near the divider on their own.
+      document.body.classList.add('lr-mammo-mode');
+      console.log('[LinkRad] Mammo zoompan sync —', synced, 'viewport(s)');
+    } catch (e) { console.warn('[LinkRad] applyMammoDisplayConventions failed', e); }
   }
 
   var LR_FUNCS = {
@@ -2296,6 +2474,8 @@
         renderToolbar();
         renderSidebar();  // Fix iter 8: also re-render sidebar so MG → mammo works
         renderMammoOverlays();  // Iter 9: refresh compression overlays when modality changes
+        // Toggle mammo body class so the gap-removing CSS only applies in MG mode
+        document.body.classList.toggle('lr-mammo-mode', m === 'MG');
         console.log('[LinkRad toolbar] modality →', m);
       }
     }, 1000);
