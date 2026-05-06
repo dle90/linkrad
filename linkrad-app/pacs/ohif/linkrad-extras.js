@@ -489,12 +489,43 @@
     }
   }
 
+  // ----- GPU compatibility: Norm16 texture path for Intel UHD/Iris -----
+  // Cornerstone3D defaults to Float32 R32F volume textures. On Intel UHD GPUs
+  // running Chrome ANGLE/D3D11, the resulting vtk.js shader fails to compile
+  // (vtkPolyDataVS error → null shader program → black viewports). Switching
+  // to Norm16 (R16) textures uses a simpler shader path that compiles cleanly
+  // on those drivers — and is faster + uses 50% less VRAM as a bonus. The GPU
+  // probe must already report `EXT_texture_norm16: true` (true on all WebGL2
+  // hardware shipped since 2018, including the affected Intel UHDs).
+  var _norm16Patched = false;
+  function patchCornerstoneConfig() {
+    if (_norm16Patched) return true;
+    var cs = window.cornerstone;
+    if (!cs || !cs.getConfiguration || !cs.setConfiguration) return false;
+    try {
+      var cfg = cs.getConfiguration() || {};
+      cfg.rendering = cfg.rendering || {};
+      cfg.rendering.useNorm16Texture = true;
+      cfg.rendering.preferSizeOverAccuracy = true;
+      cs.setConfiguration(cfg);
+      _norm16Patched = true;
+      console.log('[LinkRad] cornerstone3D: Norm16 textures enabled (Intel UHD compat + 50% VRAM)');
+      return true;
+    } catch (e) {
+      console.warn('[LinkRad] could not enable Norm16 textures', e);
+      return false;
+    }
+  }
+
   // ----- Boot loop: poll until OHIF runtime is ready -----
   var bootAttempts = 0;
   var bootTimer = setInterval(function () {
     bootAttempts++;
     var hasTools = window.cornerstoneTools && window.cornerstoneTools.addTool;
     var hasCmds  = window.commandsManager && window.commandsManager.registerCommand;
+    // Norm16 patch is independent of tools/commands — apply ASAP, before any
+    // viewport mounts.
+    patchCornerstoneConfig();
     if (hasTools && hasCmds) {
       registerCustomTools();
       registerCustomCommands();

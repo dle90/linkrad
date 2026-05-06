@@ -358,6 +358,51 @@
     '.lr-volume-msg { font-size: 13px; font-weight: 600; color: #5acce6; }',
     '.lr-volume-sub { font-size: 11px; color: #94a3b8; margin-top: 4px; }',
     '@keyframes lr-spin { to { transform: rotate(360deg); } }',
+
+    // ---- Per-viewport plane picker (MPR Axial / Sagittal / Coronal / 3D) ----
+    '.lr-vp-plane-picker {',
+    '  position: absolute; top: 6px; right: 8px; z-index: 12;',
+    '  font-family: system-ui, sans-serif; font-size: 11px; font-weight: 600;',
+    '  color: #5acce6; cursor: pointer; padding: 1px 6px;',
+    '  background: rgba(15, 23, 42, 0.55); border-radius: 3px;',
+    '  text-decoration: underline; user-select: none;',
+    '}',
+    '.lr-vp-plane-picker:hover { background: rgba(15, 23, 42, 0.85); }',
+    '.lr-vp-plane-menu {',
+    '  position: absolute; top: 28px; right: 8px; z-index: 13;',
+    '  background: rgba(15, 23, 42, 0.97); border: 1px solid #475569;',
+    '  border-radius: 4px; min-width: 130px; padding: 4px 0;',
+    '  box-shadow: 0 4px 12px rgba(0,0,0,0.5);',
+    '  font-family: system-ui, sans-serif; font-size: 12px;',
+    '}',
+    '.lr-vp-plane-menu .lr-mi {',
+    '  padding: 6px 10px 6px 22px; cursor: pointer; color: #e2e8f0;',
+    '  position: relative;',
+    '}',
+    '.lr-vp-plane-menu .lr-mi:hover { background: #1e293b; color: #5acce6; }',
+    '.lr-vp-plane-menu .lr-mi.active::before {',
+    '  content: "✓"; position: absolute; left: 8px; color: #5acce6;',
+    '}',
+    '.lr-vp-plane-menu .lr-mi.disabled {',
+    '  color: #475569; cursor: not-allowed; pointer-events: none;',
+    '}',
+
+    // ---- Anatomical orientation cube (A P L R H F) on volume3d viewports ----
+    '.lr-orient-cube {',
+    '  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);',
+    '  z-index: 12; display: flex; gap: 2px;',
+    '  font-family: system-ui, sans-serif; user-select: none;',
+    '}',
+    '.lr-orient-cube .lr-oc-btn {',
+    '  width: 26px; height: 26px; line-height: 26px; text-align: center;',
+    '  font-size: 12px; font-weight: 700; cursor: pointer;',
+    '  background: rgba(15, 23, 42, 0.7); color: #cbd5e1;',
+    '  border: 1px solid rgba(100, 116, 139, 0.4);',
+    '}',
+    '.lr-orient-cube .lr-oc-btn:hover {',
+    '  background: rgba(56, 189, 248, 0.25); color: #5acce6;',
+    '  border-color: #5acce6;',
+    '}',
   ].join('\n');
 
   function injectCSS() {
@@ -792,10 +837,12 @@
   // ============================================================
   // Volume loading overlay (MPR / 3D feedback)
   // ============================================================
-  // First-load volume conversion (streaming + texture upload) takes 5-15s
-  // for chest CT studies. Without feedback the user thinks MPR/3D is broken
-  // because viewports stay black. Show "Đang dựng khối ảnh…" overlays per
-  // viewport pane; remove when cornerstone fires IMAGE_VOLUME_LOADING_COMPLETED.
+  // Streaming a 500+ slice CT through wado-rs takes 60-120s. Without progress
+  // feedback the partially-loaded volume produces white bands at top/bottom of
+  // sagittal/coronal MPR (unloaded slices = HU 0 = upper-clip in lung W/L) and
+  // users think the viewer is broken. Show live "N/T lát" progress polled from
+  // the volume's scalar buffer; clear once loadStatus.loaded flips true.
+  var _volPollTimer = null;
   function showVolumeLoadingOverlay() {
     var panes = document.querySelectorAll('[data-cy="viewport-pane"]');
     panes.forEach(function (p) {
@@ -803,30 +850,246 @@
       var ov = document.createElement('div');
       ov.className = 'lr-volume-loading';
       ov.innerHTML = '<div class="lr-volume-spinner"></div>'
-        + '<div class="lr-volume-msg">Đang dựng khối ảnh…</div>'
-        + '<div class="lr-volume-sub">CT/MR khối lớn lần đầu mất 5–15 giây</div>';
+        + '<div class="lr-volume-msg">Đang tải khối ảnh…</div>'
+        + '<div class="lr-volume-sub" data-lr-progress>0/?</div>';
       p.appendChild(ov);
     });
+    // Poll volume load progress every 500ms
+    if (_volPollTimer) clearInterval(_volPollTimer);
+    _volPollTimer = setInterval(updateVolumeLoadProgress, 500);
+    // Run once immediately so the first frame has correct numbers
+    updateVolumeLoadProgress();
   }
   function hideVolumeLoadingOverlay() {
+    if (_volPollTimer) { clearInterval(_volPollTimer); _volPollTimer = null; }
     document.querySelectorAll('.lr-volume-loading').forEach(function (n) { n.remove(); });
   }
-  // Subscribe once to cornerstone volume-load events
-  var _volEventsHooked = false;
-  function hookVolumeLoadEvents() {
-    if (_volEventsHooked) return;
-    var cs = window.cornerstone;
-    var et = cs && cs.eventTarget;
-    var Events = cs && cs.Enums && cs.Enums.Events;
-    if (!et || !Events) return;
-    // IMAGE_VOLUME_LOADING_COMPLETED fires once when all images for a volume are ready
-    var done = function () { hideVolumeLoadingOverlay(); };
-    if (Events.IMAGE_VOLUME_LOADING_COMPLETED) et.addEventListener(Events.IMAGE_VOLUME_LOADING_COMPLETED, done);
-    if (Events.VOLUME_LOADED) et.addEventListener(Events.VOLUME_LOADED, done);
-    // Belt-and-suspenders: hide on first rendered viewport image
-    if (Events.IMAGE_RENDERED) et.addEventListener(Events.IMAGE_RENDERED, done);
-    _volEventsHooked = true;
-    console.log('[LinkRad] volume-load overlay events hooked');
+  function updateVolumeLoadProgress() {
+    try {
+      var vols = window.cornerstone && window.cornerstone.cache && window.cornerstone.cache.getVolumes && window.cornerstone.cache.getVolumes();
+      if (!vols || !vols.length) return;
+      // Pick the volume with the most slices (the active study volume)
+      var v = vols.reduce(function (a, b) { return (b.dimensions && b.dimensions[2] || 0) > (a.dimensions && a.dimensions[2] || 0) ? b : a; });
+      if (!v.scalarData || !v.dimensions) return;
+      var total = v.dimensions[2];
+      var sliceSize = v.dimensions[0] * v.dimensions[1];
+      var sd = v.scalarData;
+      var loaded = 0;
+      // Count slices whose center voxel is non-zero. Empty buffer = 0 everywhere;
+      // even air voxels in real data are -1024, never 0 by coincidence.
+      for (var s = 0; s < total; s++) {
+        if (sd[s * sliceSize + (sliceSize >> 1)] !== 0) loaded++;
+      }
+      var pct = total ? Math.floor(loaded * 100 / total) : 0;
+      document.querySelectorAll('.lr-volume-loading [data-lr-progress]').forEach(function (n) {
+        n.textContent = loaded + '/' + total + ' lát (' + pct + '%)';
+      });
+      if (v.loadStatus && v.loadStatus.loaded) hideVolumeLoadingOverlay();
+    } catch (e) { /* swallow — overlay just stays static this tick */ }
+  }
+  // Kept for back-compat with switchMode call sites; no-op now (polling replaces events).
+  function hookVolumeLoadEvents() {}
+
+  // ============================================================
+  // Per-viewport plane picker (legacy "MPR Axial / Sagittal / Coronal / 3D" dropdown)
+  // ============================================================
+  // Each viewport gets a small clickable label in the top-right corner that
+  // opens a dropdown to switch the plane. Orthographic viewports support live
+  // orientation switching via cornerstone's setOrientation(). The volume3d
+  // viewport's MPR options are shown but disabled (volume3d↔orthographic swap
+  // requires viewport recreation — Phase 2).
+  function getVpOrientation(vp) {
+    if (vp.type === 'volume3d') return '3d';
+    try {
+      var cam = vp.getCamera && vp.getCamera();
+      if (!cam || !cam.viewPlaneNormal) return null;
+      var n = cam.viewPlaneNormal;
+      var ax = Math.abs(n[0]), ay = Math.abs(n[1]), az = Math.abs(n[2]);
+      if (az >= ax && az >= ay) return 'axial';
+      if (ax >= ay && ax >= az) return 'sagittal';
+      return 'coronal';
+    } catch (e) { return null; }
+  }
+  function getVpLabel(vp) {
+    var o = getVpOrientation(vp);
+    if (o === '3d') return '3D';
+    if (o === 'axial') return 'MPR Axial';
+    if (o === 'sagittal') return 'MPR Sagittal';
+    if (o === 'coronal') return 'MPR Coronal';
+    return 'MPR';
+  }
+  function setVpPlane(vp, plane) {
+    if (vp.type === 'volume3d') return; // can't convert to orthographic in-place
+    var Enums = window.cornerstone && window.cornerstone.Enums;
+    var OrientationAxis = Enums && Enums.OrientationAxis;
+    if (!vp.setOrientation || !OrientationAxis) return;
+    try {
+      var key = plane.toUpperCase();
+      vp.setOrientation(OrientationAxis[key] || key);
+      vp.render();
+    } catch (e) { console.warn('[LinkRad] setOrientation failed', plane, e); }
+  }
+  function buildPlaneMenu(picker, vp) {
+    // Close any existing menu
+    document.querySelectorAll('.lr-vp-plane-menu').forEach(function (m) { m.remove(); });
+    var menu = document.createElement('div');
+    menu.className = 'lr-vp-plane-menu';
+    var current = getVpOrientation(vp);
+    var is3D = vp.type === 'volume3d';
+    var items = [
+      { id: '3d', label: '3D', disabled: !is3D },
+      { id: 'axial', label: 'MPR Axial', disabled: is3D },
+      { id: 'sagittal', label: 'MPR Sagittal', disabled: is3D },
+      { id: 'coronal', label: 'MPR Coronal', disabled: is3D },
+    ];
+    items.forEach(function (it) {
+      var d = document.createElement('div');
+      d.className = 'lr-mi' + (current === it.id ? ' active' : '') + (it.disabled ? ' disabled' : '');
+      d.textContent = it.label;
+      d.onclick = function (ev) {
+        ev.stopPropagation();
+        if (it.disabled) return;
+        setVpPlane(vp, it.id);
+        menu.remove();
+        // Refresh label
+        picker.textContent = getVpLabel(vp);
+      };
+      menu.appendChild(d);
+    });
+    picker.parentElement.appendChild(menu);
+    // Close on next click anywhere
+    setTimeout(function () {
+      var off = function () { menu.remove(); document.removeEventListener('click', off); };
+      document.addEventListener('click', off);
+    }, 0);
+  }
+  function injectPlanePickers() {
+    var re = window.cornerstone && window.cornerstone.getRenderingEngines && window.cornerstone.getRenderingEngines()[0];
+    if (!re) return;
+    var vps = re.getViewports();
+    document.querySelectorAll('[data-cy="viewport-pane"]').forEach(function (pane) {
+      var vpEl = pane.querySelector('[data-viewport-uid]');
+      if (!vpEl) return;
+      var uid = vpEl.getAttribute('data-viewport-uid');
+      var vp = vps.find(function (v) { return v.id === uid; });
+      if (!vp) return;
+      var existing = pane.querySelector('.lr-vp-plane-picker');
+      if (existing) {
+        existing.textContent = getVpLabel(vp);
+        return;
+      }
+      pane.style.position = pane.style.position || 'relative';
+      var picker = document.createElement('div');
+      picker.className = 'lr-vp-plane-picker';
+      picker.textContent = getVpLabel(vp);
+      picker.onclick = function (ev) { ev.stopPropagation(); buildPlaneMenu(picker, vp); };
+      pane.appendChild(picker);
+    });
+  }
+  function refreshPlanePickers() {
+    // Used after orientation changes to update the labels
+    injectPlanePickers();
+  }
+
+  // ============================================================
+  // First-render health check — auto-recover from Intel UHD ANGLE shader race
+  // ============================================================
+  // The vtk.js vtkPolyDataVS shader fails to compile on the first cold render
+  // through Chrome's ANGLE/D3D11 path on Intel UHD GPUs. Subsequent compiles
+  // work because of ANGLE's translated-shader cache. Detect the all-black
+  // canvas after volume load and silently reload once to dodge the race. A
+  // sessionStorage counter prevents reload loops if the failure is permanent.
+  // Only sample orthographic MPR canvases — volume3d's dark VR background can
+  // sample as black even on a healthy render. MPR cuts always have visible
+  // anatomy when WebGL is working.
+  var _renderHealthDone = false;
+  function checkRenderHealth() {
+    if (_renderHealthDone) return;
+    try {
+      if (currentMode !== 'mpr' && currentMode !== '3d') return;
+      var v = window.cornerstone && window.cornerstone.cache && window.cornerstone.cache.getVolumes && window.cornerstone.cache.getVolumes()[0];
+      if (!v || !v.loadStatus || !v.loadStatus.loaded) {
+        setTimeout(checkRenderHealth, 5000);
+        return;
+      }
+      // Map orthographic canvases to viewport ids via the rendering engine
+      var re = window.cornerstone.getRenderingEngines && window.cornerstone.getRenderingEngines()[0];
+      if (!re) return;
+      var orthoCanvases = re.getViewports().filter(function (vp) {
+        return vp.type === 'orthographic';
+      }).map(function (vp) { return vp.canvas; }).filter(Boolean);
+      if (!orthoCanvases.length) return;
+      var allBlack = true;
+      var tmp = document.createElement('canvas');
+      tmp.width = 1; tmp.height = 1;
+      var tctx = tmp.getContext('2d');
+      // 5×5 = 25 samples per orthographic canvas — anatomy fills enough of the
+      // pane that any healthy render produces non-black at most positions.
+      for (var i = 0; i < orthoCanvases.length && allBlack; i++) {
+        var c = orthoCanvases[i];
+        if (!c.width || !c.height) continue;
+        for (var yi = 1; yi <= 5 && allBlack; yi++) {
+          for (var xi = 1; xi <= 5 && allBlack; xi++) {
+            tctx.clearRect(0, 0, 1, 1);
+            tctx.drawImage(c, c.width * xi / 6, c.height * yi / 6, 1, 1, 0, 0, 1, 1);
+            var d = tctx.getImageData(0, 0, 1, 1).data;
+            if (d[0] > 5 || d[1] > 5 || d[2] > 5) allBlack = false;
+          }
+        }
+      }
+      _renderHealthDone = true;
+      if (!allBlack) {
+        try { sessionStorage.setItem('lrRenderRecover', '0'); } catch (e) {}
+        return;
+      }
+      var attempts = 0;
+      try { attempts = parseInt(sessionStorage.getItem('lrRenderRecover') || '0', 10); } catch (e) {}
+      if (attempts >= 1) {
+        console.error('[LinkRad] Volume render failing after retry. Suggest: update Intel driver, or chrome://flags → ANGLE → D3D11 WARP.');
+        return;
+      }
+      try { sessionStorage.setItem('lrRenderRecover', String(attempts + 1)); } catch (e) {}
+      console.warn('[LinkRad] Volume render came back all-black on orthographic viewports (likely vtk.js shader compile race). Reloading once...');
+      window.location.reload();
+    } catch (e) { console.warn('[LinkRad] checkRenderHealth failed', e); }
+  }
+
+  // ============================================================
+  // Anatomical orientation cube (A P L R H F) — volume3d viewports only
+  // ============================================================
+  // Legacy DICOM viewers show 6 letter buttons at the bottom of the 3D
+  // viewport that snap the camera to the corresponding anatomical view.
+  function injectOrientCubes() {
+    var re = window.cornerstone && window.cornerstone.getRenderingEngines && window.cornerstone.getRenderingEngines()[0];
+    if (!re) return;
+    var vps = re.getViewports();
+    document.querySelectorAll('[data-cy="viewport-pane"]').forEach(function (pane) {
+      var vpEl = pane.querySelector('[data-viewport-uid]');
+      if (!vpEl) return;
+      var uid = vpEl.getAttribute('data-viewport-uid');
+      var vp = vps.find(function (v) { return v.id === uid; });
+      if (!vp || vp.type !== 'volume3d') return;
+      if (pane.querySelector('.lr-orient-cube')) return; // already injected
+      pane.style.position = pane.style.position || 'relative';
+      var cube = document.createElement('div');
+      cube.className = 'lr-orient-cube';
+      ['A', 'P', 'L', 'R', 'H', 'F'].forEach(function (letter) {
+        var b = document.createElement('div');
+        b.className = 'lr-oc-btn';
+        b.textContent = letter;
+        b.title = {
+          A: 'Anterior — nhìn từ phía trước',
+          P: 'Posterior — nhìn từ phía sau',
+          L: 'Left — nhìn từ bên trái bệnh nhân',
+          R: 'Right — nhìn từ bên phải bệnh nhân',
+          H: 'Head/Superior — nhìn từ trên đỉnh đầu',
+          F: 'Feet/Inferior — nhìn từ dưới chân',
+        }[letter];
+        b.onclick = function (ev) { ev.stopPropagation(); set3DOrientation(letter); };
+        cube.appendChild(b);
+      });
+      pane.appendChild(cube);
+    });
   }
 
   function eachVolumeViewport(fn) {
@@ -908,11 +1171,24 @@
     } catch (e) { console.warn('[LinkRad sidebar] each3DViewport failed', e); return 0; }
   }
 
-  // Standard camera vectors per anatomical view (RAS convention)
+  // Standard camera vectors per anatomical view. viewPlaneNormal is the unit
+  // vector pointing from focal point toward the camera position (i.e., the
+  // outward direction the camera "looks from"). LPS coords: +X = patient left,
+  // +Y = patient posterior, +Z = patient head.
+  // Fixed 2026-05-06 after legacy-comparison revealed the existing axial/
+  // sagittal/coronal had viewUp inverted (feet up → upside down on side views).
   var ORIENTATION_VECTORS = {
-    axial:    { viewUp: [0, -1, 0], viewPlaneNormal: [0, 0, -1] },
-    coronal:  { viewUp: [0, 0, -1], viewPlaneNormal: [0, 1, 0] },
-    sagittal: { viewUp: [0, 0, -1], viewPlaneNormal: [1, 0, 0] },
+    // Anatomical 6-way (legacy "A P L R H F" cube)
+    A: { viewUp: [0, 0, 1],  viewPlaneNormal: [0, -1, 0] },  // Anterior — camera at -Y (in front of patient)
+    P: { viewUp: [0, 0, 1],  viewPlaneNormal: [0, 1, 0]  },  // Posterior — camera at +Y (behind patient)
+    L: { viewUp: [0, 0, 1],  viewPlaneNormal: [1, 0, 0]  },  // patient's Left side — camera at +X
+    R: { viewUp: [0, 0, 1],  viewPlaneNormal: [-1, 0, 0] },  // patient's Right side — camera at -X
+    H: { viewUp: [0, -1, 0], viewPlaneNormal: [0, 0, 1]  },  // Superior/Head — camera at +Z (above patient)
+    F: { viewUp: [0, -1, 0], viewPlaneNormal: [0, 0, -1] },  // Inferior/Feet — camera at -Z (below patient)
+    // Sidebar pills inherit the same vectors via aliases
+    axial:    { viewUp: [0, -1, 0], viewPlaneNormal: [0, 0, 1]  },  // = H (looking down from above)
+    coronal:  { viewUp: [0, 0, 1],  viewPlaneNormal: [0, -1, 0] },  // = A (looking at front)
+    sagittal: { viewUp: [0, 0, 1],  viewPlaneNormal: [-1, 0, 0] },  // = R (looking at patient's right)
   };
 
   function set3DOrientation(arg) {
@@ -978,8 +1254,86 @@
   function toggle3DBox()              { console.log('[LinkRad sidebar] 3D Box toggle TODO — needs vtk cube actor overlay'); }
   function toggle3DCursor()           { console.log('[LinkRad sidebar] 3D Cursor toggle TODO — same as toolbar Crosshairs'); }
   function toggleRotateAroundCursor() { console.log('[LinkRad sidebar] Rotate around cursor TODO — change camera focal point to cursor pos'); }
-  function removeBed()                { console.log('[LinkRad sidebar] Remove couch TODO — HU threshold + bottom-region connected-component'); }
-  function resetTissue()              { console.log('[LinkRad sidebar] Reset tissue → restore full volume opacity'); }
+
+  // Bỏ giường — make the bed HU range transparent on the volume3d opacity TF.
+  // CT couch contains foam (HU -100 to -50), plastic (HU 0 to 100), and on
+  // some scanners carbon fiber (HU 100 to 300). To reliably hide the entire
+  // couch we cut everything below HU 200 — this is a "bone-emphasis" view that
+  // also fades muscle/organs. Acceptable for skeletal 3D; user can use Render
+  // Mode preset if they want soft-tissue back. tf.modified() is required to
+  // invalidate vtk's cached opacity texture.
+  function removeBed() {
+    var hits = 0;
+    eachVolumeViewport(function (vp) {
+      if (vp.type !== 'volume3d') return;
+      try {
+        var actors = vp.getActors ? vp.getActors() : [];
+        actors.forEach(function (a) {
+          var prop = a.actor && a.actor.getProperty ? a.actor.getProperty() : null;
+          if (!prop || !prop.getScalarOpacity) return;
+          var tf = prop.getScalarOpacity(0);
+          if (!tf) return;
+          // Stash original on the actor so we can restore exactly
+          if (!a._lrOpacityBackup) {
+            var backup = [];
+            var sz = tf.getSize();
+            for (var i = 0; i < sz; i++) {
+              var nd = [];
+              tf.getNodeValue(i, nd);
+              backup.push(nd.slice());
+            }
+            a._lrOpacityBackup = backup;
+          }
+          // Cortical-bone-only ramp. Carbon fiber CT couches have HU 200-400
+          // which overlaps with cancellous bone, so HU < 500 must all be 0 to
+          // reliably hide the bed. This sacrifices cancellous bone visibility
+          // (rib internals, vertebrae spongiosa) but keeps cortical bone +
+          // dense calcifications + metal artifacts visible.
+          tf.removeAllPoints();
+          tf.addPoint(-3024, 0);
+          tf.addPoint(500,   0);     // bed (incl. carbon fiber) + soft tissue + cancellous bone all transparent
+          tf.addPoint(700,   0.45);  // cortical bone start
+          tf.addPoint(1200,  0.80);
+          tf.addPoint(3071,  0.95);  // dense cortical / metal
+          if (typeof tf.modified === 'function') tf.modified();
+          if (typeof prop.modified === 'function') prop.modified();
+          hits++;
+        });
+        if (vp.render) vp.render();
+        var re = vp.getRenderingEngine && vp.getRenderingEngine();
+        if (re && re.render) re.render();
+      } catch (e) { console.warn('[LinkRad] removeBed failed', e); }
+    });
+    console.log('[LinkRad sidebar] Bỏ giường — opacity TF rewritten on', hits, 'actor(s) (bone-emphasis)');
+  }
+  // Reset tissue — restore the original opacity TF
+  function resetTissue() {
+    var hits = 0;
+    eachVolumeViewport(function (vp) {
+      if (vp.type !== 'volume3d') return;
+      try {
+        var actors = vp.getActors ? vp.getActors() : [];
+        actors.forEach(function (a) {
+          var prop = a.actor && a.actor.getProperty ? a.actor.getProperty() : null;
+          if (!prop || !prop.getScalarOpacity) return;
+          var tf = prop.getScalarOpacity(0);
+          if (!tf || !a._lrOpacityBackup) return;
+          tf.removeAllPoints();
+          a._lrOpacityBackup.forEach(function (nd) {
+            tf.addPoint(nd[0], nd[1], nd[2] != null ? nd[2] : 0.5, nd[3] != null ? nd[3] : 0);
+          });
+          delete a._lrOpacityBackup;
+          if (typeof tf.modified === 'function') tf.modified();
+          if (typeof prop.modified === 'function') prop.modified();
+          hits++;
+        });
+        if (vp.render) vp.render();
+        var re = vp.getRenderingEngine && vp.getRenderingEngine();
+        if (re && re.render) re.render();
+      } catch (e) { console.warn('[LinkRad] resetTissue failed', e); }
+    });
+    console.log('[LinkRad sidebar] Reset tissue — restored TF on', hits, 'actor(s)');
+  }
 
   // ---- Mammo-specific ----
   // Maps each Hanging Protocol preset to a layout config.
@@ -1314,7 +1668,7 @@
         title: 'Bố cục — MPR',
         type: 'layout',
         items: [
-          { protocol: 'mpr', glyph: 'mpr3', tip: 'Mặc định: 3 viewport (axial / sagittal / coronal)' },
+          { protocol: 'linkradMpr', glyph: 'mpr3', tip: 'Mặc định: 1 lớn + 2 phải (axial · sagittal · coronal)' },
           { rows: 1, cols: 1, tip: '1 viewport' },
           { rows: 1, cols: 3, tip: 'MPR 3-up (axial / sagittal / coronal)' },
           { rows: 2, cols: 2, tip: '2 × 2 (MPR + axial double)' },
@@ -1378,7 +1732,7 @@
         title: 'Bố cục — 3D',
         type: 'layout',
         items: [
-          { protocol: 'main3D', glyph: '1+3', tip: 'Mặc định: 1 viewport 3D lớn + 3 MPR phía dưới' },
+          { protocol: 'linkrad3D', glyph: '1+3', tip: 'Mặc định: 1 viewport 3D lớn bên trái + 3 MPR bên phải' },
           { rows: 1, cols: 1, tip: '3D fullscreen' },
           { rows: 1, cols: 2, tip: '3D + MPR (2-vert)' },
           { rows: 2, cols: 2, tip: '2 × 2 (3D + MPR triplet)' },
@@ -1768,17 +2122,77 @@
   }
 
   // ============================================================
-  // Mode switching (visual only for now — wiring comes in iter 2)
+  // Mode switching
   // ============================================================
-  // Maps our mode tabs to OHIF v3.8 hanging-protocol IDs.
-  // Discovered via Playwright dump of hangingProtocolService.protocols Map.
+  // Custom hanging protocols cloned from OHIF's built-ins with our preferred
+  // layouts. Registered once at boot; indexed below.
   var MODE_TO_PROTOCOL = {
-    '2d':  'default',  // 1x1 grid
-    'mpr': 'mpr',      // 3 viewports horizontal (axial / sagittal / coronal)
-    '3d':  'main3D',   // 1 big 3D + 3 small MPR stacked (matches legacy 3D layout)
+    '2d':  'default',
+    'mpr': 'linkradMpr',  // 1 big left + 2 small stacked right (axial / sag+cor)
+    '3d':  'linkrad3D',   // 1 big 3D left + 3 MPR stacked right
   };
 
+  // Register custom protocols on first switchMode call. Idempotent.
+  var _customProtocolsRegistered = false;
+  function registerCustomProtocols() {
+    if (_customProtocolsRegistered) return;
+    var hp = window.services && window.services.hangingProtocolService;
+    if (!hp || !hp.getProtocolById || !hp.addProtocol) return;
+    try {
+      // 3D mode: clone main3D, change layout from 1-top + 3-bottom to 1-left + 3-right
+      var mainProto = hp.getProtocolById('main3D');
+      if (mainProto) {
+        var d3d = JSON.parse(JSON.stringify(mainProto, function (k, v) {
+          // strip locked flag so addProtocol accepts it
+          return v;
+        }));
+        d3d.id = 'linkrad3D';
+        d3d.name = 'LinkRad 3D';
+        d3d.locked = false;
+        d3d.isPreset = false;
+        d3d.stages[0].id = 'linkrad3DStage';
+        d3d.stages[0].name = 'linkrad3D';
+        d3d.stages[0].viewportStructure.properties = {
+          rows: 3,
+          columns: 2,
+          layoutOptions: [
+            { x: 0,   y: 0,        width: 0.5, height: 1 },        // big 3D left
+            { x: 0.5, y: 0,        width: 0.5, height: 1 / 3 },    // MPR 1 top-right
+            { x: 0.5, y: 1 / 3,    width: 0.5, height: 1 / 3 },    // MPR 2 mid-right
+            { x: 0.5, y: 2 / 3,    width: 0.5, height: 1 / 3 },    // MPR 3 bot-right
+          ],
+        };
+        hp.addProtocol('linkrad3D', d3d);
+        console.log('[LinkRad] registered hanging protocol: linkrad3D (1-left + 3-right)');
+      }
+      // MPR mode: clone mpr, change from 3-horizontal to 1-left + 2-right
+      var mprProto = hp.getProtocolById('mpr');
+      if (mprProto) {
+        var mpr2 = JSON.parse(JSON.stringify(mprProto));
+        mpr2.id = 'linkradMpr';
+        mpr2.name = 'LinkRad MPR';
+        mpr2.locked = false;
+        mpr2.isPreset = false;
+        mpr2.stages[0].viewportStructure.properties = {
+          rows: 2,
+          columns: 2,
+          layoutOptions: [
+            { x: 0,   y: 0,   width: 0.5, height: 1 },     // big axial left
+            { x: 0.5, y: 0,   width: 0.5, height: 0.5 },   // sagittal top-right
+            { x: 0.5, y: 0.5, width: 0.5, height: 0.5 },   // coronal bot-right
+          ],
+        };
+        hp.addProtocol('linkradMpr', mpr2);
+        console.log('[LinkRad] registered hanging protocol: linkradMpr (1-left + 2-right)');
+      }
+      _customProtocolsRegistered = true;
+    } catch (e) {
+      console.warn('[LinkRad] custom protocol registration failed', e);
+    }
+  }
+
   function switchMode(mode) {
+    registerCustomProtocols();
     // Capture the currently-loaded display set before we switch protocols.
     // After the layout reflows, we'll push the same series into all new viewports
     // so MPR/3D renders the actual volume rather than empty placeholders.
@@ -1793,30 +2207,6 @@
         });
       }
     } catch (e) {}
-
-    // Volume-mode safety check: large CT/MR series can crash the browser tab
-    // during volume creation (300+ MB GPU texture upload). Warn first.
-    if (mode === 'mpr' || mode === '3d') {
-      try {
-        var dss = window.services && window.services.displaySetService && window.services.displaySetService.getActiveDisplaySets();
-        var primary = (dss || []).find(function (d) { return d.numImageFrames > 50 || (d.images && d.images.length > 50); });
-        var sliceCount = primary && (primary.numImageFrames || (primary.images && primary.images.length)) || 0;
-        if (sliceCount > 300) {
-          // Estimate volume RAM: slices × 512 × 512 × 2 bytes ≈ MB
-          var est = Math.round((sliceCount * 512 * 512 * 2) / (1024 * 1024));
-          var ok = window.confirm(
-            'Chuỗi này có ' + sliceCount + ' lát cắt (~' + est + ' MB GPU memory).\n' +
-            'Dựng MPR/3D có thể làm trình duyệt crash trên máy có VRAM thấp.\n\n' +
-            'Tiếp tục?'
-          );
-          if (!ok) {
-            console.log('[LinkRad] User cancelled MPR/3D for large volume (' + sliceCount + ' slices)');
-            return;
-          }
-          console.log('[LinkRad] Building volume for', sliceCount, 'slices ≈', est, 'MB');
-        }
-      } catch (e) {}
-    }
 
     currentMode = mode;
     renderToolbar();
@@ -1837,27 +2227,20 @@
       console.log('[LinkRad toolbar] mode →', mode, '(no protocol mapping)');
     }
 
-    // Volume modes: show "Đang dựng khối ảnh…" feedback while cornerstone
-    // streams + uploads the volume texture. Cleared by IMAGE_RENDERED.
+    // Volume modes: show live N/T-lát progress while cornerstone streams the
+    // volume. The poller hides the overlay automatically when loaded.
     if (mode === 'mpr' || mode === '3d') {
-      hookVolumeLoadEvents();
       // Wait one frame so the new viewport panes exist in the DOM
       setTimeout(showVolumeLoadingOverlay, 100);
-      // Hard cap at 30s in case the events don't fire (e.g. all-stack case)
-      setTimeout(hideVolumeLoadingOverlay, 30000);
-      // Diagnostic: 5s after click, log viewport types so we can tell whether
-      // the React components actually mounted as volume viewports.
-      setTimeout(function () {
-        try {
-          var re = window.cornerstone.getRenderingEngines()[0];
-          var vps = re ? re.getViewports().map(function (v) { return v.id + ':' + v.type; }) : [];
-          var grid = window.services.viewportGridService.getState();
-          var slots = grid.viewports ? Array.from(grid.viewports.values()).map(function (v) {
-            return (v.viewportId || 'no-id') + '=' + (v.viewportOptions && v.viewportOptions.viewportType) + '/ds=' + ((v.displaySetInstanceUIDs || []).length);
-          }) : [];
-          console.log('[LinkRad] post-' + mode + ' viewports:', vps.join(', '), '| slots:', slots.join(', '));
-        } catch (e) {}
-      }, 5000);
+      // Inject per-viewport plane pickers + anatomical orient cube once
+      // viewports are mounted. Retry several times since OHIF's React mount is
+      // async and volume3d takes longer to initialize than orthographic.
+      [800, 2000, 4000, 8000].forEach(function (ms) {
+        setTimeout(function () { injectPlanePickers(); injectOrientCubes(); }, ms);
+      });
+      // Auto-recover from Intel UHD ANGLE first-render shader race: detect
+      // all-black canvas after volume load and silently reload once.
+      setTimeout(checkRenderHealth, 12000);
     } else {
       hideVolumeLoadingOverlay();
     }
