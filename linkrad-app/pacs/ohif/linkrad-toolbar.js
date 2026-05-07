@@ -406,6 +406,10 @@
     '  background: rgba(56, 189, 248, 0.25); color: #5acce6;',
     '  border-color: #5acce6;',
     '}',
+    // Hide OHIF's "for investigational use only" bottom snackbar — pops up
+    // on every load and requires a Confirm-and-Hide click. Class chain is
+    // unique enough that this won't collide with other fixed elements.
+    'div.fixed.bottom-2.z-50.w-full.justify-center { display: none !important; }',
   ].join('\n');
 
   function injectCSS() {
@@ -1608,7 +1612,7 @@
     if (!vp || !vp.getCamera || !vp.canvas) return null;
     var cam = vp.getCamera();
     if (!cam || !cam.focalPoint || cam.parallelScale == null) return null;
-    var aspect = vp.canvas.width / vp.canvas.height;
+    var aspect = (vp.canvas.clientWidth || vp.canvas.width) / (vp.canvas.clientHeight || vp.canvas.height);
     // Half world-width visible = parallelScale * aspect (parallelScale is half-height).
     // For RCC (chest at canvas right): chestWorldX = focalX + halfWidth.
     // For LCC (chest at canvas left):  chestWorldX = focalX - halfWidth.
@@ -1631,17 +1635,23 @@
     });
     if (vp.render) vp.render();
   }
-  function setupMammoZoomSync(vpIds, slotsInOrder) {
-    var cs = window.cornerstone;
-    var re = cs && cs.getRenderingEngines && cs.getRenderingEngines()[0];
-    if (!re) return;
-    // Tear down any previous bindings (mode switch, study switch, etc.)
+  // Tear down all custom drag-zoom + drag-pan pointer bindings.
+  // Zoom/Pan toolbar tools are left as-is (we no longer disable them when
+  // sync turns on, so there's nothing to restore here).
+  function teardownMammoZoomSync() {
     _mammoSyncBindings.forEach(function (b) {
       try { b.element.removeEventListener('pointerdown', b.onDown, true); } catch (e) {}
       try { window.removeEventListener('pointermove', b.onMove, true); } catch (e) {}
       try { window.removeEventListener('pointerup', b.onUp, true); } catch (e) {}
     });
     _mammoSyncBindings = [];
+    _mammoSyncIds = [];
+  }
+  function setupMammoZoomSync(vpIds, slotsInOrder) {
+    var cs = window.cornerstone;
+    var re = cs && cs.getRenderingEngines && cs.getRenderingEngines()[0];
+    if (!re) return;
+    teardownMammoZoomSync();
     _mammoSyncIds = vpIds.slice();
     // Anchor data is just laterality flag — setDisplayArea handles the rest.
     _mammoAnchors = {};
@@ -1650,22 +1660,62 @@
       _mammoAnchors[id] = { isRight: slot && slot.charAt(0) === 'R' };
     });
 
-    // Disable cornerstone tools that would steal pointer events from our
-    // custom drag-zoom: Zoom (we replace it), Crosshairs (cyan reference
-    // line, fires on click), Pan (would fight on right-click).
+    // Disable Crosshairs (cyan reference-line tool — fires a permanent
+    // marker on every click; not useful in mammo). Zoom + Pan are LEFT
+    // ACTIVE so the user can pick which one the left-button drag triggers
+    // via the standard toolbar buttons; our pointerdown handler reads the
+    // active tool and routes left-click to either synced-zoom or synced-pan
+    // accordingly. Right-click is always synced pan (mammo convention).
     try {
       var ToolGroupManager = window.cornerstoneTools && window.cornerstoneTools.ToolGroupManager;
       if (ToolGroupManager) {
         var tg = ToolGroupManager.getToolGroup('default');
         if (tg && tg.setToolPassive) {
-          ['Zoom', 'Crosshairs', 'Pan'].forEach(function (n) {
-            try { tg.setToolPassive(n); } catch (e) {}
-          });
+          try { tg.setToolPassive('Crosshairs'); } catch (e) {}
         }
       }
     } catch (e) { /* fall through */ }
 
-    // Custom pointer-based drag-zoom + drag-pan
+    // Reads the currently-active cornerstone tool for the given mouse button
+    // (1 = left, 2 = right) on the default toolGroup. Returns 'zoom', 'pan',
+    // or null if some other tool is active (e.g. Length measurement) — in
+    // which case our handler should NOT intercept and let cornerstone run.
+    function _activeToolForButton(mouseButton) {
+      var TGM = window.cornerstoneTools && window.cornerstoneTools.ToolGroupManager;
+      var tg = TGM && TGM.getToolGroup && TGM.getToolGroup('default');
+      if (!tg) return null;
+      var opts = tg.toolOptions || {};
+      // Multiple tools can be Active for the same button (cornerstone allows
+      // it — e.g. WindowLevel + Pan both bound to button 1 after a manual
+      // setToolActive that didn't passive the prior tool). Scan all matches;
+      // prefer Pan, then Zoom; if only some other tool (WindowLevel, Length,
+      // Crosshairs, etc.) is bound, return null so cornerstone handles it.
+      var hasPan = false;
+      var hasZoom = false;
+      for (var name in opts) {
+        var o = opts[name];
+        if (!o || o.mode !== 'Active') continue;
+        var bindings = o.bindings || [];
+        for (var i = 0; i < bindings.length; i++) {
+          if (bindings[i].mouseButton === mouseButton) {
+            if (name === 'Pan') hasPan = true;
+            else if (name === 'Zoom') hasZoom = true;
+            break;
+          }
+        }
+      }
+      if (hasPan)  return 'pan';
+      if (hasZoom) return 'zoom';
+      return null;
+    }
+
+    // Custom pointer-based drag-zoom + drag-pan.
+    // - Left-button drag: synced zoom OR synced pan, depending on which
+    //   cornerstone tool is currently active for primary button. So clicking
+    //   the toolbar Pan button switches left-drag to synced pan.
+    // - Right-button drag: always synced vertical pan (mammo convention).
+    //   Horizontal pan is intentionally NOT applied — the chest-wall edge
+    //   enforcer immediately undoes any horizontal shift.
     vpIds.forEach(function (id) {
       var vp = re.getViewport(id);
       if (!vp || !vp.element) return;
@@ -1674,13 +1724,46 @@
         if (ev.button !== 0 && ev.button !== 2) return;
         var cam = vp.getCamera && vp.getCamera();
         if (!cam) return;
+        var mode;
+        if (ev.button === 2) {
+          mode = 'pan'; // right-click: always synced pan
+        } else {
+          // Left-click: route to whichever tool is active in the toolbar.
+          mode = _activeToolForButton(1);
+          if (!mode) return; // some other tool (Length, etc.) — let cornerstone handle
+        }
         dragState = {
           startY: ev.clientY,
           startX: ev.clientX,
           startParallelScale: cam.parallelScale,
-          mode: ev.button === 2 ? 'pan' : 'zoom',
+          mode: mode,
         };
-        console.log('[LinkRad mammo] drag START on', id.slice(0, 8), 'startPS:', cam.parallelScale.toFixed(2));
+        // For pan, capture each peer's starting camera so the pan tracks
+        // from a stable origin (per-pointermove deltas would otherwise drift
+        // when combined with the edge enforcer's CAMERA_MODIFIED writes).
+        if (mode === 'pan') {
+          dragState.peerStarts = {};
+          _mammoSyncIds.forEach(function (peerId) {
+            var peerVp = re.getViewport(peerId);
+            if (!peerVp || !peerVp.getCamera || !peerVp.canvas || !peerVp.canvasToWorld) return;
+            var pcam = peerVp.getCamera();
+            if (!pcam || !pcam.focalPoint || !pcam.position) return;
+            // World vector for one canvas-y unit at canvas mid (screen-down).
+            // Use CSS pixel dimensions (canvasToWorld expects CSS coords;
+            // canvas.width/height is the device-pixel buffer which differs
+            // from CSS coords on high-DPI displays).
+            var canvasH = peerVp.canvas.clientHeight || peerVp.canvas.height;
+            var canvasW = peerVp.canvas.clientWidth || peerVp.canvas.width;
+            var origin = peerVp.canvasToWorld([canvasW / 2, canvasH / 2]);
+            var oneDown = peerVp.canvasToWorld([canvasW / 2, canvasH / 2 + 1]);
+            if (!origin || !oneDown) return;
+            dragState.peerStarts[peerId] = {
+              focalPoint: pcam.focalPoint.slice(),
+              position: pcam.position.slice(),
+              downVec: [oneDown[0] - origin[0], oneDown[1] - origin[1], oneDown[2] - origin[2]],
+            };
+          });
+        }
         ev.preventDefault();
         ev.stopPropagation();
         ev.stopImmediatePropagation && ev.stopImmediatePropagation();
@@ -1691,16 +1774,42 @@
           var dy = ev.clientY - dragState.startY;
           // Drag down → smaller parallelScale → zoom in.
           var factor = Math.exp(dy * 0.005);
-          // Sync only zoom (parallelScale) across viewports. Each viewport
-          // pans independently and zooms around its own center. With DICOM
-          // laterality-aware orientation, the chest walls naturally stay
-          // close to the inner divider through zoom.
+          // Sync zoom across viewports. The edge enforcer (running on
+          // CAMERA_MODIFIED) keeps each chest wall glued at its inner edge
+          // as parallelScale changes.
           _mammoSyncIds.forEach(function (peerId) {
             var peerVp = re.getViewport(peerId);
             if (!peerVp || !peerVp.getCamera || !peerVp.setCamera) return;
-            var c = peerVp.getCamera();
             var newPS = Math.max(1, Math.min(5000, dragState.startParallelScale * factor));
             peerVp.setCamera({ parallelScale: newPS });
+            if (peerVp.render) peerVp.render();
+          });
+        } else if (dragState.mode === 'pan') {
+          // Vertical-only pan synced across peers. Drag down → image follows
+          // finger (image translates down in canvas) → camera shifts up,
+          // i.e. shift along -downVec by dyCanvas.
+          var dyCanvas = ev.clientY - dragState.startY;
+          _mammoSyncIds.forEach(function (peerId) {
+            var peerVp = re.getViewport(peerId);
+            var start = dragState.peerStarts && dragState.peerStarts[peerId];
+            if (!peerVp || !start || !peerVp.setCamera) return;
+            var dW = [
+              -dyCanvas * start.downVec[0],
+              -dyCanvas * start.downVec[1],
+              -dyCanvas * start.downVec[2],
+            ];
+            peerVp.setCamera({
+              focalPoint: [
+                start.focalPoint[0] + dW[0],
+                start.focalPoint[1] + dW[1],
+                start.focalPoint[2] + dW[2],
+              ],
+              position: [
+                start.position[0] + dW[0],
+                start.position[1] + dW[1],
+                start.position[2] + dW[2],
+              ],
+            });
             if (peerVp.render) peerVp.render();
           });
         }
@@ -1709,54 +1818,298 @@
       vp.element.addEventListener('pointerdown', onDown, true);
       window.addEventListener('pointermove', onMove, true);
       window.addEventListener('pointerup', onUp, true);
-      // Also disable browser's context menu so right-click drag works for pan
       vp.element.addEventListener('contextmenu', function (e) { e.preventDefault(); });
       _mammoSyncBindings.push({ element: vp.element, onDown: onDown, onMove: onMove, onUp: onUp });
     });
   }
+
+  // When false, each viewport zooms independently using cornerstone's stock
+  // Zoom tool — useful for validating that chest-wall edge anchoring sticks
+  // on a single viewport. When true, install custom drag-zoom + drag-pan
+  // handlers that sync across all bilateral viewports. Toggleable at runtime
+  // via the Mammo sidebar; see toggleMammoSync below.
+  var LR_MAMMO_SYNC_ENABLED = true;
 
   // Mammo bilateral display:
   // 1. Anchor each viewport's chest-wall side to the inner divider via
   //    setDisplayArea({imagePoint, canvasPoint}). DICOM stores RCC with chest
   //    wall on image RIGHT (PatientOrientation [P,L]) and LCC on image LEFT
   //    ([A,R]); we map those points to the inner edge of each canvas. As the
-  //    user zooms or pans, the anchor stays glued — chest walls stay touching
-  //    at the divider.
-  // 2. Bind viewports to a shared zoompan sync so the contralateral tracks.
-  //    With chest walls anchored, sync only needs to copy parallelScale; pan
-  //    naturally falls back to mirrored anchoring per-viewport.
+  //    user zooms, the anchor stays glued — chest walls stay touching at the
+  //    divider.
+  // 2. Subscribe to viewport-level events (IMAGE_RENDERED, STACK_NEW_IMAGE,
+  //    CAMERA_RESET) to re-apply the anchor whenever cornerstone resets the
+  //    camera (which happens on initial image load and when the Reset tool
+  //    fires). Without this re-apply the load reset wipes our anchoring.
+  // 3. If LR_MAMMO_SYNC_ENABLED, bind viewports to a shared zoompan sync.
+  function _mammoLateralityAnchor(slot) {
+    return slot && slot.charAt(0) === 'R' ? 1 : 0;
+  }
+  // Source-of-truth for which side of the body each viewport is showing.
+  // Reads ImageLaterality from the viewport's currently-displayed instance.
+  // Falls back to null if we can't get it; caller substitutes slot-based.
+  // Robustness matters here: viewports' positional order in the grid is
+  // not guaranteed to match the order we passed to setDisplaySetsForViewports
+  // (observed asymmetry: LCC sticks but RCC doesn't, when slot[0]/slot[1]
+  // got crossed with vp[0]/vp[1]).
+  function _readVpLaterality(vp, vpId) {
+    try {
+      var dssService = window.services && window.services.displaySetService;
+      var gs = window.services && window.services.viewportGridService;
+      var grid = gs && gs.getState();
+      var dsuids = [];
+      // 1. Try the viewport's options
+      try {
+        if (vp && vp.options && vp.options.displaySetInstanceUIDs) {
+          dsuids = dsuids.concat(vp.options.displaySetInstanceUIDs);
+        }
+      } catch (e) {}
+      // 2. Try grid state's viewport entry
+      try {
+        if (grid && grid.viewports && grid.viewports.get) {
+          var entry = grid.viewports.get(vpId);
+          if (entry && entry.displaySetInstanceUIDs) {
+            dsuids = dsuids.concat(entry.displaySetInstanceUIDs);
+          }
+        }
+      } catch (e) {}
+      for (var i = 0; i < dsuids.length; i++) {
+        var ds = dssService && dssService.getDisplaySetByUID && dssService.getDisplaySetByUID(dsuids[i]);
+        if (ds && ds.instances && ds.instances[0]) {
+          var lat = (ds.instances[0].ImageLaterality || '').toUpperCase();
+          if (lat === 'R') return true;
+          if (lat === 'L') return false;
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+  // Initial anchor: declaratively bind imagePoint→canvasPoint via setDisplayArea
+  // and store as initial camera so a future Reset returns to this state.
+  function _applyMammoEdgeAnchor(vp, anchor) {
+    if (!vp || !vp.setDisplayArea) return;
+    try {
+      vp.setDisplayArea({
+        imageCanvasPoint: {
+          imagePoint: [anchor, 0.5],
+          canvasPoint: [anchor, 0.5],
+        },
+        storeAsInitialCamera: true,
+      });
+      if (vp.render) vp.render();
+    } catch (e) { /* swallow — viewport may not be ready yet */ }
+  }
+  // chest wall world point per viewport — captured once after initial anchor
+  // settles. Used on CAMERA_MODIFIED to keep the chest wall pinned to the
+  // canvas inner edge in screen-X under any user-driven zoom. Only the X
+  // component is constrained so vertical pan remains free.
+  // Implementation uses canvasToWorld / worldToCanvas to be agnostic to
+  // viewPlaneNormal / viewUp orientation (mammo viewports have camera along
+  // world +X, so screen-X is along world -Y, NOT world X).
+  var _mammoChest = {};         // vpId → { worldPt, isRight }
+  var _mammoEnforcing = {};     // re-entry guard per viewport
+  function _captureMammoChest(vp, id, isRight) {
+    if (!vp || !vp.canvas || !vp.canvasToWorld) return;
+    var canvasH = (vp.canvas.clientHeight || vp.canvas.height);
+    var canvasW = (vp.canvas.clientWidth || vp.canvas.width);
+    var px = isRight ? [canvasW, canvasH / 2] : [0, canvasH / 2];
+    var worldPt = vp.canvasToWorld(px);
+    if (!worldPt) return;
+    _mammoChest[id] = { worldPt: worldPt, isRight: isRight };
+  }
+  function _enforceMammoChest(vp, id) {
+    if (_mammoEnforcing[id]) return;
+    var c = _mammoChest[id];
+    if (!c) return;
+    if (!vp || !vp.canvas || !vp.worldToCanvas || !vp.canvasToWorld) return;
+    if (!vp.getCamera || !vp.setCamera) return;
+    var canvasW = (vp.canvas.clientWidth || vp.canvas.width);
+    var canvasH = (vp.canvas.clientHeight || vp.canvas.height);
+    var desiredX = c.isRight ? canvasW : 0;
+    var actualPx = vp.worldToCanvas(c.worldPt);
+    if (!actualPx) return;
+    var dxCanvas = actualPx[0] - desiredX;
+    if (Math.abs(dxCanvas) < 0.5) return;
+    // World vector for one canvas-x unit at canvas mid-height.
+    var origin = vp.canvasToWorld([0, canvasH / 2]);
+    var oneRight = vp.canvasToWorld([1, canvasH / 2]);
+    if (!origin || !oneRight) return;
+    var rightVec = [oneRight[0] - origin[0], oneRight[1] - origin[1], oneRight[2] - origin[2]];
+    // Camera shift = +dxCanvas * rightVec (moves the camera to the right in
+    // screen space, which moves the image to the LEFT in canvas, restoring
+    // the chest wall to canvas right).
+    var dW = [dxCanvas * rightVec[0], dxCanvas * rightVec[1], dxCanvas * rightVec[2]];
+    var cam = vp.getCamera();
+    if (!cam) return;
+    _mammoEnforcing[id] = true;
+    try {
+      vp.setCamera({
+        focalPoint: [cam.focalPoint[0] + dW[0], cam.focalPoint[1] + dW[1], cam.focalPoint[2] + dW[2]],
+        position: [cam.position[0] + dW[0], cam.position[1] + dW[1], cam.position[2] + dW[2]],
+      });
+    } catch (e) {}
+    setTimeout(function () { _mammoEnforcing[id] = false; }, 0);
+  }
+  var _mammoEdgeListeners = [];
+  // Continuous enforcement loop — runs on every animation frame as long as
+  // any viewport is registered in _mammoChest. Reactive event-driven
+  // enforcement (CAMERA_MODIFIED) was missing some drift on certain
+  // viewports across browser/Electron event-timing variations. A 60fps
+  // loop is cheap (a few canvas/world transforms per viewport) and robust.
+  var _mammoLoopRunning = false;
+  function _mammoEnforceTick() {
+    if (!_mammoLoopRunning) return;
+    try {
+      var re = window.cornerstone && window.cornerstone.getRenderingEngines && window.cornerstone.getRenderingEngines()[0];
+      if (re) {
+        Object.keys(_mammoChest).forEach(function (id) {
+          var vp = re.getViewport(id);
+          if (vp) _enforceMammoChest(vp, id);
+        });
+      }
+    } catch (e) {}
+    requestAnimationFrame(_mammoEnforceTick);
+  }
+  function _startMammoEnforceLoop() {
+    if (_mammoLoopRunning) return;
+    _mammoLoopRunning = true;
+    requestAnimationFrame(_mammoEnforceTick);
+  }
+  function _stopMammoEnforceLoop() { _mammoLoopRunning = false; }
+  function _teardownMammoEdgeListeners() {
+    _mammoEdgeListeners.forEach(function (l) {
+      try { l.elem.removeEventListener(l.evt, l.fn); } catch (e) {}
+    });
+    _mammoEdgeListeners = [];
+    _mammoChest = {};
+    _mammoEnforcing = {};
+    _stopMammoEnforceLoop();
+  }
   function applyMammoDisplayConventions(slotsInOrder) {
     try {
       var re = window.cornerstone && window.cornerstone.getRenderingEngines && window.cornerstone.getRenderingEngines()[0];
       if (!re) return;
-      var renderingEngineId = re.id;
-      var sgs = window.services && window.services.syncGroupService;
-      var SYNC_ID = 'lr-mammo-zoompan';
       var gs = window.services && window.services.viewportGridService;
       var grid = gs && gs.getState();
       var currentVpIds = grid ? viewportsAsArray(grid).map(function (e) { return e.id; }) : [];
-      var synced = 0;
-      // No setDisplayArea: cornerstone's natural fit-to-canvas already places
-      // chest walls at the canvas inner edges thanks to DICOM laterality-
-      // aware PatientOrientation. Trying to override via setDisplayArea ended
-      // up fighting cornerstone's image-load reset.
-      // Custom sync that re-anchors chest walls on every CAMERA_MODIFIED.
-      // Wait one tick so setDisplayArea has settled before capturing anchors.
-      setTimeout(function () {
-        setupMammoZoomSync(
-          currentVpIds.filter(function (id) { return !!id; }),
-          slotsInOrder
-        );
-      }, 50);
-      synced = currentVpIds.length;
-      // Note: previously we resized the viewport wrappers to remove OHIF's
-      // ~10px breathing room between panes ("the snap"), but that resize
-      // forced cornerstone to refit each canvas, wiping our setDisplayArea
-      // anchoring and leaving chest walls drifted. Better to live with the
-      // natural OHIF gap; the chest walls stay near the divider on their own.
+      var EVT = window.cornerstone && window.cornerstone.Enums && window.cornerstone.Enums.Events;
+
+      _teardownMammoEdgeListeners();
+
+      var anchored = 0;
+      currentVpIds.forEach(function (id, i) {
+        var vp = re.getViewport(id);
+        var slot = slotsInOrder && slotsInOrder[i];
+        if (!vp) return;
+        // Read laterality from the viewport's actual displaySet.
+        // This is the source of truth — slot[i] is just a positional hint
+        // that may not match if grid viewport order != populate order.
+        var dsLat = _readVpLaterality(vp, id);
+        var isRight;
+        if (dsLat === true || dsLat === false) {
+          isRight = dsLat;
+        } else if (slot) {
+          isRight = slot.charAt(0) === 'R';
+        } else {
+          return;
+        }
+        var anchorPt = isRight ? 1 : 0;
+        var elem = vp.element;
+        if (!elem || !EVT) return;
+        // Re-anchor: setDisplayArea + capture chestWorldPoint immediately.
+        // We capture synchronously right after setDisplayArea (when the
+        // image's chest edge is provably at the canvas inner edge), and
+        // suppress the enforcer during the call so the resulting
+        // CAMERA_MODIFIED can't drag the camera based on a stale capture.
+        var reAnchor = function () {
+          _mammoEnforcing[id] = true;
+          _applyMammoEdgeAnchor(vp, anchorPt);
+          // Synchronous capture: at this moment canvasToWorld([innerEdgePx,
+          // h/2]) returns the actual image chest-edge world coordinate.
+          _captureMammoChest(vp, id, isRight);
+          // Release the enforcer on the next macrotask so any
+          // setDisplayArea-driven CAMERA_MODIFIED has flushed.
+          setTimeout(function () { _mammoEnforcing[id] = false; }, 0);
+        };
+        // 1. Initial anchor + capture
+        reAnchor();
+        anchored++;
+        // 2. Safety re-capture at 250ms in case the image-load reset hadn't
+        //    happened yet at initial run (canvasToWorld would have returned
+        //    a pre-load value, which the STACK_NEW_IMAGE listener will fix
+        //    when it fires — this is just belt-and-braces).
+        setTimeout(reAnchor, 250);
+        // 3. CAMERA_MODIFIED: shift focalPoint to keep chestWorldPoint glued.
+        //    Coalesced via requestAnimationFrame so cornerstone's internal
+        //    multi-pass camera updates (e.g. resetCamera fires 6 CAMERA_MODIFIED
+        //    in one call) settle before our enforcer reads + corrects. Direct
+        //    sync correction inside resetCamera was overridden by its later
+        //    passes, leaving a 32px chest drift.
+        var rafPending = false;
+        var fnCM = function () {
+          if (rafPending) return;
+          rafPending = true;
+          requestAnimationFrame(function () {
+            rafPending = false;
+            _enforceMammoChest(vp, id);
+          });
+        };
+        if (EVT.CAMERA_MODIFIED) {
+          elem.addEventListener(EVT.CAMERA_MODIFIED, fnCM);
+          _mammoEdgeListeners.push({ elem: elem, evt: EVT.CAMERA_MODIFIED, fn: fnCM });
+        }
+        // 4. On NEW image (display set switch): re-anchor + fresh capture so
+        //    chestWorldPoint reflects the new image's bounds.
+        //    NOT bound: CAMERA_RESET. Cornerstone's setDisplayArea is not
+        //    idempotent across calls — re-running it on reset produces a
+        //    slightly different camera (~32px drift in our test). Instead
+        //    we let the CAMERA_MODIFIED enforcer above snap any post-reset
+        //    drift back using the stable captured chestWorldPoint.
+        ['STACK_NEW_IMAGE', 'VOLUME_NEW_IMAGE'].forEach(function (k) {
+          var n = EVT[k];
+          if (!n) return;
+          elem.addEventListener(n, reAnchor);
+          _mammoEdgeListeners.push({ elem: elem, evt: n, fn: reAnchor });
+        });
+      });
+
+      // Stash so the toggleMammoSync runtime UI can re-install bindings
+      // without needing to know the original preset.
+      _lastMammoSlots = slotsInOrder;
+      _lastMammoVpIds = currentVpIds.slice();
+
+      if (LR_MAMMO_SYNC_ENABLED) {
+        setTimeout(function () {
+          setupMammoZoomSync(
+            currentVpIds.filter(function (id) { return !!id; }),
+            slotsInOrder
+          );
+        }, 50);
+      }
+
+      // Start the continuous edge-enforce loop. It runs at 60fps and
+      // snaps any drifted chest world point back to the canvas inner edge.
+      _startMammoEnforceLoop();
       document.body.classList.add('lr-mammo-mode');
-      console.log('[LinkRad] Mammo zoompan sync —', synced, 'viewport(s)');
+      console.log('[LinkRad] Mammo edge-anchor —', anchored, 'viewport(s) · sync:', LR_MAMMO_SYNC_ENABLED);
     } catch (e) { console.warn('[LinkRad] applyMammoDisplayConventions failed', e); }
+  }
+  var _lastMammoSlots = null;
+  var _lastMammoVpIds = null;
+  // Runtime toggle. Wired to the Mammo sidebar checkbox below.
+  function toggleMammoSync(enabled) {
+    LR_MAMMO_SYNC_ENABLED = !!enabled;
+    if (!enabled) {
+      teardownMammoZoomSync();
+      console.log('[LinkRad] Mammo sync OFF');
+      return;
+    }
+    if (!_lastMammoSlots || !_lastMammoVpIds) {
+      console.log('[LinkRad] Mammo sync ON (will activate when CC/MLO preset is loaded)');
+      return;
+    }
+    setupMammoZoomSync(_lastMammoVpIds.filter(function (id) { return !!id; }), _lastMammoSlots);
+    console.log('[LinkRad] Mammo sync ON');
   }
 
   var LR_FUNCS = {
@@ -1776,6 +2129,7 @@
     removeBed: removeBed,
     resetTissue: resetTissue,
     setMammoHanging: function (arg) { setMammoHanging(arg); },
+    toggleMammoSync: function (arg) { toggleMammoSync(arg); },
     setMagnifyLevel: function (level) { setMagnifyLevel(level); },
     restoreDefaultWL: restoreDefaultWL,
     applyWLPreset: function (arg) { applyWLPreset(arg); },
@@ -2009,7 +2363,6 @@
           { label: 'CC',          tip: '1 viewport CC',  fn: 'setMammoHanging', arg: 'cc' },
           { label: 'MLO',         tip: '1 viewport MLO', fn: 'setMammoHanging', arg: 'mlo' },
           { label: 'CC / MLO 4-up', tip: 'RCC | LCC | RMLO | LMLO', fn: 'setMammoHanging', arg: 'ccmlo4' },
-          { label: 'CC + MLO',    tip: 'CC + MLO 2-up', fn: 'setMammoHanging', arg: 'ccmlo4' },
           { label: 'R CC/MLO',    tip: 'RCC + RMLO',    fn: 'setMammoHanging', arg: 'rccmlo' },
           { label: 'L CC/MLO',    tip: 'LCC + LMLO',    fn: 'setMammoHanging', arg: 'lccmlo' },
         ],
@@ -2028,31 +2381,16 @@
         hint: 'Smart detect: cảnh báo nếu ca không có TOMO',
       },
       {
-        title: 'Magnify (vi vôi hóa)',
-        type: 'pills',
-        cols: 3,
+        title: 'Đồng bộ bilateral (R/L)',
+        type: 'checks',
         items: [
-          { label: '1.5×', tip: 'Loupe 1.5x', fn: 'setMagnifyLevel', arg: 1.5 },
-          { label: '2×',   tip: 'Loupe 2x',   fn: 'setMagnifyLevel', arg: 2 },
-          { label: '4×',   tip: 'Loupe 4x',   fn: 'setMagnifyLevel', arg: 4 },
+          { label: 'Sync zoom & pan giữa các pane mammo', fn: 'toggleMammoSync', defaultChecked: true },
         ],
-        hint: 'Zoom 1:1 pixel mặc định cho mammo screening',
+        hint: 'Khi bật: kéo trái = zoom đồng bộ, kéo phải = pan dọc đồng bộ. Chest wall luôn dính vào mép trong.',
       },
       {
         title: 'DBT Cine (cuộn TOMO slice)',
         type: 'cine',
-      },
-      {
-        title: 'Compression / Paddle / kVp / mAs Overlay',
-        type: 'placeholder',
-        message: 'Hiển thị overlay: Force (N), Paddle, Body Part Thickness (mm), kVp, mAs từ DICOM tag (0018,11A0/11A2/11A4/0060/1152). Đang phát triển.',
-        tag: 'V1 LINKRAD',
-      },
-      {
-        title: 'BI-RADS (báo cáo có cấu trúc)',
-        type: 'placeholder',
-        message: 'Form BI-RADS: Density A/B/C/D, Assessment 0–6, structured findings (mass / calcifications / asymmetry / architectural distortion). Tạo SR document.',
-        tag: 'V1 LINKRAD',
       },
       {
         title: 'Đồng bộ ca chụp cũ (prior comparison)',
@@ -2213,7 +2551,14 @@
       lbl.className = 'lr-check';
       var input = document.createElement('input');
       input.type = 'checkbox';
-      input.onchange = function () { runItem(it); };
+      if (it.defaultChecked) input.checked = true;
+      input.onchange = function () {
+        // Pass the new check state as the function arg so the wired
+        // function can act as an idempotent setter rather than a flipper.
+        var argItem = it;
+        if (it.fn) argItem = { fn: it.fn, arg: input.checked };
+        runItem(argItem);
+      };
       lbl.appendChild(input);
       var span = document.createElement('span');
       span.textContent = it.label;
