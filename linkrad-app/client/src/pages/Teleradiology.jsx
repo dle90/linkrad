@@ -565,13 +565,35 @@ export default function Teleradiology() {
           // across expanded toggles. Only the className changes: normal flow
           // vs fixed-fullscreen overlay that covers the Layout sidebar + header.
           <div className={(isViewerExpanded && viewerDocked) ? 'fixed inset-0 z-50 flex bg-gray-50' : 'flex-1 flex'}>
-            <InlineViewer
-              studyUID={activeCase.studyUID}
-              onUndock={() => undockViewer(activeCase)}
-              hidden={!viewerDocked}
-              expanded={isViewerExpanded}
-              onToggleExpanded={toggleViewerExpanded}
-            />
+            {/* All open cases' iframes stacked absolute-positioned in the
+                same space; only the active one is `visibility: visible`.
+                Critical: do NOT use display:none on inactive iframes — that
+                kills the WebGL context inside them, so switching back shows
+                black viewports until cornerstone re-loads. visibility:hidden
+                keeps the canvas sized and the GL context alive, while
+                preventing pointer events.
+                The whole stack is mounted only when `viewerDocked` — popping
+                out to a separate window unmounts everything (re-dock = cold
+                start; that's expected and rare). */}
+            {viewerDocked && (
+              <div className="flex-1 flex relative min-w-0 bg-gray-900">
+                {openCases.map(c => (
+                  <div
+                    key={c._id}
+                    className="absolute inset-0 flex"
+                    style={{ visibility: c._id === activeCaseId ? 'visible' : 'hidden' }}
+                  >
+                    <InlineViewer
+                      studyUID={c.studyUID}
+                      onUndock={() => undockViewer(c)}
+                      hidden={false}
+                      expanded={isViewerExpanded}
+                      onToggleExpanded={toggleViewerExpanded}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
             {viewerDocked && (
               <ViewerDivider reportWidth={reportWidth} onChange={persistReportWidth} />
             )}
