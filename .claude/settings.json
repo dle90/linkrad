@@ -156,7 +156,16 @@
       "Bash(node verify-toggle.js)",
       "PowerShell(\"cleanup done\")",
       "Bash(node verify-tool-routing.js)",
-      "Bash(node probe-noti.js)"
+      "Bash(node probe-noti.js)",
+      "Bash(curl -s -X POST https://backboard.railway.app/graphql/v2 -H 'Authorization: Bearer __TRACKED_VAR__' -H 'Content-Type: application/json' -d '{\"query\":\"mutation { serviceInstanceRedeploy\\\\\\(serviceId: \\\\\"66f8ad61-9421-4798-b365-e510c6affd4a\\\\\", environmentId: \\\\\"8a16dfb4-dc18-4927-8963-9a41c0632ec3\\\\\"\\\\\\) }\"}')",
+      "Bash(echo \"exit=$?\")",
+      "Bash(curl -s https://linkrad-ohif-production.up.railway.app/linkrad-toolbar.js)",
+      "Bash(curl -s -o /dev/null -w \"5173 \\(Vite\\): %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s -o /dev/null -w \"3001 \\(Server\\): %{http_code}\\\\n\" http://localhost:3001/api/health)",
+      "Bash(curl -sf http://localhost:5173/ -o /dev/null)",
+      "Bash(curl -sf http://localhost:3001/api/health -o /dev/null)",
+      "Bash(curl -s -o /dev/null -w \"5173: %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(node probe-iframes.js)"
     ]
   }
 }
