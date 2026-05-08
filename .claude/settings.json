@@ -165,7 +165,16 @@
       "Bash(curl -sf http://localhost:5173/ -o /dev/null)",
       "Bash(curl -sf http://localhost:3001/api/health -o /dev/null)",
       "Bash(curl -s -o /dev/null -w \"5173: %{http_code}\\\\n\" http://localhost:5173/)",
-      "Bash(node probe-iframes.js)"
+      "Bash(node probe-iframes.js)",
+      "Bash(curl -s https://linkrad-production.up.railway.app/ -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl -s -o /dev/null -w \"linkrad-production: %{http_code}\\\\n\" https://linkrad-production.up.railway.app/)",
+      "Bash(findstr \":5173 :3001 :3000\")",
+      "Bash(curl -s -o nul -w \"OHIF status: %{http_code}\\\\n\" http://localhost:3000/linkrad-toolbar.js)",
+      "Bash(findstr /C:\"onParentTabActivated\" /C:\"_lastMammoPresetArg\")",
+      "PowerShell($body = \\(Invoke-WebRequest -Uri http://localhost:3000/linkrad-toolbar.js -UseBasicParsing\\).Content; @\\('onParentTabActivated', '_lastMammoPresetArg', \"type === 'tab-activated'\"\\) | ForEach-Object { if \\($body.Contains\\($_\\)\\) { \"FOUND: $_\" } else { \"MISSING: $_\" } })",
+      "PowerShell($body = \\(Invoke-WebRequest -Uri http://localhost:3000/linkrad-toolbar.js -UseBasicParsing\\).Content; @\\('tab-activated received', '_lastUserLayout', \"kind: 'mammo'\", \"kind: 'grid'\", \"kind: 'protocol'\"\\) | ForEach-Object { if \\($body.Contains\\($_\\)\\) { \"FOUND: $_\" } else { \"MISSING: $_\" } })",
+      "PowerShell($body = \\(Invoke-WebRequest -Uri http://localhost:3000/linkrad-toolbar.js -UseBasicParsing\\).Content; @\\('subscribeLayoutWatchdog', 'watchdog: grid auto-reverted', 'layout watchdog subscribed', 'LAYOUT_CHANGED'\\) | ForEach-Object { if \\($body.Contains\\($_\\)\\) { \"FOUND: $_\" } else { \"MISSING: $_\" } })",
+      "PowerShell($body = \\(Invoke-WebRequest -Uri http://localhost:3000/linkrad-toolbar.js -UseBasicParsing\\).Content; @\\('In-memory only', 'sessionStorage.removeItem', 'OHIF is mid-initialization', 'sessionStorage.setItem'\\) | ForEach-Object { if \\($body.Contains\\($_\\)\\) { \"FOUND: $_\" } else { \"MISSING: $_\" } })"
     ]
   }
 }

@@ -1378,16 +1378,37 @@
     } catch (e) { return null; }
   }
 
-  function setMammoHanging(arg) {
+  // Last user-applied layout in this iframe. In-memory only — sessionStorage
+  // bleeds across same-origin iframes within the same tab, so persisting it
+  // would make a layout the user picked in case A leak into case B's iframe
+  // and break case B's natural protocol defaults. Losing the saved layout
+  // on a hard refresh is the right behavior anyway: a fresh page should use
+  // OHIF's defaults, not a stale custom layout.
+  //
+  // Shape: { kind: 'grid', rows, cols } | { kind: 'protocol', id }
+  //      | { kind: 'mammo', arg }   ← Mammo HPs go through their own setter
+  //                                   so we can re-run series matching too.
+  var _lastUserLayout = null;
+  // Clean up any leaked value from prior versions that did persist to
+  // sessionStorage — would cause cross-iframe layout contamination.
+  try { sessionStorage.removeItem('lrLastUserLayout'); } catch (e) {}
+  try { sessionStorage.removeItem('lrLastMammoPreset'); } catch (e) {}
+
+  function rememberLayout(layout) {
+    _lastUserLayout = layout;
+  }
+
+  function setMammoHanging(arg, opts) {
+    var silent = !!(opts && opts.silent);
     var cfg = MAMMO_HANGING[arg];
-    if (!cfg) { console.warn('[LinkRad sidebar] unknown mammo hanging:', arg); return; }
+    if (!cfg) { console.warn('[LinkRad sidebar] unknown mammo hanging:', arg); return false; }
     if (cfg.tomo) {
       var tomoOk = hasTomoSeries();
       if (tomoOk === false) {
         // Smart detection: warn instead of silently showing black viewports (legacy did this)
-        alert('Ca chụp này không có chuỗi TOMO — chọn Hanging Protocol thường.');
+        if (!silent) alert('Ca chụp này không có chuỗi TOMO — chọn Hanging Protocol thường.');
         console.warn('[LinkRad sidebar] TOMO requested but no TOMO series detected');
-        return;
+        return false;
       }
     }
     try {
@@ -1397,9 +1418,149 @@
         context: 'DEFAULT',
       });
       console.log('[LinkRad sidebar] Mammo hanging →', arg, '(', cfg.label, ')');
+      rememberLayout({ kind: 'mammo', arg: arg });
       // After layout settles, populate viewports with matched series
       setTimeout(function () { populateMammoViewports(arg); }, 350);
-    } catch (e) { console.warn('[LinkRad sidebar] mammo hanging failed', e); }
+      return true;
+    } catch (e) { console.warn('[LinkRad sidebar] mammo hanging failed', e); return false; }
+  }
+
+  // Called when the parent (Teleradiology page) tells this iframe it has
+  // become the active case tab. Defensive re-apply: if the user has
+  // previously picked a layout and the grid no longer matches, the layout
+  // has reverted (typical scenario: opened a second case in another iframe
+  // and switched back). Re-apply silently — no alerts when the iframe
+  // wasn't even focused.
+  function onParentTabActivated() {
+    if (!_lastUserLayout) {
+      console.log('[LinkRad] tab-activated: no saved layout — skip');
+      return;
+    }
+    var gs = window.services && window.services.viewportGridService;
+    var grid = gs && gs.getState && gs.getState();
+    if (!grid || !grid.layout) {
+      // Service isn't ready yet — try again after a short delay.
+      console.log('[LinkRad] tab-activated: viewportGridService not ready, deferring');
+      setTimeout(onParentTabActivated, 500);
+      return;
+    }
+    var rows = grid.layout.numRows, cols = grid.layout.numCols;
+    var saved = _lastUserLayout;
+
+    if (saved.kind === 'grid' || saved.kind === 'mammo') {
+      var wantRows, wantCols, label;
+      if (saved.kind === 'mammo') {
+        var cfg = MAMMO_HANGING[saved.arg];
+        if (!cfg) { console.warn('[LinkRad] tab-activated: unknown mammo arg', saved.arg); return; }
+        wantRows = cfg.rows; wantCols = cfg.cols; label = 'mammo:' + saved.arg;
+      } else {
+        wantRows = saved.rows; wantCols = saved.cols; label = 'grid:' + saved.rows + '×' + saved.cols;
+      }
+      if (rows === wantRows && cols === wantCols) {
+        console.log('[LinkRad] tab-activated: layout intact (' + rows + '×' + cols + ', wanted ' + label + ')');
+        return;
+      }
+      console.warn('[LinkRad] tab-activated: layout reverted (was ' + wantRows + '×' + wantCols + ', now ' + rows + '×' + cols + ', wanted ' + label + ') — re-applying');
+      if (saved.kind === 'mammo') {
+        setMammoHanging(saved.arg, { silent: true });
+      } else {
+        try {
+          window.commandsManager.run({
+            commandName: 'setViewportGridLayout',
+            commandOptions: { numRows: wantRows, numCols: wantCols },
+            context: 'DEFAULT',
+          });
+        } catch (e) { console.warn('[LinkRad] tab-activated: re-apply failed', e); }
+      }
+      return;
+    }
+
+    if (saved.kind === 'protocol') {
+      // We don't have a cheap way to read the active protocol ID from grid
+      // state, so just re-apply unconditionally. cheap & idempotent.
+      console.log('[LinkRad] tab-activated: re-applying protocol', saved.id);
+      try {
+        window.commandsManager.run({
+          commandName: 'setHangingProtocol',
+          commandOptions: { protocolId: saved.id },
+          context: 'DEFAULT',
+        });
+      } catch (e) { console.warn('[LinkRad] tab-activated: re-apply protocol failed', e); }
+    }
+  }
+
+  // ---- Grid-state watchdog ----
+  // The reason the layout reverts between tab activations: OHIF's
+  // hangingProtocolService re-runs `applyProtocol` whenever new
+  // displaySets stream in (lazy load). That resets the grid to the
+  // protocol's default 1×1 even though the iframe is hidden. By the
+  // time the user switches back, the revert has already happened.
+  //
+  // Subscribe to viewportGridService events and restore the saved
+  // layout the moment OHIF tries to revert it. Throttled and gated
+  // by `_restoreInflight` so OHIF's own GRID_STATE_CHANGED reaction
+  // to our re-apply doesn't loop.
+  var _restoreInflight = false;
+  var _lastRestoreTs = 0;
+
+  function checkGridAgainstSaved() {
+    if (!_lastUserLayout) return;
+    if (_restoreInflight) return;
+    var now = Date.now();
+    if (now - _lastRestoreTs < 600) return;
+
+    var gs = window.services && window.services.viewportGridService;
+    var grid = gs && gs.getState && gs.getState();
+    if (!grid || !grid.layout) return;
+
+    var rows = grid.layout.numRows, cols = grid.layout.numCols;
+    // 0×0 means OHIF is mid-initialization — never override the natural
+    // boot sequence, the user hasn't seen anything yet anyway.
+    if (!rows || !cols) return;
+    var saved = _lastUserLayout;
+    var wantRows, wantCols, label;
+    if (saved.kind === 'mammo') {
+      var cfg = MAMMO_HANGING[saved.arg];
+      if (!cfg) return;
+      wantRows = cfg.rows; wantCols = cfg.cols; label = 'mammo:' + saved.arg;
+    } else if (saved.kind === 'grid') {
+      wantRows = saved.rows; wantCols = saved.cols; label = 'grid:' + saved.rows + '×' + saved.cols;
+    } else {
+      // protocol kind — only re-applied on tab activation, not by watchdog
+      return;
+    }
+    if (rows === wantRows && cols === wantCols) return;
+
+    console.warn('[LinkRad] watchdog: grid auto-reverted to ' + rows + '×' + cols + ', restoring ' + label);
+    _restoreInflight = true;
+    _lastRestoreTs = now;
+    try {
+      if (saved.kind === 'mammo') {
+        setMammoHanging(saved.arg, { silent: true });
+      } else {
+        window.commandsManager.run({
+          commandName: 'setViewportGridLayout',
+          commandOptions: { numRows: wantRows, numCols: wantCols },
+          context: 'DEFAULT',
+        });
+      }
+    } catch (e) { console.warn('[LinkRad] watchdog re-apply failed', e); }
+    setTimeout(function () { _restoreInflight = false; }, 600);
+  }
+
+  function subscribeLayoutWatchdog() {
+    if (subscribeLayoutWatchdog._done) return;
+    try {
+      var gs = window.services && window.services.viewportGridService;
+      if (!gs || !gs.subscribe || !gs.EVENTS) return;
+      // Prefer the narrow LAYOUT_CHANGED event when present; fall back to
+      // GRID_STATE_CHANGED with a throttle if not.
+      var evName = gs.EVENTS.LAYOUT_CHANGED || gs.EVENTS.GRID_STATE_CHANGED;
+      if (!evName) return;
+      gs.subscribe(evName, function () { checkGridAgainstSaved(); });
+      subscribeLayoutWatchdog._done = true;
+      console.log('[LinkRad] layout watchdog subscribed (' + evName + ')');
+    } catch (e) {}
   }
 
   function setMagnifyLevel(level) {
@@ -2520,12 +2681,14 @@
               commandOptions: { protocolId: it.protocol },
               context: 'DEFAULT',
             });
+            rememberLayout({ kind: 'protocol', id: it.protocol });
           } else {
             window.commandsManager.run({
               commandName: 'setViewportGridLayout',
               commandOptions: { numRows: it.rows, numCols: it.cols },
               context: 'DEFAULT',
             });
+            rememberLayout({ kind: 'grid', rows: it.rows, cols: it.cols });
           }
         } catch (e) { console.warn('[LinkRad sidebar] layout switch failed', e); }
       };
@@ -2853,6 +3016,33 @@
     startMutationObserver();
     watchModality();
     subscribeMammoOverlays();
+
+    // Parent (Teleradiology page) tells us when this iframe is the active
+    // case tab. We use this to re-apply the last-clicked layout if the grid
+    // has reverted while we were hidden.
+    window.addEventListener('message', function (e) {
+      var data = e.data;
+      if (!data || data.source !== 'linkrad-parent') return;
+      if (data.type === 'tab-activated') {
+        console.log('[LinkRad] tab-activated received');
+        onParentTabActivated();
+      }
+    });
+
+    // Subscribe the layout watchdog as soon as viewportGridService is ready.
+    // Polls until it is — usually 1-3 seconds after iframe load.
+    var wdAttempts = 0;
+    var wdIv = setInterval(function () {
+      wdAttempts++;
+      var gs = window.services && window.services.viewportGridService;
+      if (gs && gs.subscribe && gs.EVENTS) {
+        subscribeLayoutWatchdog();
+        clearInterval(wdIv);
+      } else if (wdAttempts > 60) {
+        clearInterval(wdIv);
+        console.warn('[LinkRad] layout watchdog: viewportGridService never appeared');
+      }
+    }, 200);
 
     // Also poll commandsManager so wiring works once OHIF is ready
     var attempts = 0;

@@ -7,11 +7,12 @@ import api from '../api'
 // The `hidden` prop CSS-hides the iframe (without unmounting) when the user
 // pops the viewer out to a separate window — OHIF's JS state survives so
 // re-docking is instant.
-export default function InlineViewer({ studyUID, onUndock, hidden = false, expanded = false, onToggleExpanded }) {
+export default function InlineViewer({ studyUID, onUndock, hidden = false, expanded = false, onToggleExpanded, isActive = false }) {
   const [src, setSrc] = useState('about:blank')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const loadedOnceRef = useRef(false)
+  const iframeRef = useRef(null)
 
   useEffect(() => {
     if (!studyUID) {
@@ -36,10 +37,27 @@ export default function InlineViewer({ studyUID, onUndock, hidden = false, expan
     return () => { cancelled = true }
   }, [studyUID])
 
+  // Tell the iframe each time this case becomes the active tab. The OHIF
+  // toolbar customization listens for this and re-applies the last-clicked
+  // Mammo hanging protocol if the grid has reverted (defensive — the bug
+  // shows up after another iframe loads in the parent and we switch back).
+  const sendActivated = () => {
+    const iframe = iframeRef.current
+    if (!iframe || !iframe.contentWindow) return
+    try {
+      iframe.contentWindow.postMessage({ source: 'linkrad-parent', type: 'tab-activated' }, '*')
+    } catch {}
+  }
+  useEffect(() => {
+    if (isActive) sendActivated()
+  }, [isActive])
+
   return (
     <div className={`${hidden ? 'hidden' : 'flex-1 flex'} min-w-0 bg-gray-900 relative`}>
       <iframe
+        ref={iframeRef}
         src={src}
+        onLoad={() => { if (isActive) sendActivated() }}
         className="flex-1 w-full border-0 bg-gray-900"
         title="DICOM Viewer"
         allow="fullscreen; clipboard-read; clipboard-write; cross-origin-isolated"

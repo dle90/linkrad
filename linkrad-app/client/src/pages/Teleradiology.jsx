@@ -589,6 +589,7 @@ export default function Teleradiology() {
                       hidden={false}
                       expanded={isViewerExpanded}
                       onToggleExpanded={toggleViewerExpanded}
+                      isActive={c._id === activeCaseId}
                     />
                   </div>
                 ))}
