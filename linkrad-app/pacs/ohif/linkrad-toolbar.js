@@ -2273,6 +2273,53 @@
     console.log('[LinkRad] Mammo sync ON');
   }
 
+  // Zoom/Pan sync — OHIF v3.8's toggleSynchronizer command only registers
+  // 'imageSlice' and 'voi' toggle functions, so type:'zoomPan' silently
+  // no-ops. The underlying syncGroupService DOES register a 'zoompan'
+  // synchronizer factory (createZoomPanSynchronizer), so we drive it
+  // directly. Setter, not flipper — the sidebar checkbox passes its new
+  // state as `enabled`.
+  var LR_ZOOMPAN_SYNC_ID = 'LR_ZOOMPAN_SYNC';
+  function setZoomPanSync(enabled) {
+    try {
+      var s = window.services;
+      var sgs = s && s.syncGroupService;
+      var vgs = s && s.viewportGridService;
+      var cvs = s && s.cornerstoneViewportService;
+      if (!sgs || !vgs || !cvs) {
+        console.warn('[LinkRad] setZoomPanSync: services not ready');
+        return;
+      }
+      var grid = vgs.getState();
+      var vps = grid && grid.viewports;
+      var arr = vps && (vps.values ? Array.from(vps.values()) : Object.values(vps));
+      if (!arr || !arr.length) return;
+      arr.forEach(function (gv) {
+        var vid = gv.viewportOptions && gv.viewportOptions.viewportId;
+        if (!vid) return;
+        var vp = cvs.getCornerstoneViewport(vid);
+        if (!vp) return;
+        var re = vp.getRenderingEngine && vp.getRenderingEngine();
+        if (!re || !re.id) return;
+        try {
+          if (enabled) {
+            sgs.addViewportToSyncGroup(vid, re.id, {
+              type: 'zoompan',
+              id: LR_ZOOMPAN_SYNC_ID,
+              source: true,
+              target: true,
+            });
+          } else {
+            sgs.removeViewportFromSyncGroup(vid, re.id, LR_ZOOMPAN_SYNC_ID);
+          }
+        } catch (e) { /* per-viewport failure is non-fatal */ }
+      });
+      console.log('[LinkRad] zoom/pan sync', enabled ? 'ON' : 'OFF', '— viewports:', arr.length);
+    } catch (e) {
+      console.warn('[LinkRad] setZoomPanSync failed', e);
+    }
+  }
+
   var LR_FUNCS = {
     deleteLastAnnotation: deleteLastAnnotation,
     deleteAllAnnotations: deleteAllAnnotations,
@@ -2297,6 +2344,7 @@
     clearColormap: clearColormap,
     showVolumeLoadingOverlay: showVolumeLoadingOverlay,
     hideVolumeLoadingOverlay: hideVolumeLoadingOverlay,
+    setZoomPanSync: function (arg) { setZoomPanSync(!!arg); },
   };
 
   // ============================================================
@@ -2342,7 +2390,7 @@
         items: [
           { label: 'Cuộn theo vị trí (mm)', cmd: 'toggleSynchronizer', cmdOpts: { type: 'imageSlice' } },
           { label: 'Đồng bộ W/L',           cmd: 'toggleSynchronizer', cmdOpts: { type: 'voi' } },
-          { label: 'Đồng bộ Zoom/Pan',      cmd: 'toggleSynchronizer', cmdOpts: { type: 'zoomPan' } },
+          { label: 'Đồng bộ Zoom/Pan',      fn: 'setZoomPanSync' },
         ],
       },
       {
@@ -2410,7 +2458,7 @@
         items: [
           { label: 'Cuộn theo vị trí (mm)', cmd: 'toggleSynchronizer', cmdOpts: { type: 'imageSlice' } },
           { label: 'Đồng bộ W/L',           cmd: 'toggleSynchronizer', cmdOpts: { type: 'voi' } },
-          { label: 'Đồng bộ Zoom/Pan',      cmd: 'toggleSynchronizer', cmdOpts: { type: 'zoomPan' } },
+          { label: 'Đồng bộ Zoom/Pan',      fn: 'setZoomPanSync' },
         ],
       },
     ],
@@ -2495,7 +2543,7 @@
         items: [
           { label: 'Cuộn theo vị trí (mm)', cmd: 'toggleSynchronizer', cmdOpts: { type: 'imageSlice' } },
           { label: 'Đồng bộ W/L',           cmd: 'toggleSynchronizer', cmdOpts: { type: 'voi' } },
-          { label: 'Đồng bộ Zoom/Pan',      cmd: 'toggleSynchronizer', cmdOpts: { type: 'zoomPan' } },
+          { label: 'Đồng bộ Zoom/Pan',      fn: 'setZoomPanSync' },
         ],
       },
     ],
@@ -2559,7 +2607,7 @@
         items: [
           { label: 'Khóa view với prior',     cmd: 'toggleSynchronizer', cmdOpts: { type: 'imageSlice' } },
           { label: 'Đồng bộ W/L',             cmd: 'toggleSynchronizer', cmdOpts: { type: 'voi' } },
-          { label: 'Đồng bộ Zoom/Pan',        cmd: 'toggleSynchronizer', cmdOpts: { type: 'zoomPan' } },
+          { label: 'Đồng bộ Zoom/Pan',        fn: 'setZoomPanSync' },
         ],
       },
     ],
