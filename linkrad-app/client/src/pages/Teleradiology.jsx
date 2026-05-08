@@ -559,43 +559,73 @@ export default function Teleradiology() {
         onSelect={setActiveCaseId}
         onClose={closeCase}
       />
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        {activeCase ? (
-          // Wrapper is always present so React keeps the InlineViewer mounted
-          // across expanded toggles. Only the className changes: normal flow
-          // vs fixed-fullscreen overlay that covers the Layout sidebar + header.
-          <div className={(isViewerExpanded && viewerDocked) ? 'fixed inset-0 z-50 flex bg-gray-50' : 'flex-1 flex'}>
-            {/* All open cases' iframes stacked absolute-positioned in the
-                same space; only the active one is `visibility: visible`.
-                Critical: do NOT use display:none on inactive iframes — that
-                kills the WebGL context inside them, so switching back shows
-                black viewports until cornerstone re-loads. visibility:hidden
-                keeps the canvas sized and the GL context alive, while
-                preventing pointer events.
-                The whole stack is mounted only when `viewerDocked` — popping
-                out to a separate window unmounts everything (re-dock = cold
-                start; that's expected and rare). */}
-            {viewerDocked && (
-              <div className="flex-1 flex relative min-w-0 bg-gray-900">
-                {openCases.map(c => (
-                  <div
-                    key={c._id}
-                    className="absolute inset-0 flex"
-                    style={{ visibility: c._id === activeCaseId ? 'visible' : 'hidden' }}
-                  >
-                    <InlineViewer
-                      studyUID={c.studyUID}
-                      onUndock={() => undockViewer(c)}
-                      hidden={false}
-                      expanded={isViewerExpanded}
-                      onToggleExpanded={toggleViewerExpanded}
-                      isActive={c._id === activeCaseId}
-                    />
-                  </div>
-                ))}
+      <div className="flex-1 flex min-h-0 overflow-hidden relative">
+        {/* IFRAME STACK — lifted above the {activeCase ? ... : ...} ternary
+            so it stays mounted when the user clicks the Worklist tab. The
+            previous version put this inside the activeCase branch, which
+            meant going to worklist (activeCase = null) unmounted every
+            open case's OHIF iframe, and reopening a case remounted them
+            all from cold start. This is the bug the user reported.
+
+            Positioning is state-driven so React identity is preserved:
+              • activeCase + !expanded  →  in normal flex flow (left slot)
+              • activeCase + expanded   →  fixed overlay covering the Layout
+                                            sidebar + header, leaving room
+                                            for the report panel on the right
+              • no activeCase           →  position:absolute + visibility:hidden
+                                            (off-screen but full size, so the
+                                            iframe canvases keep their
+                                            dimensions and WebGL contexts
+                                            stay alive — display:none would
+                                            kill them; see commit 0f93fe5)
+
+            All open cases' iframes are stacked absolute-positioned inside
+            this wrapper; only the active one has visibility:visible. */}
+        {viewerDocked && openCases.length > 0 && (
+          <div
+            className="flex bg-gray-900"
+            style={
+              activeCase
+                ? isViewerExpanded
+                  ? { position: 'fixed', top: 0, left: 0, right: `${reportWidth}px`, bottom: 0, zIndex: 50 }
+                  : { position: 'relative', flex: '1 1 0%', minWidth: 0 }
+                : { position: 'absolute', inset: 0, visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }
+            }
+          >
+            {openCases.map(c => (
+              <div
+                key={c._id}
+                className="absolute inset-0 flex"
+                style={{ visibility: c._id === activeCaseId ? 'visible' : 'hidden' }}
+              >
+                <InlineViewer
+                  studyUID={c.studyUID}
+                  onUndock={() => undockViewer(c)}
+                  hidden={false}
+                  expanded={isViewerExpanded}
+                  onToggleExpanded={toggleViewerExpanded}
+                  isActive={c._id === activeCaseId}
+                />
               </div>
-            )}
-            {viewerDocked && (
+            ))}
+          </div>
+        )}
+        {activeCase ? (
+          // Active-case row layout. The iframe stack is rendered above and
+          // takes the left slot via flex:1. This wrapper holds the divider
+          // and the report panel. In expanded mode the iframe stack is a
+          // fixed overlay, and we position the report panel to match.
+          <div
+            className={
+              !viewerDocked
+                ? 'flex-1 flex'
+                : (isViewerExpanded
+                    ? 'fixed top-0 right-0 bottom-0 z-50 flex bg-gray-50'
+                    : 'flex flex-shrink-0')
+            }
+            style={(isViewerExpanded && viewerDocked) ? { width: `${reportWidth}px` } : undefined}
+          >
+            {viewerDocked && !isViewerExpanded && (
               <ViewerDivider reportWidth={reportWidth} onChange={persistReportWidth} />
             )}
             <div
