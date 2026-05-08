@@ -2937,26 +2937,40 @@
     }
   }
 
-  // Reset camera + VOI on every viewport via OHIF's resetViewport command.
-  // Used between mode switches so per-viewport state (VOI, camera, slab
-  // thickness, blend mode, colormap) doesn't leak from MPR/3D back to 2D
-  // (observed: 2D → MPR → 2D rendered with carried-over slab/blend even
-  // though the displayed W:1500 L:-700 said otherwise).
+  // Full per-viewport state reset between mode switches. cornerstone3D's
+  // resetProperties() only restores VOI / VOILUTFunction / invert / colormap
+  // — it does NOT reset blendMode or slabThickness, which the user can
+  // change in MPR mode (1mm/5mm/10mm slab, MIP/AIP/MinIP/VR blend). Those
+  // carry over to any subsequent mode if we don't explicitly clear them,
+  // which is why 2D → MPR → 2D came back rendering as if a thick MIP slab
+  // was still in effect even though the displayed W/L said otherwise.
+  // We walk every cornerstone viewport directly so we hit both stack
+  // (2D) and volume (MPR/3D) viewports in one pass.
   function resetAllViewports() {
     try {
-      var cm = window.commandsManager;
-      var grid = window.services && window.services.viewportGridService && window.services.viewportGridService.getState();
-      if (!cm || !grid) return;
-      viewportsAsArray(grid).forEach(function (e) {
-        try {
-          cm.run({
-            commandName: 'resetViewport',
-            commandOptions: { viewportId: e.id },
-            context: 'CORNERSTONE',
-          });
-        } catch (err) { /* per-viewport reset failure is non-fatal */ }
+      var cs = window.cornerstone;
+      var BlendModes = cs && cs.Enums && cs.Enums.BlendModes;
+      var engines = (cs && cs.getRenderingEngines && cs.getRenderingEngines()) || [];
+      engines.forEach(function (re) {
+        var vps = (re.getViewports && re.getViewports()) || [];
+        vps.forEach(function (vp) {
+          try {
+            // VOI + invert + colormap (works on all viewport types)
+            if (typeof vp.resetProperties === 'function') vp.resetProperties();
+            // Camera (zoom + pan + parallel scale)
+            if (typeof vp.resetCamera === 'function') vp.resetCamera();
+            // Volume-only cleanup that resetProperties skips
+            if (typeof vp.setBlendMode === 'function' && BlendModes && BlendModes.COMPOSITE !== undefined) {
+              vp.setBlendMode(BlendModes.COMPOSITE);
+            }
+            if (typeof vp.setSlabThickness === 'function') {
+              vp.setSlabThickness(0);
+            }
+          } catch (err) { /* per-viewport reset failure is non-fatal */ }
+        });
+        if (re.render) re.render();
       });
-    } catch (err) { /* swallow */ }
+    } catch (err) { /* swallow — never let cleanup block a mode switch */ }
   }
 
   function switchMode(mode) {
