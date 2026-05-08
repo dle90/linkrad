@@ -410,42 +410,105 @@
       .catch(function () { body.textContent = 'Lỗi khi tải ca chụp.'; });
   }
 
-  // ----- QIDO study-list response sanitizer -----
+  // ----- QIDO study-list response sanitizer (fetch + XHR) -----
   // OHIF's getModalities() crashes on `Cannot read properties of undefined
   // (reading 'length')` when a QIDO /studies response includes an entry whose
   // `00080061 ModalitiesInStudy` element is present but has no `.Value` field
-  // (e.g. orphan studies built from Secondary Capture only). The crash kills
-  // the StudyBrowser thumbnail render for the whole study panel.
-  // Wrap window.fetch and inject `Value: []` on offending responses.
+  // (e.g. orphan studies built from Secondary Capture only with no PatientID).
+  // The crash kills the StudyBrowser thumbnail render for the whole study panel.
+  function sanitizeQIDOArray(data) {
+    if (!Array.isArray(data)) return false;
+    var dirty = false;
+    data.forEach(function (s) {
+      if (s && s['00080061'] && !('Value' in s['00080061'])) {
+        s['00080061'].Value = [];
+        dirty = true;
+      }
+    });
+    return dirty;
+  }
+  function isStudyListURL(u) {
+    return typeof u === 'string'
+      && /\/studies(\?|$)/.test(u)
+      && !/\/series|\/instances/.test(u);
+  }
+
+  // Wrap window.fetch — used by some OHIF code paths.
   (function patchFetchForQIDO() {
     if (window._linkradFetchPatched) return;
     window._linkradFetchPatched = true;
     var orig = window.fetch.bind(window);
     window.fetch = function (url, init) {
       var u = typeof url === 'string' ? url : (url && url.url);
-      var isStudyList = typeof u === 'string' && /\/studies(\?|$)/.test(u) && !/\/series|\/instances/.test(u);
-      if (!isStudyList) return orig(url, init);
+      if (!isStudyListURL(u)) return orig(url, init);
       return orig(url, init).then(function (resp) {
         if (!resp.ok) return resp;
         var ctype = resp.headers.get('content-type') || '';
         if (!/json/.test(ctype)) return resp;
         return resp.clone().json().then(function (data) {
-          if (!Array.isArray(data)) return resp;
-          var dirty = false;
-          data.forEach(function (s) {
-            if (s && s['00080061'] && !('Value' in s['00080061'])) {
-              s['00080061'].Value = [];
-              dirty = true;
-            }
-          });
-          if (!dirty) return resp;
-          // Rebuild a Response with the cleaned body
+          if (!sanitizeQIDOArray(data)) return resp;
           var headers = new Headers(resp.headers);
           return new Response(JSON.stringify(data), { status: resp.status, statusText: resp.statusText, headers: headers });
         }).catch(function () { return resp; });
       });
     };
     console.log('[LinkRad] QIDO fetch sanitizer installed');
+  })();
+
+  // Wrap XMLHttpRequest — dicomweb-client (the primary QIDO path in OHIF v3)
+  // uses XHR, not fetch, so the wrapper above misses it. Shadow the
+  // responseText/response getters on the instance so every handler
+  // (onreadystatechange, onload, addEventListener) reads sanitized JSON
+  // regardless of registration order.
+  (function patchXHRForQIDO() {
+    if (window._linkradXHRPatched || !window.XMLHttpRequest) return;
+    window._linkradXHRPatched = true;
+    var origOpen = XMLHttpRequest.prototype.open;
+    var rtDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText');
+    var rDesc  = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response');
+    if (!rtDesc || !rtDesc.get) {
+      console.warn('[LinkRad] XHR sanitizer: responseText getter unavailable, skipping');
+      return;
+    }
+    XMLHttpRequest.prototype.open = function (method, url) {
+      try {
+        var u = typeof url === 'string' ? url : (url && String(url)) || '';
+        if (isStudyListURL(u)) {
+          var xhr = this;
+          // Sanitize lazily on first read after readyState=4.
+          var define = function (prop, baseDesc) {
+            if (!baseDesc || !baseDesc.get) return;
+            Object.defineProperty(xhr, prop, {
+              configurable: true,
+              get: function () {
+                var raw = baseDesc.get.call(this);
+                if (this.readyState !== 4) return raw;
+                if (this._lr_cached !== undefined) return this._lr_cached;
+                var ct = this.getResponseHeader('Content-Type') || '';
+                if (!/json/i.test(ct) || typeof raw !== 'string') {
+                  this._lr_cached = raw;
+                  return raw;
+                }
+                try {
+                  var data = JSON.parse(raw);
+                  if (sanitizeQIDOArray(data)) {
+                    this._lr_cached = JSON.stringify(data);
+                    console.log('[LinkRad] QIDO XHR sanitizer scrubbed', data.length, 'entries');
+                  } else {
+                    this._lr_cached = raw;
+                  }
+                } catch (e) { this._lr_cached = raw; }
+                return this._lr_cached;
+              },
+            });
+          };
+          define('responseText', rtDesc);
+          define('response',     rDesc);
+        }
+      } catch (e) { /* swallow — don't break OHIF if the patch fails */ }
+      return origOpen.apply(this, arguments);
+    };
+    console.log('[LinkRad] QIDO XHR sanitizer installed');
   })();
 
   // ----- Display-set sanitizer -----
