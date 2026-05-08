@@ -2866,105 +2866,66 @@
     '3d':  'linkrad3D',   // 1 big 3D left + 3 MPR stacked right
   };
 
-  // Pristine clones of our custom hanging protocols. Built once on first
-  // call to registerCustomProtocols. We re-addProtocol a fresh deep clone
-  // on every switchMode rather than reusing a single registered instance,
-  // because cornerstone/OHIF mutates the active protocol's stages and
-  // displaySetMatchDetails during use — feeding the mutated object back
-  // into setHangingProtocol on a second application produces wrong layouts
-  // (observed: MPR → 3D → MPR loses the Coronal viewport).
-  var _pristineLinkrad3D = null;
-  var _pristineLinkradMpr = null;
-
+  // Register custom protocols on first switchMode call. Idempotent.
+  var _customProtocolsRegistered = false;
   function registerCustomProtocols() {
+    if (_customProtocolsRegistered) return;
     var hp = window.services && window.services.hangingProtocolService;
     if (!hp || !hp.getProtocolById || !hp.addProtocol) return;
     try {
-      // Build pristine clones once.
-      if (!_pristineLinkrad3D) {
-        // 3D: clone main3D, change 1-top + 3-bottom to 1-left + 3-right.
-        var mainProto = hp.getProtocolById('main3D');
-        if (mainProto) {
-          var d3d = JSON.parse(JSON.stringify(mainProto));
-          d3d.id = 'linkrad3D';
-          d3d.name = 'LinkRad 3D';
-          d3d.locked = false;
-          d3d.isPreset = false;
-          d3d.stages[0].id = 'linkrad3DStage';
-          d3d.stages[0].name = 'linkrad3D';
-          d3d.stages[0].viewportStructure.properties = {
-            rows: 3,
-            columns: 2,
-            layoutOptions: [
-              { x: 0,   y: 0,        width: 0.5, height: 1 },        // big 3D left
-              { x: 0.5, y: 0,        width: 0.5, height: 1 / 3 },    // MPR 1 top-right
-              { x: 0.5, y: 1 / 3,    width: 0.5, height: 1 / 3 },    // MPR 2 mid-right
-              { x: 0.5, y: 2 / 3,    width: 0.5, height: 1 / 3 },    // MPR 3 bot-right
-            ],
-          };
-          _pristineLinkrad3D = d3d;
-          console.log('[LinkRad] built pristine linkrad3D (1-left + 3-right)');
-        }
+      // 3D mode: clone main3D, change layout from 1-top + 3-bottom to 1-left + 3-right
+      var mainProto = hp.getProtocolById('main3D');
+      if (mainProto) {
+        var d3d = JSON.parse(JSON.stringify(mainProto, function (k, v) {
+          // strip locked flag so addProtocol accepts it
+          return v;
+        }));
+        d3d.id = 'linkrad3D';
+        d3d.name = 'LinkRad 3D';
+        d3d.locked = false;
+        d3d.isPreset = false;
+        d3d.stages[0].id = 'linkrad3DStage';
+        d3d.stages[0].name = 'linkrad3D';
+        d3d.stages[0].viewportStructure.properties = {
+          rows: 3,
+          columns: 2,
+          layoutOptions: [
+            { x: 0,   y: 0,        width: 0.5, height: 1 },        // big 3D left
+            { x: 0.5, y: 0,        width: 0.5, height: 1 / 3 },    // MPR 1 top-right
+            { x: 0.5, y: 1 / 3,    width: 0.5, height: 1 / 3 },    // MPR 2 mid-right
+            { x: 0.5, y: 2 / 3,    width: 0.5, height: 1 / 3 },    // MPR 3 bot-right
+          ],
+        };
+        hp.addProtocol('linkrad3D', d3d);
+        console.log('[LinkRad] registered hanging protocol: linkrad3D (1-left + 3-right)');
       }
-      if (!_pristineLinkradMpr) {
-        // MPR: clone mpr, change 3-horizontal to 1-left + 2-right.
-        var mprProto = hp.getProtocolById('mpr');
-        if (mprProto) {
-          var mpr2 = JSON.parse(JSON.stringify(mprProto));
-          mpr2.id = 'linkradMpr';
-          mpr2.name = 'LinkRad MPR';
-          mpr2.locked = false;
-          mpr2.isPreset = false;
-          mpr2.stages[0].viewportStructure.properties = {
-            rows: 2,
-            columns: 2,
-            layoutOptions: [
-              { x: 0,   y: 0,   width: 0.5, height: 1 },     // big axial left
-              { x: 0.5, y: 0,   width: 0.5, height: 0.5 },   // sagittal top-right
-              { x: 0.5, y: 0.5, width: 0.5, height: 0.5 },   // coronal bot-right
-            ],
-          };
-          _pristineLinkradMpr = mpr2;
-          console.log('[LinkRad] built pristine linkradMpr (1-left + 2-right)');
-        }
+      // MPR mode: clone mpr, change from 3-horizontal to 1-left + 2-right
+      var mprProto = hp.getProtocolById('mpr');
+      if (mprProto) {
+        var mpr2 = JSON.parse(JSON.stringify(mprProto));
+        mpr2.id = 'linkradMpr';
+        mpr2.name = 'LinkRad MPR';
+        mpr2.locked = false;
+        mpr2.isPreset = false;
+        mpr2.stages[0].viewportStructure.properties = {
+          rows: 2,
+          columns: 2,
+          layoutOptions: [
+            { x: 0,   y: 0,   width: 0.5, height: 1 },     // big axial left
+            { x: 0.5, y: 0,   width: 0.5, height: 0.5 },   // sagittal top-right
+            { x: 0.5, y: 0.5, width: 0.5, height: 0.5 },   // coronal bot-right
+          ],
+        };
+        hp.addProtocol('linkradMpr', mpr2);
+        console.log('[LinkRad] registered hanging protocol: linkradMpr (1-left + 2-right)');
       }
-      // Always re-register a fresh deep clone so cornerstone mutations
-      // from the previous run don't poison this run.
-      if (_pristineLinkrad3D) hp.addProtocol('linkrad3D', JSON.parse(JSON.stringify(_pristineLinkrad3D)));
-      if (_pristineLinkradMpr) hp.addProtocol('linkradMpr', JSON.parse(JSON.stringify(_pristineLinkradMpr)));
+      _customProtocolsRegistered = true;
     } catch (e) {
       console.warn('[LinkRad] custom protocol registration failed', e);
     }
   }
 
-  // Reset camera + VOI on every viewport via OHIF's resetViewport command.
-  // Used between mode switches so per-viewport state (VOI, camera, slab
-  // thickness, blend mode, colormap) doesn't leak from MPR/3D back to 2D
-  // (observed: 2D → MPR → 2D rendered with carried-over slab/blend even
-  // though the displayed W:1500 L:-700 said otherwise).
-  function resetAllViewports() {
-    try {
-      var cm = window.commandsManager;
-      var grid = window.services && window.services.viewportGridService && window.services.viewportGridService.getState();
-      if (!cm || !grid) return;
-      viewportsAsArray(grid).forEach(function (e) {
-        try {
-          cm.run({
-            commandName: 'resetViewport',
-            commandOptions: { viewportId: e.id },
-            context: 'CORNERSTONE',
-          });
-        } catch (err) { /* per-viewport reset failure is non-fatal */ }
-      });
-    } catch (err) { /* swallow */ }
-  }
-
   function switchMode(mode) {
-    // Reset viewport state on the OUTGOING viewports first. Without this,
-    // cornerstone3D leaks per-displaySet state (VOI, slab thickness, blend
-    // mode, colormap) into the volume cache, and the leak comes back when
-    // the user returns to that mode.
-    resetAllViewports();
     registerCustomProtocols();
     // Capture the currently-loaded display set before we switch protocols.
     // After the layout reflows, we'll push the same series into all new viewports
@@ -2996,11 +2957,6 @@
       } catch (e) {
         console.warn('[LinkRad toolbar] setHangingProtocol failed', protocolId, e);
       }
-      // Belt-and-braces: also reset the NEW viewports once cornerstone has
-      // had a moment to build them. Some state survives the protocol swap
-      // because cornerstone re-binds the same volume actors when the same
-      // displaySet is reused — this second pass scrubs the new viewports.
-      setTimeout(resetAllViewports, 400);
     } else {
       console.log('[LinkRad toolbar] mode →', mode, '(no protocol mapping)');
     }
