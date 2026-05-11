@@ -1,10 +1,9 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react'
 import api from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useTeleradTabs, SYS_WORKLIST } from '../context/TeleradTabsContext'
 import CaseTabBar from '../components/CaseTabBar'
 import PatientDetailView from '../components/PatientDetailView'
-import InlineViewer from '../components/InlineViewer'
 
 const VIEWER_DOCKED_KEY = 'linkrad.reader.viewerDocked'
 const REPORT_WIDTH_KEY = 'linkrad.reader.reportWidth'
@@ -174,7 +173,7 @@ function ViewImagesButton({ studyUID, imageStatus, imageCount, compact = false }
 
 // ── Study list (left) ────────────────────────────────────────────────────────
 
-function StudyList({ studies, selectedId, onSelect, onOpen, groupKey, onGroupKey, filterBar }) {
+function StudyList({ studies, selectedId, onSelect, onOpen, onOpenInNewTab, groupKey, onGroupKey, filterBar }) {
   return (
     <div className="w-[520px] flex-shrink-0 flex flex-col bg-white border-r border-gray-200">
       {/* Pill group tabs */}
@@ -223,6 +222,20 @@ function StudyList({ studies, selectedId, onSelect, onOpen, groupKey, onGroupKey
                   <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${pill.cls}`}>{pill.label}</span>
                   <span className="text-[10px] text-gray-400 font-mono">{fmtDateTime(s.studyDate || s.appointmentTime || s.createdAt)}</span>
                 </div>
+                {/* Icon-button: open this study in a brand-new browser tab
+                    (cold-start OHIF, by design — escape hatch for compare-
+                    side-by-side). Uses role+stopPropagation rather than a
+                    nested <button> to avoid invalid HTML inside the row. */}
+                {onOpenInNewTab && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); onOpenInNewTab(s) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpenInNewTab(s) } }}
+                    title="Mở viewer trong tab trình duyệt mới (cold start)"
+                    className="text-gray-300 hover:text-blue-600 hover:bg-blue-50 rounded px-1.5 py-0.5 text-sm cursor-pointer flex-shrink-0"
+                  >↗</span>
+                )}
               </div>
             </button>
           )
@@ -234,7 +247,7 @@ function StudyList({ studies, selectedId, onSelect, onOpen, groupKey, onGroupKey
 
 // ── Preview / detail panel (right) — shown when a row is selected on worklist
 
-function StudyPreview({ study, onOpen }) {
+function StudyPreview({ study, onOpen, onOpenInNewTab }) {
   const age = calcAge(study.dob)
   const pill = STATUS_PILL[study.status] || { label: study.status, cls: 'bg-gray-100 text-gray-700' }
 
@@ -282,6 +295,16 @@ function StudyPreview({ study, onOpen }) {
           className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg">
           Mở ca →
         </button>
+        {/* Escape hatch: open the study in a fresh browser tab. Independent of
+            the docked iframe and the named undock popup; this one cold-starts
+            OHIF by design — useful for compare-side-by-side. */}
+        {onOpenInNewTab && (
+          <button onClick={() => onOpenInNewTab(study)}
+            title="Mở viewer trong tab trình duyệt mới (cold start)"
+            className="w-full py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs rounded-lg">
+            ↗ Mở tab mới
+          </button>
+        )}
         <div className="text-[10px] text-gray-400 text-center">Tip: double-click hàng để mở nhanh</div>
       </div>
     </div>
@@ -398,7 +421,11 @@ function FilterBar({ modalityFilter, onModalityFilter, siteFilter, onSiteFilter,
 
 export default function Teleradiology() {
   const { auth } = useAuth()
-  const { openCases, activeCaseId, setActiveCaseId, openCase, closeCase, syncWithStudies } = useTeleradTabs()
+  const {
+    openCases, activeCaseId, setActiveCaseId, openCase, closeCase, syncWithStudies,
+    setViewerSlotRect, undockedRef,
+  } = useTeleradTabs()
+  const slotRef = useRef(null)
 
   const [studies, setStudies] = useState([])
   const [loading, setLoading] = useState(true)
@@ -443,31 +470,67 @@ export default function Teleradiology() {
     }
   }
 
-  // Popup-reuse: if the popup is still alive AND already showing the same
-  // study, focusing it skips the OHIF cold-start. First undock per study is
-  // unavoidable — popup has its own browsing context and must boot OHIF.
-  const popupRef = useRef(null)
-  const popupStudyRef = useRef(null)
-
+  // Popup-reuse: if the popup is alive we swap-load via postMessage instead
+  // of opening with a new URL. Same one-cold-start-per-session principle as
+  // the docked iframe (PersistentOHIFHost). undockedRef lives in
+  // TeleradTabsContext so it survives /teleradiology unmount + remount.
   const undockViewer = async (study) => {
     if (!study?.studyUID) return
-    const existing = popupRef.current
-    if (existing && !existing.closed && popupStudyRef.current === study.studyUID) {
-      try { existing.focus() } catch {}
+    const cur = undockedRef.current
+    const alive = !!(cur && cur.win && !cur.win.closed)
+
+    // Same study already shown → focus, no work
+    if (alive && cur.studyUID === study.studyUID) {
+      try { cur.win.focus() } catch {}
       persistViewerDocked(false)
       return
     }
+
+    // Different study, popup alive → swap via postMessage (no cold start)
+    if (alive) {
+      try {
+        cur.win.postMessage({
+          source: 'linkrad-parent',
+          type: 'lr:loadStudy',
+          studyUID: study.studyUID,
+          correlationId: 'undock-' + Date.now(),
+        }, '*')
+        cur.studyUID = study.studyUID
+        cur.win.focus()
+        persistViewerDocked(false)
+        return
+      } catch {
+        // Falls through to cold-open if postMessage fails
+      }
+    }
+
+    // No popup / dead popup → spawn fresh (this one cold-starts)
     try {
       const r = await api.get(`/ris/orthanc/viewer-url/${encodeURIComponent(study.studyUID)}`)
       if (r.data?.found === false) {
         alert('Ca này chưa có ảnh DICOM trong PACS.')
         return
       }
-      // Named window so any existing popup is reused (navigated) rather than
-      // opened as a second window.
-      popupRef.current = window.open(r.data.url, 'linkrad-viewer')
-      popupStudyRef.current = study.studyUID
+      const win = window.open(r.data.url, 'linkrad-viewer')
+      undockedRef.current = { win, studyUID: study.studyUID }
       persistViewerDocked(false)
+    } catch {
+      alert('Không mở được viewer')
+    }
+  }
+
+  // Escape hatch: open a study in a brand-new browser tab with no
+  // coordination — fresh OHIF instance, by design. Used when doctors
+  // explicitly want a second viewer (compare side-by-side, second monitor).
+  const openInNewTab = async (study) => {
+    if (!study?.studyUID) return
+    try {
+      const r = await api.get(`/ris/orthanc/viewer-url/${encodeURIComponent(study.studyUID)}`)
+      if (r.data?.found === false) {
+        alert('Ca này chưa có ảnh DICOM trong PACS.')
+        return
+      }
+      window.open(r.data.url, '_blank', 'noopener,noreferrer')
     } catch {
       alert('Không mở được viewer')
     }
@@ -486,6 +549,35 @@ export default function Teleradiology() {
   }
 
   useEffect(() => { load() }, [])
+
+  // Publish the slot's bounding rect to TeleradTabsContext so
+  // <PersistentOHIFHost/> can pin its fixed iframe over the same area.
+  // The slot's geometry can change without a remount (report-width drag,
+  // window resize, sidebar collapse), so we watch it with ResizeObserver
+  // plus a window resize listener. On unmount (e.g. user navigates to
+  // /inventory) we publish null which parks the iframe off-screen.
+  const activeCase = openCases.find(c => c._id === activeCaseId)
+  const slotShouldExist = !!activeCase && viewerDocked
+  useLayoutEffect(() => {
+    const el = slotRef.current
+    if (!el) {
+      setViewerSlotRect(null)
+      return
+    }
+    const publish = () => {
+      const r = el.getBoundingClientRect()
+      setViewerSlotRect({ top: r.top, left: r.left, width: r.width, height: r.height })
+    }
+    publish()
+    const ro = new ResizeObserver(publish)
+    ro.observe(el)
+    window.addEventListener('resize', publish)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', publish)
+      setViewerSlotRect(null)
+    }
+  }, [setViewerSlotRect, slotShouldExist, isViewerExpanded, reportWidth])
 
   const siteOptions = useMemo(
     () => Array.from(new Set(studies.map(s => s.site).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -516,8 +608,6 @@ export default function Teleradiology() {
   }, [filtered, selectedId])
 
   const selected = useMemo(() => filtered.find(s => s._id === selectedId), [filtered, selectedId])
-  const activeCase = openCases.find(c => c._id === activeCaseId)
-
 
   // Jump to another case from the queue rail — opens as a tab if it isn't
   // already one. Doesn't auto-claim (the "Ca kế tiếp" button handles claiming).
@@ -560,54 +650,42 @@ export default function Teleradiology() {
         onClose={closeCase}
       />
       <div className="flex-1 flex min-h-0 overflow-hidden relative">
-        {/* IFRAME STACK — lifted above the {activeCase ? ... : ...} ternary
-            so it stays mounted when the user clicks the Worklist tab. The
-            previous version put this inside the activeCase branch, which
-            meant going to worklist (activeCase = null) unmounted every
-            open case's OHIF iframe, and reopening a case remounted them
-            all from cold start. This is the bug the user reported.
-
-            Positioning is state-driven so React identity is preserved:
-              • activeCase + !expanded  →  in normal flex flow (left slot)
-              • activeCase + expanded   →  fixed overlay covering the Layout
-                                            sidebar + header, leaving room
-                                            for the report panel on the right
-              • no activeCase           →  position:absolute + visibility:hidden
-                                            (off-screen but full size, so the
-                                            iframe canvases keep their
-                                            dimensions and WebGL contexts
-                                            stay alive — display:none would
-                                            kill them; see commit 0f93fe5)
-
-            All open cases' iframes are stacked absolute-positioned inside
-            this wrapper; only the active one has visibility:visible. */}
-        {viewerDocked && openCases.length > 0 && (
+        {/* Viewer SLOT — the persistent OHIF iframe (rendered at App level by
+            <PersistentOHIFHost/>) pins itself over this rect via position:fixed.
+            The slot itself is just a sized placeholder with the action buttons
+            overlaid in its top-right corner. When the worklist tab is active
+            this slot doesn't render — the host parks the iframe off-screen,
+            keeping the OHIF instance warm for the next case open. */}
+        {viewerDocked && activeCase && (
           <div
-            className="flex bg-gray-900"
-            style={
-              activeCase
-                ? isViewerExpanded
-                  ? { position: 'fixed', top: 0, left: 0, right: `${reportWidth}px`, bottom: 0, zIndex: 50 }
-                  : { position: 'relative', flex: '1 1 0%', minWidth: 0 }
-                : { position: 'absolute', inset: 0, visibility: 'hidden', pointerEvents: 'none', zIndex: -1 }
+            ref={slotRef}
+            className="relative"
+            style={isViewerExpanded
+              ? { position: 'fixed', top: 0, left: 0, right: `${reportWidth}px`, bottom: 0, zIndex: 50, background: 'transparent', pointerEvents: 'none' }
+              : { flex: '1 1 0%', minWidth: 0, position: 'relative', background: 'transparent', pointerEvents: 'none' }
             }
           >
-            {openCases.map(c => (
-              <div
-                key={c._id}
-                className="absolute inset-0 flex"
-                style={{ visibility: c._id === activeCaseId ? 'visible' : 'hidden' }}
+            {/* Action buttons floating above the iframe. The slot itself is
+                transparent + pointer-events:none so the persistent iframe
+                (rendered at App level with position:fixed, zIndex:5) is
+                visible and interactive through it. The buttons re-enable
+                pointer-events for themselves. */}
+            <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
+              <button
+                onClick={toggleViewerExpanded}
+                title={isViewerExpanded ? 'Thu gọn ảnh' : 'Mở rộng ảnh (thu nhỏ kết quả)'}
+                className="px-2.5 py-1 bg-gray-800/80 hover:bg-gray-700 text-gray-200 text-xs rounded-md border border-gray-700 backdrop-blur-sm transition-colors"
               >
-                <InlineViewer
-                  studyUID={c.studyUID}
-                  onUndock={() => undockViewer(c)}
-                  hidden={false}
-                  expanded={isViewerExpanded}
-                  onToggleExpanded={toggleViewerExpanded}
-                  isActive={c._id === activeCaseId}
-                />
-              </div>
-            ))}
+                {isViewerExpanded ? '↔ Thu gọn' : '⇔ Mở rộng ảnh'}
+              </button>
+              <button
+                onClick={() => undockViewer(activeCase)}
+                title="Mở viewer trong cửa sổ riêng"
+                className="px-2.5 py-1 bg-gray-800/80 hover:bg-gray-700 text-gray-200 text-xs rounded-md border border-gray-700 backdrop-blur-sm transition-colors"
+              >
+                ⇗ Cửa sổ riêng
+              </button>
+            </div>
           </div>
         )}
         {activeCase ? (
@@ -650,12 +728,13 @@ export default function Teleradiology() {
               selectedId={selectedId}
               onSelect={(s) => setSelectedId(s._id)}
               onOpen={openCase}
+              onOpenInNewTab={openInNewTab}
               groupKey={groupKey}
               onGroupKey={setGroupKey}
               filterBar={filterBar}
             />
             {selected ? (
-              <StudyPreview study={selected} onOpen={openCase} />
+              <StudyPreview study={selected} onOpen={openCase} onOpenInNewTab={openInNewTab} />
             ) : (
               <div className="flex-1 flex items-center justify-center text-center text-gray-400 text-sm p-8">
                 <div className="max-w-xs">

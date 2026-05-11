@@ -31,6 +31,13 @@ services:
     environment:
       # Internal Docker network hostname — overridden by ORTHANC_BACKEND_URL env var in cloud
       ORTHANC_BACKEND_URL: http://orthanc:8042
+    # Bind-mount the LinkRad customization scripts so edits hot-reload on
+    # browser refresh — no image rebuild needed during dev. The Dockerfile
+    # still bakes them in for prod (Railway) deploys.
+    volumes:
+      - ./ohif/linkrad-toolbar.js:/usr/share/nginx/html/linkrad-toolbar.js:ro
+      - ./ohif/linkrad-extras.js:/usr/share/nginx/html/linkrad-extras.js:ro
+      - ./ohif/ohif-config.js:/usr/share/nginx/html/app-config.js:ro
     depends_on:
       - orthanc
     restart: unless-stopped

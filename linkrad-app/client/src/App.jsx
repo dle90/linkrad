@@ -38,6 +38,7 @@ import DashboardFinance from './pages/DashboardFinance'
 import CriticalFindings from './pages/CriticalFindings'
 import AuditLog from './pages/AuditLog'
 import ReportTemplates from './pages/ReportTemplates'
+import PersistentOHIFHost from './components/PersistentOHIFHost'
 
 function AuthenticatedRoutes() {
   const { auth } = useAuth()
@@ -123,6 +124,10 @@ export default function App() {
     <AuthProvider>
       <TeleradTabsProvider>
         <AppRoutes />
+        {/* Persistent OHIF iframe lives at App level so it survives route
+            navigation and case-tab close. Renders null until the first case
+            is opened. Positions itself via TeleradTabsContext.viewerSlotRect. */}
+        <PersistentOHIFHost />
       </TeleradTabsProvider>
     </AuthProvider>
   )

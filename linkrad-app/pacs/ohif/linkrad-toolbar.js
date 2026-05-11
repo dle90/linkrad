@@ -1010,6 +1010,15 @@
   // sample as black even on a healthy render. MPR cuts always have visible
   // anatomy when WebGL is working.
   var _renderHealthDone = false;
+  // Tracks how many times the user has entered 3D/MPR mode in this session.
+  // First entry can hit the cold ANGLE shader-compile race and benefit from
+  // a one-shot reload. Subsequent entries (e.g. swap-back-with-restore)
+  // shouldn't reload — shader cache is warm, all-black is a different bug
+  // (vtk.js re-mount race), and reloading would destroy the snapshotted
+  // state the parent just restored.
+  var _volumeModeEntries = 0;
+  // One-shot auto-retry guard for the cold ANGLE shader-compile race.
+  var _renderRetryDone = false;
   function checkRenderHealth() {
     if (_renderHealthDone) return;
     try {
@@ -1046,18 +1055,21 @@
       }
       _renderHealthDone = true;
       if (!allBlack) {
-        try { sessionStorage.setItem('lrRenderRecover', '0'); } catch (e) {}
         return;
       }
-      var attempts = 0;
-      try { attempts = parseInt(sessionStorage.getItem('lrRenderRecover') || '0', 10); } catch (e) {}
-      if (attempts >= 1) {
-        console.error('[LinkRad] Volume render failing after retry. Suggest: update Intel driver, or chrome://flags → ANGLE → D3D11 WARP.');
+      // All-black detected — most likely the cold ANGLE shader-compile race
+      // on Intel UHD. Auto-retry by re-running switchMode in-place (no full
+      // page reload). The first failed compile primes ANGLE's translated-
+      // shader cache, so the second attempt almost always succeeds. We cap
+      // at one retry to avoid loops on broken drivers.
+      if (_renderRetryDone) {
+        console.error('[LinkRad] 3D still all-black after one auto-retry. Click the 3D button manually, or update Intel GPU driver.');
         return;
       }
-      try { sessionStorage.setItem('lrRenderRecover', String(attempts + 1)); } catch (e) {}
-      console.warn('[LinkRad] Volume render came back all-black on orthographic viewports (likely vtk.js shader compile race). Reloading once...');
-      window.location.reload();
+      _renderRetryDone = true;
+      _renderHealthDone = false;  // let the check run again after the retry
+      console.warn('[LinkRad] 3D all-black on first mount — auto-retrying switchMode in-place (no reload)');
+      setTimeout(function () { try { switchMode(currentMode); } catch (e) {} }, 300);
     } catch (e) { console.warn('[LinkRad] checkRenderHealth failed', e); }
   }
 
@@ -2896,6 +2908,16 @@
             { x: 0.5, y: 2 / 3,    width: 0.5, height: 1 / 3 },    // MPR 3 bot-right
           ],
         };
+        // Rename viewport IDs so they don't collide with 2D mode's "default".
+        // OHIF's per-viewport-id presentation cache (LUT + transfer function)
+        // is the root cause of the binarized 2D image after exiting 3D — if
+        // the IDs don't overlap, no cache key collision, no bleed.
+        if (d3d.stages[0].viewports && d3d.stages[0].viewports.length) {
+          d3d.stages[0].viewports.forEach(function (v, i) {
+            v.viewportOptions = v.viewportOptions || {};
+            v.viewportOptions.viewportId = 'lr3d-' + i;
+          });
+        }
         hp.addProtocol('linkrad3D', d3d);
         console.log('[LinkRad] registered hanging protocol: linkrad3D (1-left + 3-right)');
       }
@@ -2907,6 +2929,12 @@
         mpr2.name = 'LinkRad MPR';
         mpr2.locked = false;
         mpr2.isPreset = false;
+        if (mpr2.stages[0].viewports && mpr2.stages[0].viewports.length) {
+          mpr2.stages[0].viewports.forEach(function (v, i) {
+            v.viewportOptions = v.viewportOptions || {};
+            v.viewportOptions.viewportId = 'lrmpr-' + i;
+          });
+        }
         mpr2.stages[0].viewportStructure.properties = {
           rows: 2,
           columns: 2,
@@ -2925,8 +2953,61 @@
     }
   }
 
+  // Clear OHIF v3.8's per-viewport presentation cache. OHIF stores LUT
+  // (W/L, invert, colormap) and position (camera, slab, blendMode) keyed by
+  // viewportId so that when a new viewport binds to the same key the prior
+  // user-tweaks are re-applied. That's exactly the cross-mode leak fingered
+  // in project_open_issues.md (CT 2D lung W/L sticks into MPR, MPR layout
+  // bleeds into 3D, etc.). We can't call clearPresentation (doesn't exist
+  // in v3.8), but pushing empty objects through setPresentations resets it.
+  function clearAllPresentations() {
+    var svcs = window.services;
+    var grid = svcs && svcs.viewportGridService && svcs.viewportGridService.getState && svcs.viewportGridService.getState();
+    var csvc = svcs && svcs.cornerstoneViewportService;
+    if (!grid || !csvc || typeof csvc.setPresentations !== 'function') return;
+    try {
+      viewportsAsArray(grid).forEach(function (e) {
+        try {
+          csvc.setPresentations(e.id, { lutPresentation: {}, positionPresentation: {} });
+        } catch (err) { /* viewport not yet bound to a renderer — ignore */ }
+      });
+    } catch (e) { console.warn('[LinkRad] clearAllPresentations failed', e); }
+  }
+
   function switchMode(mode) {
+    if (mode === 'mpr' || mode === '3d') _volumeModeEntries++;
     registerCustomProtocols();
+    var leavingVolumeMode = (currentMode === 'mpr' || currentMode === '3d');
+    // 2D-after-volume rendering bleed is unfixable at the cornerstone /
+    // OHIF API level (probed via spike-2d-bleed.js: setPresentations,
+    // disableElement, resetProperties, setViewportColormap, displaySet
+    // re-bind, viewport-ID rename, purgeVolumeCache — all fail to clear
+    // the VTK transfer state). The ONLY thing that reliably wipes state
+    // is OHIF's defaultRouteInit re-running, which happens on location
+    // change. Force it by pushing a same-study URL with a cache-buster.
+    if (leavingVolumeMode && mode === '2d') {
+      try {
+        var dss = window.services && window.services.displaySetService;
+        var allDS = (dss && dss.getActiveDisplaySets && dss.getActiveDisplaySets()) || [];
+        var studyUID = allDS[0] && allDS[0].StudyInstanceUID;
+        if (studyUID) {
+          currentMode = '2d';
+          renderToolbar();
+          renderSidebar();
+          var url = new URL(window.location.href);
+          url.searchParams.set('StudyInstanceUIDs', studyUID);
+          url.searchParams.set('_lr2d', String(Date.now()));
+          window.history.pushState({}, '', url.toString());
+          window.dispatchEvent(new PopStateEvent('popstate'));
+          console.log('[LinkRad] 2D mode after volume — forcing defaultRouteInit re-run for clean state');
+          return; // skip the normal setHangingProtocol path
+        }
+      } catch (e) { console.warn('[LinkRad] force-reinit on 2D exit failed', e); }
+    }
+    if (leavingVolumeMode) {
+      // For MPR (kept around but rare) we still try the cheap clear.
+      clearAllPresentations();
+    }
     // Capture the currently-loaded display set before we switch protocols.
     // After the layout reflows, we'll push the same series into all new viewports
     // so MPR/3D renders the actual volume rather than empty placeholders.
@@ -2977,6 +3058,14 @@
       setTimeout(checkRenderHealth, 12000);
     } else {
       hideVolumeLoadingOverlay();
+      // Belt-and-suspenders fix for the volume → 2D bleed (binarized image
+      // in viewport 0). OHIF's presentation cache re-applies the prior
+      // volume-mode VOI / blendMode to the new stack viewport that shares
+      // the same viewport-ID + display-set key. Force-reset properties +
+      // camera AFTER setHangingProtocol mounts the new stack viewports.
+      // (post-volume-exit cleanup no longer needed — linkrad3D and linkradMpr
+      //  use unique viewport IDs (lr3d-* and lrmpr-*) so they can't share a
+      //  presentation-cache key with 2D mode's "default" viewport.)
     }
 
     // Note iter 11: manually pushing display sets here doesn't actually trigger
@@ -3055,6 +3144,353 @@
   }
 
   // ============================================================
+  // Persistent host protocol — single iframe, many studies
+  // ============================================================
+  // The parent app (PersistentOHIFHost) drives study switching via
+  // postMessage so the iframe boots once and stays warm across cases.
+  // OHIF v3.8.3's Mode.tsx useEffect depends on `location` + parsed
+  // studyInstanceUIDs, so pushing a new search param + dispatching
+  // popstate re-runs defaultRouteInit (with proper onModeExit cleanup)
+  // WITHOUT remounting ViewerLayout. Our injected DOM and globals
+  // (toolbar, watchdog, services/extensionManager/commandsManager)
+  // survive untouched. See scripts/spike-study-swap.js for the
+  // Playwright spike that validated this.
+  //
+  // Messages from parent (source: 'linkrad-parent'):
+  //   tab-activated     — legacy, kept for compat
+  //   lr:loadStudy      { studyUID, restore?, correlationId? }
+  //   lr:snapshotState  { correlationId }
+  //   lr:purgeStudy     { studyUID, correlationId? }
+  //
+  // Messages from iframe (source: 'linkrad-iframe'):
+  //   lr:loadStudy:done       { studyUID, correlationId? }
+  //   lr:loadStudy:error      { studyUID, error, correlationId? }
+  //   lr:snapshotState:result { state, correlationId }
+  //   lr:purgeStudy:done      { studyUID, removed, correlationId? }
+
+  function _findDisplaySetsForStudy(studyUID) {
+    var dss = window.services && window.services.displaySetService;
+    if (!dss || !dss.getActiveDisplaySets) return [];
+    return (dss.getActiveDisplaySets() || []).filter(function (d) {
+      return d && d.StudyInstanceUID === studyUID;
+    });
+  }
+
+  function _readViewportRuntimeState(viewportId) {
+    var cs = window.cornerstone;
+    if (!cs || !cs.getRenderingEngines) return null;
+    var engines = cs.getRenderingEngines() || [];
+    for (var i = 0; i < engines.length; i++) {
+      var vp;
+      try { vp = engines[i].getViewport(viewportId); } catch (e) {}
+      if (!vp) continue;
+      var out = {};
+      try {
+        var props = vp.getProperties ? vp.getProperties() : null;
+        if (props) {
+          if (props.voiRange) out.voiRange = { lower: props.voiRange.lower, upper: props.voiRange.upper };
+          if (typeof props.invert === 'boolean') out.invert = props.invert;
+          if (props.colormap) out.colormap = props.colormap;
+        }
+      } catch (e) {}
+      try { if (typeof vp.getCurrentImageIdIndex === 'function') out.sliceIndex = vp.getCurrentImageIdIndex(); } catch (e) {}
+      try { if (typeof vp.getBlendMode === 'function') out.blendMode = vp.getBlendMode(); } catch (e) {}
+      try { if (typeof vp.getSlabThickness === 'function') out.slabThickness = vp.getSlabThickness(); } catch (e) {}
+      try {
+        if (typeof vp.getCamera === 'function') {
+          var c = vp.getCamera();
+          if (c) out.camera = {
+            parallelScale: c.parallelScale,
+            focalPoint: c.focalPoint && c.focalPoint.slice ? c.focalPoint.slice() : c.focalPoint,
+            position: c.position && c.position.slice ? c.position.slice() : c.position,
+            viewUp: c.viewUp && c.viewUp.slice ? c.viewUp.slice() : c.viewUp,
+          };
+        }
+      } catch (e) {}
+      return out;
+    }
+    return null;
+  }
+
+  function _enumerateGridViewports(grid) {
+    // viewportGridService.getState().viewports has been a Map in some OHIF
+    // builds and a plain object in others. Normalize to a list.
+    var entries = [];
+    var v = grid.viewports;
+    if (!v) return entries;
+    if (typeof v.forEach === 'function' && typeof v.entries === 'function') {
+      v.forEach(function (vp, viewportId) { entries.push({ id: viewportId, vp: vp }); });
+    } else if (Array.isArray(v)) {
+      v.forEach(function (vp) {
+        var id = (vp.viewportOptions && vp.viewportOptions.viewportId) || vp.id;
+        entries.push({ id: id, vp: vp });
+      });
+    } else if (typeof v === 'object') {
+      Object.keys(v).forEach(function (k) { entries.push({ id: k, vp: v[k] }); });
+    }
+    return entries;
+  }
+
+  function captureState() {
+    var gs = window.services && window.services.viewportGridService;
+    var grid = gs && gs.getState && gs.getState();
+    if (!grid) return null;
+    var dss = window.services && window.services.displaySetService;
+    var allDS = (dss && dss.getActiveDisplaySets && dss.getActiveDisplaySets()) || [];
+    var dsById = {};
+    allDS.forEach(function (d) { dsById[d.displaySetInstanceUID] = d; });
+
+    var entries = _enumerateGridViewports(grid);
+    var bindings = entries.map(function (e) {
+      var dsUIDs = e.vp.displaySetInstanceUIDs || [];
+      var refs = dsUIDs.map(function (id) {
+        var d = dsById[id];
+        return d ? { seriesUID: d.SeriesInstanceUID, sopClass: d.SOPClassUID } : null;
+      }).filter(Boolean);
+      return {
+        viewportId: e.id,
+        seriesRefs: refs,
+        viewportOptions: e.vp.viewportOptions || null,
+        displaySetOptions: e.vp.displaySetOptions || null,
+      };
+    });
+
+    var viewportStates = entries.map(function (e) {
+      return { viewportId: e.id, runtime: _readViewportRuntimeState(e.id) };
+    });
+
+    var hp = window.services && window.services.hangingProtocolService;
+    var active = hp && hp.getActiveProtocol && hp.getActiveProtocol();
+    var hpId = active && active.protocol && active.protocol.id;
+
+    var layout = grid.layout || { numRows: grid.numRows, numCols: grid.numCols };
+    return {
+      studyUID: allDS[0] ? allDS[0].StudyInstanceUID : null,
+      hpId: hpId,
+      currentMode: currentMode,
+      lastUserLayout: _lastUserLayout,
+      layout: { numRows: layout.numRows, numCols: layout.numCols },
+      bindings: bindings,
+      viewportStates: viewportStates,
+    };
+  }
+
+  function _waitForStudyDisplaySets(studyUID, timeoutMs) {
+    timeoutMs = timeoutMs || 20000;
+    return new Promise(function (resolve, reject) {
+      var t0 = Date.now();
+      function poll() {
+        var got = _findDisplaySetsForStudy(studyUID);
+        if (got.length > 0) return resolve(got);
+        if (Date.now() - t0 > timeoutMs) {
+          return reject(new Error('Timeout waiting for displaySets of ' + studyUID));
+        }
+        setTimeout(poll, 200);
+      }
+      poll();
+    });
+  }
+
+  function applyRestoreState(state) {
+    if (!state) return Promise.resolve();
+    return _waitForStudyDisplaySets(state.studyUID).then(function () {
+      var gs = window.services.viewportGridService;
+      var lul = state.lastUserLayout;
+      var didMammo = false;
+      var didMode = false;
+
+      // 1. Re-apply the user's hanging-protocol intent. lastUserLayout is
+      //    the authoritative record of "what did the user click last":
+      //    - mammo:  CC/MLO/etc. — setMammoHanging does layout + populate
+      //              + edge-stick re-install in one call.
+      //    - protocol: 2D / MPR / 3D mode tab — switchMode does HP + custom
+      //                overlays (volume loading, plane pickers, orient cube).
+      //    - grid:   raw grid dimensions (Bố cục sidebar item).
+      //    - null:   user never picked anything → let OHIF's default HP run.
+      if (lul && lul.kind === 'mammo' && MAMMO_HANGING && MAMMO_HANGING[lul.arg]) {
+        try { setMammoHanging(lul.arg, { silent: true }); didMammo = true; }
+        catch (e) { console.warn('[LinkRad restore] mammo HP failed', e); }
+      } else if (state.currentMode && state.currentMode !== '2d') {
+        try { switchMode(state.currentMode); didMode = true; }
+        catch (e) { console.warn('[LinkRad restore] switchMode failed', e); }
+      } else if (lul && lul.kind === 'grid' && window.commandsManager) {
+        try {
+          window.commandsManager.run({
+            commandName: 'setViewportGridLayout',
+            commandOptions: { numRows: lul.rows, numCols: lul.cols },
+            context: 'DEFAULT',
+          });
+        } catch (e) { console.warn('[LinkRad restore] grid layout failed', e); }
+      } else if (lul && lul.kind === 'protocol' && lul.id && window.commandsManager) {
+        // Catch-all for protocol entries we don't map via currentMode
+        try {
+          window.commandsManager.run({
+            commandName: 'setHangingProtocol',
+            commandOptions: { protocolId: lul.id },
+            context: 'DEFAULT',
+          });
+        } catch (e) { console.warn('[LinkRad restore] setHangingProtocol failed', e); }
+      }
+
+      // 2. Restore the watchdog's memory NOW so it doesn't undo our HP.
+      if (lul) _lastUserLayout = lul;
+
+      // 3. Wait for HP / Mammo populate to settle, then bindings + runtime.
+      //    Mammo (populateMammoViewports) has a 350ms internal delay; modes
+      //    fire setHangingProtocol which can take ~400-700ms to mount volume
+      //    viewports. Default plain HP settles in ~250ms.
+      var settleMs = didMammo ? 900 : (didMode ? 1200 : 500);
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          // 4. Bindings — only for non-Mammo paths. setMammoHanging already
+          //    ran populateMammoViewports which calls setDisplaySetsForViewports
+          //    with its own positional slot mapping; restoring stored bindings
+          //    on top would fight it. For mode switches (3D/MPR) the protocol
+          //    binds the active volume to its viewports; stored bindings are
+          //    typically the same so this is a no-op.
+          if (!didMammo) {
+            var dss = window.services.displaySetService;
+            var allDS = (dss.getActiveDisplaySets && dss.getActiveDisplaySets()) || [];
+            var updates = (state.bindings || []).map(function (b) {
+              if (!b.seriesRefs || !b.seriesRefs.length) return null;
+              var dsUIDs = b.seriesRefs.map(function (ref) {
+                for (var i = 0; i < allDS.length; i++) {
+                  if (allDS[i].SeriesInstanceUID === ref.seriesUID &&
+                      (!ref.sopClass || allDS[i].SOPClassUID === ref.sopClass)) {
+                    return allDS[i].displaySetInstanceUID;
+                  }
+                }
+                for (var j = 0; j < allDS.length; j++) {
+                  if (allDS[j].SeriesInstanceUID === ref.seriesUID) return allDS[j].displaySetInstanceUID;
+                }
+                return null;
+              }).filter(Boolean);
+              return dsUIDs.length ? {
+                viewportId: b.viewportId,
+                displaySetInstanceUIDs: dsUIDs,
+                viewportOptions: b.viewportOptions || undefined,
+                displaySetOptions: b.displaySetOptions || undefined,
+              } : null;
+            }).filter(Boolean);
+            if (updates.length && typeof gs.setDisplaySetsForViewports === 'function') {
+              try { gs.setDisplaySetsForViewports(updates); }
+              catch (e) { console.warn('[LinkRad restore] setDisplaySetsForViewports failed', e); }
+            }
+          }
+
+          // 5. Per-viewport runtime state — VOI, camera, slice, blend, slab.
+          //    For 3D/MPR (didMode) we deliberately SKIP camera + blend/slab:
+          //    cornerstone3D's volume viewport mount has a vtk.js race where
+          //    setCamera on a partially-mounted viewport triggers shader
+          //    errors and leaves orthographic panes all-black. The HP's
+          //    default camera renders fine; user can re-tweak post-restore.
+          //    We still restore VOI for the volume3d (windowing on the VRT).
+          var cs = window.cornerstone;
+          var engines = (cs && cs.getRenderingEngines && cs.getRenderingEngines()) || [];
+          (state.viewportStates || []).forEach(function (vs) {
+            if (!vs.runtime) return;
+            for (var i = 0; i < engines.length; i++) {
+              var vp;
+              try { vp = engines[i].getViewport(vs.viewportId); } catch (e) {}
+              if (!vp) continue;
+              try {
+                if (vs.runtime.voiRange && vp.setProperties) {
+                  vp.setProperties({ voiRange: vs.runtime.voiRange, invert: vs.runtime.invert });
+                }
+                if (vs.runtime.colormap && vp.setProperties) vp.setProperties({ colormap: vs.runtime.colormap });
+                if (!didMode) {
+                  if (vs.runtime.sliceIndex != null && typeof vp.setImageIdIndex === 'function') vp.setImageIdIndex(vs.runtime.sliceIndex);
+                  if (vs.runtime.blendMode != null && typeof vp.setBlendMode === 'function') vp.setBlendMode(vs.runtime.blendMode);
+                  if (vs.runtime.slabThickness != null && typeof vp.setSlabThickness === 'function') vp.setSlabThickness(vs.runtime.slabThickness);
+                  if (vs.runtime.camera && typeof vp.setCamera === 'function') vp.setCamera(vs.runtime.camera);
+                }
+                vp.render();
+              } catch (e) { console.warn('[LinkRad restore] viewport apply failed', vs.viewportId, e); }
+              break;
+            }
+          });
+          resolve();
+        }, settleMs);
+      });
+    });
+  }
+
+  function loadStudyInPlace(studyUID, restore) {
+    return new Promise(function (resolve, reject) {
+      if (!studyUID) return reject(new Error('missing studyUID'));
+      var url = new URL(window.location.href);
+      if (url.searchParams.get('StudyInstanceUIDs') === studyUID) {
+        // Already on this study — skip URL nav, just restore if asked.
+        if (restore) return applyRestoreState(restore).then(function () { resolve({ studyUID: studyUID }); }).catch(reject);
+        return resolve({ studyUID: studyUID });
+      }
+      // Belt-and-suspenders: clear OHIF's per-viewport presentation cache
+      // BEFORE re-init runs, so VOI / camera / blendMode / slabThickness
+      // from the prior study can't get re-applied to viewports of the new
+      // study (the same fingerprint as the 2D/MPR/3D bleed). The Playwright
+      // spike didn't catch this case directly, but it's cheap insurance.
+      try { clearAllPresentations(); } catch (e) {}
+      // Mammo edge-stick teardown. applyMammoDisplayConventions installs
+      // CAMERA_MODIFIED listeners + a 60fps enforce loop that snaps each
+      // viewport's chest wall to the canvas inner edge. OHIF re-uses
+      // viewport DOM nodes across study swap, so the listeners survive and
+      // keep enforcing chest-wall anchoring on the NEW study's viewports
+      // (observed: open Mammo → pick CC → swap back to CT → CT's first
+      // viewport stuck to one edge like a Mammo). Tear down before
+      // reinit; applyRestoreState re-installs if the snapshot was Mammo.
+      try { _teardownMammoEdgeListeners(); } catch (e) {}
+      try { document.body.classList.remove('lr-mammo-mode'); } catch (e) {}
+      // Clear the layout watchdog's memory. Otherwise it sees the new
+      // study's fresh HP layout (e.g. CT's 1×1) as "reverted from the
+      // user's last pick" (e.g. Mammo CC) and re-applies the OLD study's
+      // hanging protocol to the NEW study. applyRestoreState sets this
+      // back when a snapshot is being restored.
+      _lastUserLayout = null;
+      url.searchParams.set('StudyInstanceUIDs', studyUID);
+      window.history.pushState({}, '', url.toString());
+      window.dispatchEvent(new PopStateEvent('popstate'));
+
+      _waitForStudyDisplaySets(studyUID).then(function () {
+        if (restore) return applyRestoreState(restore);
+      }).then(function () { resolve({ studyUID: studyUID }); })
+        .catch(reject);
+    });
+  }
+
+  function purgeStudyVolumes(studyUID) {
+    var removed = 0;
+    try {
+      var cs = window.cornerstone;
+      if (!cs || !cs.cache) return removed;
+      var cache = cs.cache;
+      // Volumes
+      var volumes = (cache.getVolumes && cache.getVolumes()) || [];
+      volumes.forEach(function (v) {
+        if (!v) return;
+        var match = false;
+        if (v.metadata && v.metadata.StudyInstanceUID === studyUID) match = true;
+        else if (v.imageIds && v.imageIds[0] && String(v.imageIds[0]).indexOf(studyUID) !== -1) match = true;
+        else if (v.volumeId && String(v.volumeId).indexOf(studyUID) !== -1) match = true;
+        if (match) {
+          try { cache.removeVolumeLoadObject(v.volumeId); removed++; } catch (e) {}
+        }
+      });
+      // Stack viewport images (best-effort: imageIds carry the study UID for wadors)
+      if (cache.getImageLoadObject || cache._imageCache) {
+        try {
+          var ids = (cache.getImageIds && cache.getImageIds()) || Object.keys(cache._imageCache || {});
+          ids.forEach(function (id) {
+            if (String(id).indexOf(studyUID) !== -1) {
+              try { cache.removeImageLoadObject(id); removed++; } catch (e) {}
+            }
+          });
+        } catch (e) {}
+      }
+    } catch (e) { console.warn('[LinkRad purge] failed', e); }
+    return removed;
+  }
+
+  // ============================================================
   // Boot
   // ============================================================
   function boot() {
@@ -3065,17 +3501,64 @@
     watchModality();
     subscribeMammoOverlays();
 
-    // Parent (Teleradiology page) tells us when this iframe is the active
-    // case tab. We use this to re-apply the last-clicked layout if the grid
-    // has reverted while we were hidden.
+    // Parent (Teleradiology page) → iframe protocol.
     window.addEventListener('message', function (e) {
       var data = e.data;
       if (!data || data.source !== 'linkrad-parent') return;
+      var corr = data.correlationId;
+      var reply = function (type, payload) {
+        try {
+          var msg = { source: 'linkrad-iframe', type: type, correlationId: corr };
+          if (payload) Object.keys(payload).forEach(function (k) { msg[k] = payload[k]; });
+          (window.parent || window.opener || window).postMessage(msg, '*');
+        } catch (err) {}
+      };
+
       if (data.type === 'tab-activated') {
-        console.log('[LinkRad] tab-activated received');
+        // Legacy; still useful when an undocked window comes back to focus.
         onParentTabActivated();
+        return;
+      }
+      if (data.type === 'lr:loadStudy') {
+        console.log('[LinkRad] lr:loadStudy →', data.studyUID, data.restore ? '(with restore)' : '(fresh HP)');
+        loadStudyInPlace(data.studyUID, data.restore)
+          .then(function (r) { reply('lr:loadStudy:done', { studyUID: r.studyUID }); })
+          .catch(function (err) { reply('lr:loadStudy:error', { studyUID: data.studyUID, error: String(err && err.message || err) }); });
+        return;
+      }
+      if (data.type === 'lr:snapshotState') {
+        var state = captureState();
+        reply('lr:snapshotState:result', { state: state });
+        return;
+      }
+      if (data.type === 'lr:purgeStudy') {
+        var removed = purgeStudyVolumes(data.studyUID);
+        console.log('[LinkRad] lr:purgeStudy', data.studyUID, '— removed', removed, 'cache entries');
+        reply('lr:purgeStudy:done', { studyUID: data.studyUID, removed: removed });
+        return;
       }
     });
+
+    // Emit lr:ready once the first study's displaySets have actually loaded
+    // — the parent uses this to gate postMessage operations so we don't race
+    // OHIF's initial boot. Fires exactly once per iframe lifetime.
+    var _readyEmitted = false;
+    function _emitReadyWhenLoaded() {
+      if (_readyEmitted) return;
+      var dss = window.services && window.services.displaySetService;
+      var got = dss && dss.getActiveDisplaySets && dss.getActiveDisplaySets();
+      if (got && got.length) {
+        _readyEmitted = true;
+        try {
+          var tgt = window.parent && window.parent !== window ? window.parent : (window.opener || window);
+          tgt.postMessage({ source: 'linkrad-iframe', type: 'lr:ready' }, '*');
+          console.log('[LinkRad] lr:ready emitted to parent');
+        } catch (e) {}
+        return;
+      }
+      setTimeout(_emitReadyWhenLoaded, 200);
+    }
+    setTimeout(_emitReadyWhenLoaded, 500);
 
     // Subscribe the layout watchdog as soon as viewportGridService is ready.
     // Polls until it is — usually 1-3 seconds after iframe load.
@@ -3115,6 +3598,59 @@
     };
     window._linkradMammoSeriesMap = findMammoSeriesMap;
     window._linkradRenderMammoOverlays = renderMammoOverlays;
+    // Test hook: trigger a Mammo hanging-protocol preset programmatically
+    // (same code path as clicking the CC/MLO/etc. button in the sidebar).
+    window._linkradSetMammoHanging = setMammoHanging;
+    // Test hook: trigger mode tab programmatically (2D / MPR / 3D).
+    window._linkradSwitchMode = switchMode;
+
+    // ============================================================
+    // SPIKE: in-place study swap (validates URL+popstate path)
+    // ============================================================
+    // Hypothesis: OHIF v3.8.3's Mode.tsx useEffect depends on `location`
+    // + `studyInstanceUIDs`, so pushState({?StudyInstanceUIDs=B}) +
+    // dispatching popstate re-runs defaultRouteInit without remounting
+    // ViewerLayout. Our injected scripts (toolbar, watchdog, modality
+    // detector) should stay alive across the swap.
+    //
+    // Usage from console (after a study is loaded):
+    //   _linkradLoadStudy('1.2.840...newUID')
+    // Sampling logs at +0.5s / +1.5s / +3s / +6s tell us whether the
+    // displaySetService observed the new study and whether our toolbar
+    // element survived (proxy for "React tree not remounted").
+    window._linkradLoadStudy = function (newStudyUID) {
+      if (!newStudyUID) {
+        console.warn('[LinkRad SPIKE] missing studyUID');
+        return;
+      }
+      var snap = function (label) {
+        var ds = (window.services && window.services.displaySetService &&
+                  window.services.displaySetService.getActiveDisplaySets()) || [];
+        var uids = ds.map(function (d) { return d.StudyInstanceUID; })
+                     .filter(function (v, i, a) { return a.indexOf(v) === i; });
+        var toolbar = document.getElementById('linkrad-toolbar');
+        console.log('[LinkRad SPIKE]', label, {
+          loc: window.location.search,
+          displaySets: ds.length,
+          studies: uids.length,
+          studyUIDs: uids,
+          toolbarAlive: !!toolbar,
+          toolbarChildren: toolbar ? toolbar.children.length : 0,
+          servicesAlive: !!window.services,
+          extMgrAlive: !!window.extensionManager,
+          cmdMgrAlive: !!window.commandsManager,
+        });
+      };
+      snap('BEFORE');
+      var url = new URL(window.location.href);
+      url.searchParams.set('StudyInstanceUIDs', newStudyUID);
+      console.log('[LinkRad SPIKE] pushState →', url.pathname + url.search);
+      window.history.pushState({}, '', url.toString());
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      [500, 1500, 3000, 6000].forEach(function (ms) {
+        setTimeout(function () { snap('AFTER +' + ms + 'ms'); }, ms);
+      });
+    };
   }
 
   if (document.body) boot();
