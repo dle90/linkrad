@@ -202,8 +202,10 @@ function StudyList({ studies, selectedId, onSelect, onOpen, onOpenInNewTab, grou
           return (
             <button key={s._id} onClick={() => onSelect(s)}
               onDoubleClick={() => onOpen(s)}
+              title={s.hiddenAt ? `Đã ẩn bởi ${s.hiddenByName || s.hiddenBy || '?'}${s.hiddenReason ? ' — ' + s.hiddenReason : ''}` : undefined}
               className={`w-full text-left px-3 py-2.5 rounded-xl border transition-colors
-                ${on ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+                ${on ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-50'}
+                ${s.hiddenAt ? 'opacity-50 line-through' : ''}`}>
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 font-bold text-sm flex items-center justify-center flex-shrink-0">
                   {initials(s.patientName)}
@@ -212,6 +214,7 @@ function StudyList({ studies, selectedId, onSelect, onOpen, onOpenInNewTab, grou
                   <div className="flex items-baseline gap-2">
                     <div className="font-semibold text-sm text-gray-800 truncate">{s.patientName || '—'}</div>
                     <div className="text-[10px] font-mono text-gray-400 flex-shrink-0">{s.patientId || ''}</div>
+                    {s.hiddenAt && <span className="text-[9px] text-red-500 font-mono">[ẨN]</span>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
                     <span className="px-1.5 py-0 rounded bg-gray-100 text-gray-700 text-[10px] font-mono">{s.modality}</span>
@@ -362,8 +365,10 @@ function QueueRail({ studies, currentId, onJumpTo, onOpenNext }) {
           const pill = STATUS_PILL[s.status] || { label: s.status, cls: 'bg-gray-100 text-gray-700' }
           return (
             <button key={s._id} onClick={() => onJumpTo?.(s)}
+              title={s.hiddenAt ? `Đã ẩn` : undefined}
               className={`w-full text-left px-2.5 py-2 rounded-lg border transition-colors
-                ${isCurrent ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+                ${isCurrent ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-50'}
+                ${s.hiddenAt ? 'opacity-50 line-through' : ''}`}>
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center flex-shrink-0">
                   {initials(s.patientName)}
