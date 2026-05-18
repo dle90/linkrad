@@ -620,6 +620,22 @@
     b.innerHTML = svgIcon(item.svg);
     b.onclick = function (ev) {
       ev.stopPropagation();
+      // Toggle: if this same button's dropdown is already open, close it.
+      // Without this, clicking an open dropdown's button re-runs openDropdown
+      // which closes-then-reopens — net effect is the menu never closes via
+      // its own button.
+      if ((item.dropdown || item.dynamicDropdown) && openDD && openDD._anchor === b) {
+        closeDropdown();
+        return;
+      }
+      // Tool-button toggle-off: clicking an already-active tool reverts to
+      // WindowLevel (the radiologist resting cursor). Excludes WindowLevel
+      // itself so clicking W/L while W/L is active is a no-op rather than
+      // re-triggering itself.
+      if (item.tool && item.tool !== 'WindowLevel' && b.classList.contains('active')) {
+        runItem({ tool: 'WindowLevel', id: 'wl' });
+        return;
+      }
       if (item.dropdown) openDropdown(b, item.dropdown);
       else if (item.dynamicDropdown) openDropdown(b, resolveDynamicDropdown(item.dynamicDropdown));
       else runItem(item);
@@ -724,6 +740,7 @@
     });
     document.body.appendChild(dd);
     openDD = dd;
+    openDD._anchor = anchor; // for the toggle check in the button onclick
     // Keep dropdown within viewport (right edge)
     var ddRect = dd.getBoundingClientRect();
     if (ddRect.right > window.innerWidth - 8) {
@@ -787,36 +804,78 @@
   }
 
   function deleteAllAnnotations() {
-    var cm = window.commandsManager;
+    // Skip the auto-overlay tools that aren't user-drawn measurements.
+    var NON_USER = { ReferenceLines: 1, Crosshairs: 1, CrosshairsOverlay: 1 };
+
+    var msCount = 0;
     var ms = window.services && window.services.measurementService;
-    // Prefer OHIF's measurementService if available — it cleans up SR + tool state.
     if (ms && typeof ms.clearMeasurements === 'function') {
-      try { ms.clearMeasurements(); annotationStack = []; console.log('[LinkRad toolbar] cleared all measurements'); return; } catch (e) {}
+      try { var prev = (ms.getMeasurements && ms.getMeasurements()) || []; msCount = prev.length; ms.clearMeasurements(); }
+      catch (e) { console.warn('[LinkRad toolbar] measurementService.clearMeasurements failed', e); }
     }
-    // Fallback: enumerate annotation state and remove each
+
+    // Also enumerate cornerstone3D annotation state directly. measurementService
+    // only tracks measurements that were registered with it; some annotations
+    // (custom tools, annotations added without OHIF mapping) live only in the
+    // cornerstone annotation manager. We need to remove from BOTH layers.
+    var cstCount = 0;
     var cst = window.cornerstoneTools;
     if (cst && cst.annotation && cst.annotation.state) {
       try {
         var state = cst.annotation.state.getAnnotationManager().getAllAnnotations();
         var uids = [];
+        var collect = function (a) {
+          if (!a || !a.annotationUID) return;
+          var tn = (a.metadata && a.metadata.toolName) || '';
+          if (NON_USER[tn]) return;
+          uids.push(a.annotationUID);
+        };
         if (Array.isArray(state)) {
-          state.forEach(function (a) { if (a && a.annotationUID) uids.push(a.annotationUID); });
+          state.forEach(collect);
         } else {
-          // state may be keyed object
-          Object.keys(state || {}).forEach(function (k) {
-            var arr = state[k];
-            if (Array.isArray(arr)) arr.forEach(function (a) { if (a && a.annotationUID) uids.push(a.annotationUID); });
+          // Nested: { FrameOfReferenceUID: { toolName: [annotations...] } } OR { toolName: [annotations...] }
+          Object.keys(state || {}).forEach(function (k1) {
+            var v1 = state[k1];
+            if (Array.isArray(v1)) {
+              v1.forEach(collect);
+            } else if (v1 && typeof v1 === 'object') {
+              Object.keys(v1).forEach(function (k2) {
+                var v2 = v1[k2];
+                if (Array.isArray(v2)) v2.forEach(collect);
+              });
+            }
           });
         }
         uids.forEach(function (u) { try { cst.annotation.state.removeAnnotation(u); } catch (e) {} });
-        annotationStack = [];
-        var re = window.cornerstone && window.cornerstone.getRenderingEngines && window.cornerstone.getRenderingEngines()[0];
-        if (re && re.render) re.render();
-        console.log('[LinkRad toolbar] deleted', uids.length, 'annotations');
+        cstCount = uids.length;
       } catch (e) {
-        console.warn('[LinkRad toolbar] deleteAll fallback failed', e);
+        console.warn('[LinkRad toolbar] cornerstone annotation enumeration failed', e);
       }
     }
+
+    annotationStack = [];
+
+    // Force a re-render so annotations actually disappear from the canvas.
+    // measurementService.clearMeasurements + removeAnnotation update state but
+    // do not necessarily repaint — the rendered overlay layer caches the last
+    // drawn frame until something triggers a redraw.
+    try {
+      var re = window.cornerstone && window.cornerstone.getRenderingEngines && window.cornerstone.getRenderingEngines()[0];
+      if (re) {
+        var vps = (re.getViewports && re.getViewports()) || [];
+        vps.forEach(function (v) { try { v.render && v.render(); } catch (e) {} });
+      }
+      // Cornerstone3D annotation re-render hook (preferred for annotation layer)
+      var triggerFn = cst && cst.utilities && cst.utilities.triggerAnnotationRenderForViewportIds;
+      if (typeof triggerFn === 'function' && re) {
+        try {
+          var ids = ((re.getViewports && re.getViewports()) || []).map(function (v) { return v.id; });
+          triggerFn(re, ids);
+        } catch (e) {}
+      }
+    } catch (e) {}
+
+    console.log('[LinkRad toolbar] Delete All — measurementService:', msCount, '· cornerstone state:', cstCount);
   }
 
   function togglePatientOverlay() {
