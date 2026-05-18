@@ -84,8 +84,12 @@
       dropdown: [
         { label: 'Ảnh hiện tại (JPEG)',         cmd: 'showDownloadViewportModal' },
         { label: 'Ảnh hiện tại (DICOM .dcm)',   fn: 'downloadCurrentInstance' },
+        { divider: true },
         { label: 'Loạt hiện tại (DICOM .zip)',  fn: 'downloadCurrentSeries' },
+        { label: 'Loạt hiện tại (JPEG .zip, ≤200 ảnh)', fn: 'downloadCurrentSeriesAsJpegZip' },
+        { divider: true },
         { label: 'Ca hiện tại (DICOM .zip)',    fn: 'downloadCurrentStudy' },
+        { label: 'Ca hiện tại (JPEG .zip, ≤200 ảnh tổng)', fn: 'downloadCurrentStudyAsJpegZip' },
       ]
     },
     { type: 'btn', id: 'capture',    svg: 'camera',   tip: 'Capture · Chụp viewport',  cmd: 'showDownloadViewportModal' },
@@ -1069,6 +1073,278 @@
     var ids = _currentDicomIds();
     if (!ids.studyUID) return _toast('Không xác định được ca', 'error');
     _triggerDownload('/api/ris/orthanc/download/study/' + encodeURIComponent(ids.studyUID), 'study-' + ids.studyUID.slice(-12) + '.zip');
+  }
+
+  // ---- JPEG batch (zip) ----
+  // Cap on number of frames per batch — caps browser-memory exposure for the
+  // accumulated blob. A 200-frame batch at ~150KB each = ~30MB; safe.
+  // For bigger needs the user should use DICOM .zip which streams from server.
+  var JPEG_BATCH_CAP = 200;
+  function _loadJSZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    if (_loadJSZip._promise) return _loadJSZip._promise;
+    _loadJSZip._promise = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+      s.onload = function () { window.JSZip ? resolve(window.JSZip) : reject(new Error('JSZip global missing after load')); };
+      s.onerror = function () { reject(new Error('Failed to load JSZip from CDN')); };
+      document.head.appendChild(s);
+    });
+    return _loadJSZip._promise;
+  }
+  // Modal-style progress overlay (single instance — replaced on each call).
+  function _showProgress(title) {
+    _hideProgress();
+    var ov = document.createElement('div');
+    ov.id = 'lr-jpeg-progress';
+    ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;';
+    ov.innerHTML = '<div style="background:#1e293b;color:#e2e8f0;padding:24px 32px;border-radius:8px;min-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.5);">' +
+      '<div style="font-weight:600;font-size:14px;margin-bottom:12px;" id="lr-jpeg-title">' + title + '</div>' +
+      '<div style="background:#0f172a;border-radius:4px;height:8px;overflow:hidden;"><div id="lr-jpeg-bar" style="background:#3b82f6;height:100%;width:0%;transition:width 120ms ease-out;"></div></div>' +
+      '<div style="margin-top:8px;font-size:12px;color:#94a3b8;" id="lr-jpeg-status">Đang chuẩn bị…</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+  }
+  function _setProgress(done, total, msg) {
+    var bar = document.getElementById('lr-jpeg-bar');
+    var st  = document.getElementById('lr-jpeg-status');
+    if (bar) bar.style.width = (total ? Math.round((done / total) * 100) : 0) + '%';
+    if (st)  st.textContent  = (msg || ('Đã render ' + done + ' / ' + total + ' ảnh'));
+  }
+  function _hideProgress() {
+    var ov = document.getElementById('lr-jpeg-progress');
+    if (ov) ov.remove();
+  }
+  // Capture viewport.canvas as JPEG Blob. Renders synchronously — caller
+  // must have already triggered a render and waited for IMAGE_RENDERED.
+  function _captureViewportAsJpeg(vp, quality) {
+    return new Promise(function (resolve, reject) {
+      try {
+        var c = vp.canvas || (typeof vp.getCanvas === 'function' && vp.getCanvas());
+        if (!c) return reject(new Error('Viewport has no canvas'));
+        if (typeof c.toBlob !== 'function') {
+          // Fallback for canvases that only expose toDataURL
+          var url = c.toDataURL('image/jpeg', quality || 0.92);
+          fetch(url).then(function (r) { return r.blob(); }).then(resolve).catch(reject);
+          return;
+        }
+        c.toBlob(function (blob) { blob ? resolve(blob) : reject(new Error('toBlob returned null')); }, 'image/jpeg', quality || 0.92);
+      } catch (e) { reject(e); }
+    });
+  }
+  // Scroll a stack viewport to index N and wait for the new image to render.
+  // We listen for STACK_NEW_IMAGE on the viewport element with a small grace
+  // period afterwards so cornerstone3D's pixel upload + draw cycle completes.
+  function _scrollViewportAndWait(vp, idx, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      var cs = window.cornerstone;
+      var EVT = cs && cs.Enums && cs.Enums.Events && cs.Enums.Events.STACK_NEW_IMAGE;
+      if (!EVT || !vp.element) {
+        try { vp.setImageIdIndex(idx); vp.render && vp.render(); }
+        catch (e) { return reject(e); }
+        return setTimeout(resolve, 200);
+      }
+      var settled = false;
+      var fired = false;
+      var t = setTimeout(function () {
+        if (settled) return;
+        try { vp.element.removeEventListener(EVT, onImg); } catch (e) {}
+        settled = true;
+        // Even on timeout, resolve so the loop continues — we may have rendered
+        // the same image (no event fires when idx already matches).
+        resolve();
+      }, timeoutMs || 5000);
+      function onImg () {
+        if (fired) return;
+        fired = true;
+        // Grace period for paint
+        setTimeout(function () {
+          if (settled) return;
+          try { vp.element.removeEventListener(EVT, onImg); } catch (e) {}
+          settled = true;
+          clearTimeout(t);
+          resolve();
+        }, 120);
+      }
+      vp.element.addEventListener(EVT, onImg);
+      try {
+        vp.setImageIdIndex(idx);
+        vp.render && vp.render();
+        // If idx didn't change, no STACK_NEW_IMAGE fires; resolve via the
+        // short timeout path. Don't wait full 5s for that case.
+      } catch (e) {
+        clearTimeout(t);
+        try { vp.element.removeEventListener(EVT, onImg); } catch (e) {}
+        settled = true;
+        return reject(e);
+      }
+    });
+  }
+  function _activeStackViewport() {
+    var vgs = window.services && window.services.viewportGridService;
+    var grid = vgs && vgs.getState && vgs.getState();
+    var activeId = grid && grid.activeViewportId;
+    var re = window.cornerstone && window.cornerstone.getRenderingEngines && window.cornerstone.getRenderingEngines()[0];
+    if (!re) return null;
+    var vp = re.getViewport(activeId);
+    if (!vp) {
+      var vps = (re.getViewports && re.getViewports()) || [];
+      vp = vps[0];
+    }
+    return vp;
+  }
+  async function downloadCurrentSeriesAsJpegZip() {
+    var vp = _activeStackViewport();
+    if (!vp || typeof vp.getImageIds !== 'function') return _toast('Không tìm thấy viewport stack hợp lệ', 'error');
+    var imageIds;
+    try { imageIds = vp.getImageIds(); } catch (e) { return _toast('Không đọc được danh sách ảnh: ' + e.message, 'error'); }
+    if (!imageIds.length) return _toast('Loạt rỗng', 'error');
+    if (imageIds.length > JPEG_BATCH_CAP) {
+      var ok = window.confirm('Loạt có ' + imageIds.length + ' ảnh, vượt giới hạn ' + JPEG_BATCH_CAP + '.\n' +
+        'Sẽ chỉ render ' + JPEG_BATCH_CAP + ' ảnh đầu tiên.\n' +
+        'Tải toàn bộ ở định dạng DICOM .zip thay vào? (chọn Cancel để tiếp tục với 200 ảnh)');
+      if (ok) { downloadCurrentSeries(); return; }
+      imageIds = imageIds.slice(0, JPEG_BATCH_CAP);
+    }
+    var ids = _currentDicomIds();
+    var seriesTag = (ids.seriesUID || 'series').slice(-12);
+    var startIdx = (typeof vp.getCurrentImageIdIndex === 'function' && vp.getCurrentImageIdIndex()) || 0;
+    var JSZip;
+    try { JSZip = await _loadJSZip(); } catch (e) { return _toast('Không tải được thư viện zip: ' + e.message, 'error'); }
+    var zip = new JSZip();
+    _showProgress('Đang xuất loạt ' + seriesTag + ' (' + imageIds.length + ' ảnh)…');
+    var pad = String(imageIds.length).length;
+    var failures = 0;
+    try {
+      for (var i = 0; i < imageIds.length; i++) {
+        try {
+          await _scrollViewportAndWait(vp, i);
+          var blob = await _captureViewportAsJpeg(vp, 0.92);
+          var name = 'frame-' + String(i + 1).padStart(pad, '0') + '.jpg';
+          zip.file(name, blob);
+        } catch (e) {
+          failures++;
+          console.warn('[LinkRad] JPEG export frame', i, 'failed:', e.message);
+        }
+        _setProgress(i + 1, imageIds.length);
+      }
+      _setProgress(imageIds.length, imageIds.length, 'Đang nén zip…');
+      var zipBlob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+      _setProgress(imageIds.length, imageIds.length, 'Đang lưu file…');
+      var fname = 'series-' + seriesTag + '-jpeg.zip';
+      var url = URL.createObjectURL(zipBlob);
+      var a = document.createElement('a');
+      a.href = url; a.download = fname; a.style.display = 'none';
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { try { a.remove(); URL.revokeObjectURL(url); } catch (e) {} }, 5000);
+      _toast('Đã lưu ' + (imageIds.length - failures) + '/' + imageIds.length + ' ảnh' + (failures ? ' (' + failures + ' lỗi)' : ''));
+    } catch (e) {
+      _toast('Lỗi xuất JPEG: ' + e.message, 'error');
+    } finally {
+      // Restore viewport to original frame so the user isn't disoriented
+      try { await _scrollViewportAndWait(vp, startIdx, 2000); } catch (e) {}
+      _hideProgress();
+    }
+  }
+  async function downloadCurrentStudyAsJpegZip() {
+    var vgs = window.services && window.services.viewportGridService;
+    var dss = window.services && window.services.displaySetService;
+    var vp  = _activeStackViewport();
+    if (!vp || !vgs || !dss) return _toast('Services chưa sẵn sàng', 'error');
+
+    // Enumerate non-empty stack-capable display sets in the active study.
+    var allSets = (dss.getActiveDisplaySets && dss.getActiveDisplaySets()) || [];
+    var stackSets = allSets.filter(function (d) { return d && d.Modality !== 'SR' && d.numImageFrames !== 0; });
+    if (!stackSets.length) return _toast('Không có loạt nào để xuất', 'error');
+
+    // Build a plan: how many frames per series, capped to JPEG_BATCH_CAP total.
+    var plan = [];
+    var totalFrames = 0;
+    for (var i = 0; i < stackSets.length; i++) {
+      var ds = stackSets[i];
+      var frames = ds.numImageFrames || (ds.instances && ds.instances.length) || 0;
+      if (!frames) continue;
+      var room = JPEG_BATCH_CAP - totalFrames;
+      if (room <= 0) break;
+      var take = Math.min(frames, room);
+      plan.push({ ds: ds, take: take, total: frames });
+      totalFrames += take;
+    }
+    if (!totalFrames) return _toast('Không có khung hình nào để render', 'error');
+
+    var ok = window.confirm('Sẽ xuất ' + totalFrames + ' ảnh từ ' + plan.length + ' loạt (cap ' + JPEG_BATCH_CAP + ').\n' +
+      'Viewport sẽ thay đổi tạm thời. Tiếp tục?');
+    if (!ok) return;
+
+    var startActiveVpId = vgs.getState().activeViewportId;
+    var startGridSnapshot = null;
+    try {
+      var s = vgs.getState();
+      var entry = (s.viewports.entries ? Array.from(s.viewports.entries()) : Object.entries(s.viewports))
+        .find(function (e) { return e[0] === startActiveVpId; });
+      if (entry) startGridSnapshot = { id: entry[0], dsUIDs: (entry[1].displaySetInstanceUIDs || []).slice() };
+    } catch (e) {}
+
+    var ids = _currentDicomIds();
+    var studyTag = (ids.studyUID || 'study').slice(-12);
+    var JSZip;
+    try { JSZip = await _loadJSZip(); } catch (e) { return _toast('Không tải được thư viện zip: ' + e.message, 'error'); }
+    var zip = new JSZip();
+    _showProgress('Đang xuất ca ' + studyTag + ' (' + totalFrames + ' ảnh tổng)…');
+    var renderedSoFar = 0, failures = 0;
+
+    try {
+      for (var p = 0; p < plan.length; p++) {
+        var item = plan[p];
+        // Swap the active viewport to this series' display set
+        try {
+          vgs.setDisplaySetsForViewports([{
+            viewportId: startActiveVpId,
+            displaySetInstanceUIDs: [item.ds.displaySetInstanceUID],
+          }]);
+        } catch (e) { failures += item.take; continue; }
+        // Allow mount + initial render
+        await new Promise(function (r) { setTimeout(r, 800); });
+        var currentVp = _activeStackViewport();
+        if (!currentVp || typeof currentVp.getImageIds !== 'function') { failures += item.take; continue; }
+        var seriesFolder = zip.folder('series-' + String(p + 1).padStart(2, '0') + '-' + ((item.ds.SeriesDescription || 'series').replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40)));
+        var pad = String(item.take).length;
+        for (var k = 0; k < item.take; k++) {
+          try {
+            await _scrollViewportAndWait(currentVp, k);
+            var blob = await _captureViewportAsJpeg(currentVp, 0.92);
+            seriesFolder.file('frame-' + String(k + 1).padStart(pad, '0') + '.jpg', blob);
+          } catch (e) {
+            failures++;
+          }
+          renderedSoFar++;
+          _setProgress(renderedSoFar, totalFrames);
+        }
+      }
+      _setProgress(totalFrames, totalFrames, 'Đang nén zip…');
+      var zipBlob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+      _setProgress(totalFrames, totalFrames, 'Đang lưu file…');
+      var fname = 'study-' + studyTag + '-jpeg.zip';
+      var url = URL.createObjectURL(zipBlob);
+      var a = document.createElement('a');
+      a.href = url; a.download = fname; a.style.display = 'none';
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { try { a.remove(); URL.revokeObjectURL(url); } catch (e) {} }, 5000);
+      _toast('Đã lưu ' + (totalFrames - failures) + '/' + totalFrames + ' ảnh' + (failures ? ' (' + failures + ' lỗi)' : ''));
+    } catch (e) {
+      _toast('Lỗi xuất JPEG: ' + e.message, 'error');
+    } finally {
+      // Restore the original display set in the active viewport
+      try {
+        if (startGridSnapshot && startGridSnapshot.dsUIDs.length) {
+          vgs.setDisplaySetsForViewports([{
+            viewportId: startGridSnapshot.id,
+            displaySetInstanceUIDs: startGridSnapshot.dsUIDs,
+          }]);
+        }
+      } catch (e) {}
+      _hideProgress();
+    }
   }
 
   // ---- Hide / Hard delete ----
@@ -2800,6 +3076,8 @@
     downloadCurrentInstance: downloadCurrentInstance,
     downloadCurrentSeries: downloadCurrentSeries,
     downloadCurrentStudy: downloadCurrentStudy,
+    downloadCurrentSeriesAsJpegZip: downloadCurrentSeriesAsJpegZip,
+    downloadCurrentStudyAsJpegZip: downloadCurrentStudyAsJpegZip,
     hideCurrentStudy: hideCurrentStudy,
     unhideCurrentStudy: unhideCurrentStudy,
     hardDeleteCurrentInstance: hardDeleteCurrentInstance,
@@ -4060,6 +4338,9 @@
     window._linkradSetMammoHanging = setMammoHanging;
     // Test hook: toggle Mammo slice sync from Playwright / devtools.
     window._linkradToggleMammoSliceSync = toggleMammoSliceSync;
+    // Test hooks: invoke JPEG batch export from Playwright / devtools.
+    window._linkradDownloadSeriesJpegZip = downloadCurrentSeriesAsJpegZip;
+    window._linkradDownloadStudyJpegZip = downloadCurrentStudyAsJpegZip;
     // Test hook: trigger mode tab programmatically (2D / MPR / 3D).
     window._linkradSwitchMode = switchMode;
 
