@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../api'
 import { useTeleradTabs, SYS_WORKLIST } from '../context/TeleradTabsContext'
-import { postLoadStudy, postSnapshotState, postPurgeStudy } from '../lib/ohifProtocol'
+import { postLoadStudy, postSnapshotState, postPurgeStudy, postPrefetchStudy } from '../lib/ohifProtocol'
 
 // Single OHIF iframe that lives at App level so the doctor pays the cold-start
 // cost exactly once per session. The Teleradiology page publishes its desired
@@ -19,7 +19,7 @@ import { postLoadStudy, postSnapshotState, postPurgeStudy } from '../lib/ohifPro
 // restore in ~600ms with no React tree remount.
 
 export default function PersistentOHIFHost () {
-  const { openCases, activeCaseId, viewerSlotRect } = useTeleradTabs()
+  const { openCases, activeCaseId, viewerSlotRect, prefetchRef } = useTeleradTabs()
   const [iframeSrc, setIframeSrc] = useState(null)
   const [iframeReady, setIframeReady] = useState(false)
 
@@ -100,6 +100,30 @@ export default function PersistentOHIFHost () {
     })
     return queueRef.current
   }, [])
+
+  // Publish a debounced prefetch fn into the context so Teleradiology can
+  // call it from its onSelect handler. Debounce prevents firing a network
+  // burst when the user arrows quickly through the worklist; only fires
+  // after they pause on a row for 300ms (typical "consider opening" intent).
+  useEffect(() => {
+    if (!prefetchRef) return
+    let timer = null
+    let lastUID = null
+    prefetchRef.current = (studyUID) => {
+      if (!studyUID || studyUID === lastUID) return
+      if (studyUID === currentStudyUIDRef.current) return // already loaded
+      lastUID = studyUID
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        const t = target()
+        if (t) postPrefetchStudy(t, studyUID)
+      }, 300)
+    }
+    return () => {
+      clearTimeout(timer)
+      prefetchRef.current = null
+    }
+  }, [prefetchRef, target, iframeReady])
 
   // Lazy iframe-src mount on first real case
   useEffect(() => {

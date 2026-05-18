@@ -4272,7 +4272,39 @@
         reply('lr:purgeStudy:done', { studyUID: data.studyUID, removed: removed });
         return;
       }
+      if (data.type === 'lr:prefetch') {
+        // Parent told us about a study the user is likely to open soon (e.g.
+        // hovered/clicked in the worklist). Issue background fetches to warm
+        // (a) Orthanc + R2 caches and (b) the browser HTTP cache, so when
+        // OHIF later does the real loadStudy it hits warm bytes instead of
+        // 7-second R2 cold starts.
+        //
+        // We don't touch any OHIF state — no viewport changes, no displaySet
+        // mutations. Just fetch the metadata + series QIDO and discard the
+        // bodies. Optionally also pre-warm the FIRST instance of each series.
+        var sUid = data.studyUID;
+        if (!sUid || sUid === currentStudyUIDRef()) { reply('lr:prefetch:done', { studyUID: sUid, skipped: true }); return; }
+        var t0 = Date.now();
+        // Fire-and-forget; we don't await the bodies. Browser HTTP cache will
+        // hold the responses for the eventual loadStudy fetch.
+        var base = '/wado/studies/' + encodeURIComponent(sUid);
+        var headers = { Accept: 'application/dicom+json' };
+        var p1 = fetch(base + '/metadata', { headers: headers, credentials: 'include' }).catch(function () {});
+        var p2 = fetch(base + '/series',   { headers: headers, credentials: 'include' }).catch(function () {});
+        Promise.all([p1, p2]).then(function () {
+          var ms = Date.now() - t0;
+          console.log('[LinkRad] lr:prefetch warmed metadata+series for', sUid, 'in', ms, 'ms');
+        });
+        // Don't wait — reply immediately so the parent doesn't queue behind it.
+        reply('lr:prefetch:done', { studyUID: sUid });
+        return;
+      }
     });
+    // Helper: read the StudyInstanceUID currently shown in the iframe URL so
+    // lr:prefetch can skip warming the already-loaded study.
+    function currentStudyUIDRef() {
+      try { return new URL(window.location.href).searchParams.get('StudyInstanceUIDs') || ''; } catch (e) { return ''; }
+    }
 
     // Emit lr:ready once the first study's displaySets have actually loaded
     // — the parent uses this to gate postMessage operations so we don't race

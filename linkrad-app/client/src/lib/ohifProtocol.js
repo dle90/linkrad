@@ -70,6 +70,17 @@ export function postPurgeStudy (target, studyUID) {
   } catch {}
 }
 
+// Fire-and-forget — tells the iframe to warm Orthanc + R2 caches for a study
+// the user has shown intent to open (e.g. clicked in the worklist). The iframe
+// issues background QIDO/metadata fetches; subsequent loadStudy then hits the
+// browser HTTP cache + warm Orthanc cache and renders much faster.
+export function postPrefetchStudy (target, studyUID) {
+  if (!target || !studyUID) return
+  try {
+    target.postMessage({ source: 'linkrad-parent', type: 'lr:prefetch', studyUID }, '*')
+  } catch {}
+}
+
 // Legacy "tab-activated" ping kept for compat with the layout watchdog.
 export function postTabActivated (target) {
   try {

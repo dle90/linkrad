@@ -428,7 +428,7 @@ export default function Teleradiology() {
   const { auth } = useAuth()
   const {
     openCases, activeCaseId, setActiveCaseId, openCase, closeCase, syncWithStudies,
-    setViewerSlotRect, undockedRef,
+    setViewerSlotRect, undockedRef, prefetchStudy,
   } = useTeleradTabs()
   const slotRef = useRef(null)
 
@@ -731,7 +731,7 @@ export default function Teleradiology() {
             <StudyList
               studies={filtered}
               selectedId={selectedId}
-              onSelect={(s) => setSelectedId(s._id)}
+              onSelect={(s) => { setSelectedId(s._id); prefetchStudy?.(s.studyUID) }}
               onOpen={openCase}
               onOpenInNewTab={openInNewTab}
               groupKey={groupKey}

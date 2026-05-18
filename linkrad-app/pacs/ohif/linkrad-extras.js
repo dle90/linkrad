@@ -581,7 +581,16 @@
   }
 
   // ----- Boot loop: poll until OHIF runtime is ready -----
+  // `registerCustomTools` is idempotent and intentionally re-runs each tick so
+  // newly-mounted ToolGroups (created lazily by OHIF) pick up our custom tools.
+  // `buildTimelinePanel` + `refreshTimeline` are NOT idempotent in a useful
+  // sense — building the panel twice is wasted DOM, and refresh fires a QIDO
+  // network call. Previously both ran every 200ms for ~30s once OHIF was up,
+  // which produced ~150 QIDO requests per page load (one per tick) and made
+  // Orthanc cold-start latency painfully visible. Fix: gate one-shot init on
+  // a flag and only re-run the truly per-tick work.
   var bootAttempts = 0;
+  var oneShotDone = false;
   var bootTimer = setInterval(function () {
     bootAttempts++;
     var hasTools = window.cornerstoneTools && window.cornerstoneTools.addTool;
@@ -592,8 +601,11 @@
     if (hasTools && hasCmds) {
       registerCustomTools();
       registerCustomCommands();
-      buildTimelinePanel();
-      refreshTimeline();
+      if (!oneShotDone) {
+        buildTimelinePanel();
+        refreshTimeline();
+        oneShotDone = true;
+      }
       patchDisplaySetService();
       // Continue trying to attach tools to newly created toolGroups for ~30s
       if (bootAttempts > 150) clearInterval(bootTimer);

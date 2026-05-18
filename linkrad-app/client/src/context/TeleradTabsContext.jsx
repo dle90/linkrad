@@ -23,6 +23,15 @@ export function TeleradTabsProvider({ children }) {
   const [viewerSlotRect, setViewerSlotRect] = useState(null)
   // undockedWindowRef.current === { win, caseId } | null
   const undockedRef = useRef(null)
+  // Set by PersistentOHIFHost once the iframe is ready: a function that
+  // posts lr:prefetch into the iframe to warm Orthanc + R2 + browser HTTP
+  // caches for a study the user has shown intent to open (e.g. selected a
+  // worklist row). Teleradiology calls prefetchStudy(studyUID); a no-op
+  // until the iframe exists.
+  const prefetchRef = useRef(null)
+  const prefetchStudy = useCallback((studyUID) => {
+    if (typeof prefetchRef.current === 'function') prefetchRef.current(studyUID)
+  }, [])
 
   const openCase = useCallback((study) => {
     setOpenCases(cs => cs.find(c => c._id === study._id) ? cs : [...cs, study])
@@ -45,6 +54,7 @@ export function TeleradTabsProvider({ children }) {
       openCases, activeCaseId, setActiveCaseId, openCase, closeCase, syncWithStudies,
       viewerSlotRect, setViewerSlotRect,
       undockedRef,
+      prefetchRef, prefetchStudy,
     }}>
       {children}
     </TeleradTabsContext.Provider>
