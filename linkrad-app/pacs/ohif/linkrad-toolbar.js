@@ -1361,12 +1361,12 @@
   var MAMMO_HANGING = {
     cc:        { rows: 1, cols: 2, label: 'CC bilateral (RCC | LCC)' },
     mlo:       { rows: 1, cols: 2, label: 'MLO bilateral (RMLO | LMLO)' },
-    ccmlo4:    { rows: 1, cols: 4, label: 'RCC | LCC | RMLO | LMLO' },
+    ccmlo4:    { rows: 2, cols: 2, label: 'RCC | LCC / RMLO | LMLO' },
     rccmlo:    { rows: 1, cols: 2, label: 'R CC + MLO' },
     lccmlo:    { rows: 1, cols: 2, label: 'L CC + MLO' },
     tomocc:    { rows: 1, cols: 2, label: 'TOMO CC bilateral',  tomo: true },
     tomomlo:   { rows: 1, cols: 2, label: 'TOMO MLO bilateral', tomo: true },
-    tomo4up:   { rows: 1, cols: 4, label: 'TOMO 4-up',   tomo: true },
+    tomo4up:   { rows: 2, cols: 2, label: 'TOMO 4-up',   tomo: true },
     tomor:     { rows: 1, cols: 2, label: 'TOMO R',      tomo: true },
     tomol:     { rows: 1, cols: 2, label: 'TOMO L',      tomo: true },
   };
@@ -1696,13 +1696,37 @@
         if (!inst) return;
         var view = (inst.ViewPosition || '').toUpperCase().replace(/\s+/g, '');
         var lat  = (inst.ImageLaterality || '').toUpperCase();
-        if (!view || !lat) return;
+        var sd   = (ds.SeriesDescription || '').toUpperCase();
         var isTomo = (ds.SOPClassUID === '1.2.840.10008.5.1.4.1.1.13.1.3') ||
-                     /TOMO|DBT/.test((ds.SeriesDescription || '').toUpperCase());
+                     /TOMO|DBT/.test(sd) || /\bVOL\b|3D/.test(sd);
+        // Hologic BTO instances frequently lack ImageLaterality/ViewPosition
+        // DICOM tags. Fall back to parsing the SeriesDescription, which
+        // follows the convention "ROUTINE3D_VOL_<LAT><VIEW>" (e.g. RCC, LMLO).
+        if (isTomo && (!lat || !view)) {
+          // SeriesDescription patterns: "ROUTINE3D_VOL_RMLO", "TOMO_LCC", etc.
+          // `\b` boundaries don't work here — underscores and letters are both
+          // word chars, so we use explicit separators or string ends.
+          var m = sd.match(/(?:^|[_\s\-])([LR])(CC|MLO)(?=$|[_\s\-])/) ||
+                  sd.match(/(?:^|[_\s\-])(CC|MLO)([LR])(?=$|[_\s\-])/);
+          if (m) {
+            if (m[1] === 'L' || m[1] === 'R') { lat = lat || m[1]; view = view || m[2]; }
+            else                              { view = view || m[1]; lat = lat || m[2]; }
+          }
+        }
+        if (!view || !lat) return;
         var isProc = (inst.PresentationIntentType || '').toUpperCase() === 'FOR PRESENTATION';
         var key = lat + view + (isTomo ? '_TOMO' : '');
         if (!map[key]) {
           map[key] = ds.displaySetInstanceUID;
+        } else if (isTomo) {
+          // Hologic emits two BTO display sets per anatomy: a low-frame
+          // c-view/projection synthesis and a high-frame reconstructed
+          // slice stack. Keep the bigger one — that's what radiologists
+          // actually scroll through.
+          var existingTomo = sets.filter(function (s) { return s.displaySetInstanceUID === map[key]; })[0];
+          var exFrames = (existingTomo && existingTomo.numImageFrames) || 0;
+          var newFrames = ds.numImageFrames || 0;
+          if (newFrames > exFrames) map[key] = ds.displaySetInstanceUID;
         } else if (isProc) {
           var existing = sets.filter(function (s) { return s.displaySetInstanceUID === map[key]; })[0];
           var exIntent = (existing && existing.instances && existing.instances[0] &&
@@ -1766,6 +1790,120 @@
     // setDisplaySetsForViewports can regenerate viewport IDs — the new IDs
     // need to be looked up post-mount via positional order in the grid.
     setTimeout(function () { applyMammoDisplayConventions(slots); }, 700);
+    // Auto-enable slice sync for TOMO bilateral presets so wheeling one side
+    // advances the contralateral viewport in lockstep — standard mammographer
+    // workflow. 2D presets and the single-side TOMO L/R presets are skipped.
+    // Honors the LR_MAMMO_SLICE_SYNC_ENABLED toggle (sidebar checkbox).
+    var cfg = MAMMO_HANGING[presetArg];
+    if (cfg && cfg.tomo && (cfg.rows * cfg.cols) >= 2 && LR_MAMMO_SLICE_SYNC_ENABLED) {
+      setTimeout(function () { setupMammoSliceSync(); }, 900);
+    } else {
+      setTimeout(function () { teardownMammoSliceSync(); }, 900);
+    }
+  }
+
+  // Image-slice sync for TOMO bilateral viewports. We CANNOT use OHIF's
+  // built-in 'imageSlice' / 'stackImage' synchronizers — both resolve to
+  // imageSliceSyncCallback which gates on `areViewportsCoplanar`, and RCC vs
+  // LCC live in different anatomical planes so the check fails silently.
+  // Instead we install raw STACK_NEW_IMAGE listeners that propagate index
+  // by ordinal (slice N on source → slice N on target), gated by a flag to
+  // prevent infinite ping-pong.
+  var LR_MAMMO_SLICE_SYNC_ENABLED = true;
+  var _mammoSliceListeners = [];
+  var _mammoSliceSuppress = false;
+  // Runtime toggle wired to the Mammo sidebar checkbox. When turned ON for
+  // a non-bilateral-tomo preset, takes effect on the next applicable preset.
+  function toggleMammoSliceSync(enabled) {
+    LR_MAMMO_SLICE_SYNC_ENABLED = !!enabled;
+    if (!enabled) {
+      teardownMammoSliceSync();
+      console.log('[LinkRad] Mammo slice sync OFF');
+      return;
+    }
+    // Try to activate now if the current grid is a tomo bilateral.
+    try {
+      var vgs = window.services && window.services.viewportGridService;
+      var grid = vgs && vgs.getState && vgs.getState();
+      var vps = grid && grid.viewports;
+      var n = vps ? (vps.size != null ? vps.size : Object.keys(vps).length) : 0;
+      // Heuristic: if we have ≥2 viewports and any of them holds a multi-frame
+      // stack, activate. Cheap proxy for "we're in a tomo bilateral preset."
+      if (n >= 2) setupMammoSliceSync();
+      console.log('[LinkRad] Mammo slice sync ON');
+    } catch (e) { /* silent */ }
+  }
+  function teardownMammoSliceSync() {
+    _mammoSliceListeners.forEach(function (b) {
+      try { b.elem.removeEventListener(b.evt, b.fn); } catch (e) {}
+    });
+    _mammoSliceListeners = [];
+  }
+  function setupMammoSliceSync() {
+    try {
+      teardownMammoSliceSync();
+      var cs = window.cornerstone;
+      var re = cs && cs.getRenderingEngines && cs.getRenderingEngines()[0];
+      if (!re) return;
+      var vgs = window.services && window.services.viewportGridService;
+      var grid = vgs && vgs.getState && vgs.getState();
+      var vps = grid && grid.viewports;
+      var gridVps = vps && (vps.values ? Array.from(vps.values()) : Object.values(vps));
+      if (!gridVps || gridVps.length < 2) return;
+      var vpIds = gridVps
+        .map(function (gv) { return gv.viewportOptions && gv.viewportOptions.viewportId; })
+        .filter(Boolean);
+      var STACK_EVT = cs.Enums && cs.Enums.Events && cs.Enums.Events.STACK_NEW_IMAGE;
+      if (!STACK_EVT) { console.warn('[LinkRad] mammo slice sync: no STACK_NEW_IMAGE event constant'); return; }
+      vpIds.forEach(function (srcId) {
+        var srcVp = re.getViewport(srcId);
+        if (!srcVp || !srcVp.element) return;
+        var handler = function () {
+          if (_mammoSliceSuppress) return;
+          var srcIdx;
+          try { srcIdx = srcVp.getCurrentImageIdIndex(); } catch (e) { return; }
+          if (typeof srcIdx !== 'number') return;
+          _mammoSliceSuppress = true;
+          try {
+            vpIds.forEach(function (tgtId) {
+              if (tgtId === srcId) return;
+              var tgt = re.getViewport(tgtId);
+              if (!tgt) return;
+              var tgtImgs = [];
+              try { tgtImgs = tgt.getImageIds(); } catch (e) {}
+              if (!tgtImgs.length) return;
+              // Map by ordinal, clamped to target's available range.
+              var newIdx = Math.min(srcIdx, tgtImgs.length - 1);
+              var cur;
+              try { cur = tgt.getCurrentImageIdIndex(); } catch (e) {}
+              if (cur === newIdx) return;
+              try {
+                // Use the StackViewport instance method `viewport.scroll(delta)`
+                // (NOT raw setImageIdIndex). scroll() fires both STACK_NEW_IMAGE
+                // *and* STACK_VIEWPORT_SCROLL — the latter is what OHIF's
+                // CustomizableViewportOverlay subscribes to for the
+                // "I: N (idx/total)" corner text. setImageIdIndex alone updates
+                // the rendered pixels but leaves the React overlay stale.
+                if (typeof tgt.scroll === 'function') {
+                  tgt.scroll(newIdx - (cur || 0));
+                } else {
+                  tgt.setImageIdIndex(newIdx);
+                  if (tgt.render) tgt.render();
+                }
+              } catch (e) { /* skip if target not ready */ }
+            });
+          } finally {
+            // Release on next macrotask so the propagated setImageIdIndex
+            // calls (which themselves fire STACK_NEW_IMAGE) have time to
+            // run with suppress still on.
+            setTimeout(function () { _mammoSliceSuppress = false; }, 0);
+          }
+        };
+        srcVp.element.addEventListener(STACK_EVT, handler);
+        _mammoSliceListeners.push({ elem: srcVp.element, evt: STACK_EVT, fn: handler });
+      });
+      console.log('[LinkRad] Mammo slice sync ON across', vpIds.length, 'viewports (custom event listener)');
+    } catch (e) { console.warn('[LinkRad] setupMammoSliceSync failed', e); }
   }
 
   // Mammo bilateral sync: chest-wall-anchored zoom. We can't use cornerstone's
@@ -2350,6 +2488,7 @@
     resetTissue: resetTissue,
     setMammoHanging: function (arg) { setMammoHanging(arg); },
     toggleMammoSync: function (arg) { toggleMammoSync(arg); },
+    toggleMammoSliceSync: function (arg) { toggleMammoSliceSync(arg); },
     setMagnifyLevel: function (level) { setMagnifyLevel(level); },
     restoreDefaultWL: restoreDefaultWL,
     applyWLPreset: function (arg) { applyWLPreset(arg); },
@@ -2606,6 +2745,7 @@
         type: 'checks',
         items: [
           { label: 'Sync zoom & pan giữa các pane mammo', fn: 'toggleMammoSync', defaultChecked: true },
+          { label: 'Sync cuộn slice TOMO bilateral',      fn: 'toggleMammoSliceSync', defaultChecked: true },
         ],
         hint: 'Khi bật: kéo trái = zoom đồng bộ, kéo phải = pan dọc đồng bộ. Chest wall luôn dính vào mép trong.',
       },
@@ -3601,6 +3741,8 @@
     // Test hook: trigger a Mammo hanging-protocol preset programmatically
     // (same code path as clicking the CC/MLO/etc. button in the sidebar).
     window._linkradSetMammoHanging = setMammoHanging;
+    // Test hook: toggle Mammo slice sync from Playwright / devtools.
+    window._linkradToggleMammoSliceSync = toggleMammoSliceSync;
     // Test hook: trigger mode tab programmatically (2D / MPR / 3D).
     window._linkradSwitchMode = switchMode;
 
