@@ -30,7 +30,9 @@ export default function PersistentOHIFHost () {
   const viewerStatesRef = useRef(new Map())   // caseId -> snapshot
   const currentStudyUIDRef = useRef(null)
 
-  // Listen for the iframe's one-shot lr:ready emit
+  // Listen for the iframe's emits: lr:ready (one-shot) and lr:api (RPC for
+  // the iframe to call HIS-RIS API endpoints through the parent's auth
+  // session — used by Key Image flagging, soft-hide, hard-delete, etc.)
   useEffect(() => {
     function onMsg (e) {
       const d = e.data
@@ -38,6 +40,52 @@ export default function PersistentOHIFHost () {
       if (d.type === 'lr:ready') {
         console.log('[OHIFHost] iframe lr:ready')
         setIframeReady(true)
+        return
+      }
+      if (d.type === 'lr:download') {
+        // Iframe asked us to trigger an authenticated download. We can't use
+        // a bare <a download> because LinkRad auth is bearer-token in
+        // localStorage — anchor navigation skips axios interceptors so the
+        // server returns 401. Instead: fetch the bytes via api (bearer
+        // injected), then create an Object URL and click a synthetic anchor.
+        ;(async () => {
+          try {
+            // Strip the /api prefix; api instance prepends it.
+            const path = String(d.url || '').replace(/^\/api/, '')
+            const r = await api.get(path, { responseType: 'blob' })
+            const blobUrl = URL.createObjectURL(r.data)
+            const a = document.createElement('a')
+            a.href = blobUrl
+            if (d.filename) a.download = d.filename
+            a.style.display = 'none'
+            document.body.appendChild(a)
+            a.click()
+            setTimeout(() => { try { a.remove(); URL.revokeObjectURL(blobUrl) } catch {} }, 5000)
+          } catch (err) {
+            console.warn('[OHIFHost] download failed', err)
+            alert('Tải về thất bại: ' + (err?.response?.data?.error || err.message))
+          }
+        })()
+        return
+      }
+      if (d.type === 'lr:api') {
+        const corr = d.correlationId
+        const target = iframeRef.current?.contentWindow
+        const reply = (payload) => {
+          try { target && target.postMessage({ source: 'linkrad-parent', type: 'lr:api:result', correlationId: corr, ...payload }, '*') } catch {}
+        }
+        ;(async () => {
+          try {
+            const method = (d.method || 'GET').toUpperCase()
+            const url    = d.path // e.g. '/ris/key-images', '/ris/studies/abc/hide'
+            const opts = { method }
+            if (d.body !== undefined) opts.data = d.body
+            const r = await api.request({ url, ...opts })
+            reply({ ok: true, status: r.status, data: r.data })
+          } catch (err) {
+            reply({ ok: false, status: err?.response?.status || 0, error: err?.response?.data?.error || err.message })
+          }
+        })()
       }
     }
     window.addEventListener('message', onMsg)

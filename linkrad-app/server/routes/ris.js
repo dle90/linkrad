@@ -814,6 +814,189 @@ router.delete('/key-images/:id', requireAuth, async (req, res) => {
 })
 
 // ═══════════════════════════════════════════════════════
+// STUDY HIDE / UNHIDE / HARD DELETE
+// ═══════════════════════════════════════════════════════
+// All require admin role; soft-hide is reversible, hard delete cascades
+// through Mongo (Study, Report, KeyImage, StudyAnnotation) and Orthanc
+// (study/series/instance DELETE). Hard delete is permanent and irreversible.
+
+function requireAdmin (req, res, next) {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Yêu cầu quyền admin' })
+  next()
+}
+
+// PATCH /studies/:id/hide — soft-hide a study from default worklist view
+router.patch('/studies/:id/hide', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const reason = (req.body && req.body.reason) || ''
+    const now = new Date().toISOString()
+    const updated = await Study.findByIdAndUpdate(
+      req.params.id,
+      { $set: { hiddenAt: now, hiddenBy: req.user.username, hiddenByName: req.user.displayName, hiddenReason: reason, updatedAt: now } },
+      { new: true }
+    )
+    if (!updated) return res.status(404).json({ error: 'Không tìm thấy ca' })
+    res.json({ ok: true, study: updated })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// PATCH /studies/:id/unhide — restore a soft-hidden study
+router.patch('/studies/:id/unhide', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const updated = await Study.findByIdAndUpdate(
+      req.params.id,
+      { $set: { updatedAt: new Date().toISOString() }, $unset: { hiddenAt: '', hiddenBy: '', hiddenByName: '', hiddenReason: '' } },
+      { new: true }
+    )
+    if (!updated) return res.status(404).json({ error: 'Không tìm thấy ca' })
+    res.json({ ok: true, study: updated })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /studies/:id — hard delete study from Mongo + Orthanc + cascade
+router.delete('/studies/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const study = await Study.findById(req.params.id)
+    if (!study) return res.status(404).json({ error: 'Không tìm thấy ca' })
+
+    // Orthanc side: resolve studyUID → Orthanc study id, then DELETE
+    let orthancDeleted = false
+    if (study.studyUID) {
+      try {
+        const findRes = await fetch(`${ORTHANC_BASE}/tools/find`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ Level: 'Study', Query: { StudyInstanceUID: study.studyUID } }),
+        })
+        if (findRes.ok) {
+          const ids = await findRes.json()
+          for (const orthancId of (ids || [])) {
+            const delRes = await fetch(`${ORTHANC_BASE}/studies/${orthancId}`, { method: 'DELETE' })
+            if (delRes.ok) orthancDeleted = true
+          }
+        }
+      } catch (e) { /* Orthanc unreachable — still cascade Mongo */ }
+    }
+
+    // Mongo cascade
+    const reportRes  = await Report.deleteMany({ studyId: req.params.id })
+    const keyImgRes  = await KeyImage.deleteMany({ studyId: req.params.id })
+    const annRes     = await StudyAnnotation.deleteMany({ studyId: req.params.id })
+    await Study.findByIdAndDelete(req.params.id)
+
+    res.json({
+      ok: true,
+      orthancDeleted,
+      cascaded: { reports: reportRes.deletedCount, keyImages: keyImgRes.deletedCount, annotations: annRes.deletedCount },
+    })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /orthanc/series/:seriesUID — hard delete a single series from Orthanc
+router.delete('/orthanc/series/:seriesUID', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const findRes = await fetch(`${ORTHANC_BASE}/tools/find`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Level: 'Series', Query: { SeriesInstanceUID: req.params.seriesUID } }),
+    })
+    if (!findRes.ok) return res.status(502).json({ error: 'Orthanc lookup failed' })
+    const ids = await findRes.json()
+    if (!ids?.length) return res.status(404).json({ error: 'Series không tìm thấy trong Orthanc' })
+    let count = 0
+    for (const id of ids) {
+      const r = await fetch(`${ORTHANC_BASE}/series/${id}`, { method: 'DELETE' })
+      if (r.ok) count++
+    }
+    // Also drop any KeyImages referring to this series
+    const ki = await KeyImage.deleteMany({ seriesUID: req.params.seriesUID })
+    res.json({ ok: true, deleted: count, keyImagesRemoved: ki.deletedCount })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /orthanc/instances/:instanceUID — hard delete a single instance
+router.delete('/orthanc/instances/:instanceUID', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const findRes = await fetch(`${ORTHANC_BASE}/tools/find`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Level: 'Instance', Query: { SOPInstanceUID: req.params.instanceUID } }),
+    })
+    if (!findRes.ok) return res.status(502).json({ error: 'Orthanc lookup failed' })
+    const ids = await findRes.json()
+    if (!ids?.length) return res.status(404).json({ error: 'Instance không tìm thấy trong Orthanc' })
+    let count = 0
+    for (const id of ids) {
+      const r = await fetch(`${ORTHANC_BASE}/instances/${id}`, { method: 'DELETE' })
+      if (r.ok) count++
+    }
+    const ki = await KeyImage.deleteMany({ instanceUID: req.params.instanceUID })
+    res.json({ ok: true, deleted: count, keyImagesRemoved: ki.deletedCount })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ═══════════════════════════════════════════════════════
+// DICOM DOWNLOAD PROXIES
+// ═══════════════════════════════════════════════════════
+// Stream-pipe Orthanc's instance file / series archive / study archive to the
+// client with a Content-Disposition: attachment header so the browser saves.
+
+async function _streamFromOrthanc (req, res, orthancPath, downloadName) {
+  try {
+    const upstream = await fetch(`${ORTHANC_BASE}${orthancPath}`)
+    if (!upstream.ok) return res.status(upstream.status).json({ error: 'Orthanc fetch failed' })
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`)
+    const ct = upstream.headers.get('content-type')
+    if (ct) res.setHeader('Content-Type', ct)
+    const buf = Buffer.from(await upstream.arrayBuffer())
+    res.send(buf)
+  } catch (err) { res.status(502).json({ error: err.message }) }
+}
+
+// Resolve a DICOM SOPInstanceUID → Orthanc instance id, then proxy the .dcm bytes
+router.get('/orthanc/download/instance/:instanceUID', requireAuth, async (req, res) => {
+  try {
+    const findRes = await fetch(`${ORTHANC_BASE}/tools/find`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Level: 'Instance', Query: { SOPInstanceUID: req.params.instanceUID } }),
+    })
+    if (!findRes.ok) return res.status(502).json({ error: 'Orthanc lookup failed' })
+    const ids = await findRes.json()
+    if (!ids?.length) return res.status(404).json({ error: 'Không tìm thấy ảnh' })
+    return _streamFromOrthanc(req, res, `/instances/${ids[0]}/file`, `${req.params.instanceUID}.dcm`)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+router.get('/orthanc/download/series/:seriesUID', requireAuth, async (req, res) => {
+  try {
+    const findRes = await fetch(`${ORTHANC_BASE}/tools/find`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Level: 'Series', Query: { SeriesInstanceUID: req.params.seriesUID } }),
+    })
+    if (!findRes.ok) return res.status(502).json({ error: 'Orthanc lookup failed' })
+    const ids = await findRes.json()
+    if (!ids?.length) return res.status(404).json({ error: 'Không tìm thấy chuỗi' })
+    return _streamFromOrthanc(req, res, `/series/${ids[0]}/archive`, `series-${req.params.seriesUID.slice(-12)}.zip`)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+router.get('/orthanc/download/study/:studyUID', requireAuth, async (req, res) => {
+  try {
+    const findRes = await fetch(`${ORTHANC_BASE}/tools/find`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Level: 'Study', Query: { StudyInstanceUID: req.params.studyUID } }),
+    })
+    if (!findRes.ok) return res.status(502).json({ error: 'Orthanc lookup failed' })
+    const ids = await findRes.json()
+    if (!ids?.length) return res.status(404).json({ error: 'Không tìm thấy ca' })
+    return _streamFromOrthanc(req, res, `/studies/${ids[0]}/archive`, `study-${req.params.studyUID.slice(-12)}.zip`)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ═══════════════════════════════════════════════════════
 // PRIOR STUDY COMPARISON
 // ═══════════════════════════════════════════════════════
 
