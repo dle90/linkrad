@@ -6,6 +6,12 @@
   "deploy": {
     "startCommand": "node linkrad-app/server/index.js",
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
+    "restartPolicyMaxRetries": 10,
+    "watchPatterns": [
+      "linkrad-app/server/**",
+      "linkrad-app/client/**",
+      "linkrad-app/package*.json",
+      "railway.json"
+    ]
   }
 }
