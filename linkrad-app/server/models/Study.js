@@ -52,13 +52,6 @@ const studySchema = new mongoose.Schema({
   },
   consumablesDeductedAt: String,
   consumablesTransactionId: String,
-  // Soft-hide: study still exists in Mongo + Orthanc but is rendered faded
-  // in the worklist. Reversible via the "unhide" endpoint. Hard-delete is
-  // separate (cascades through Report / KeyImage / StudyAnnotation + Orthanc).
-  hiddenAt: String,
-  hiddenBy: String,
-  hiddenByName: String,
-  hiddenReason: String,
   createdAt: String,
   updatedAt: String,
 }, { _id: false })

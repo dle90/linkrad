@@ -79,26 +79,7 @@
     { type: 'spacer' },
 
     // ---- Group E: Output / metadata (right edge) ----
-    { type: 'btn', id: 'keyimg',     svg: 'star',     tip: 'Key Image · Đánh dấu ảnh quan trọng', fn: 'toggleKeyImage' },
-    { type: 'btn', id: 'save',       svg: 'download', tip: 'Lưu · Tải về ▾',
-      dropdown: [
-        { label: 'Ảnh hiện tại (JPEG)',         cmd: 'showDownloadViewportModal' },
-        { label: 'Ảnh hiện tại (DICOM .dcm)',   fn: 'downloadCurrentInstance' },
-        { label: 'Loạt hiện tại (DICOM .zip)',  fn: 'downloadCurrentSeries' },
-        { label: 'Ca hiện tại (DICOM .zip)',    fn: 'downloadCurrentStudy' },
-      ]
-    },
     { type: 'btn', id: 'capture',    svg: 'camera',   tip: 'Capture · Chụp viewport',  cmd: 'showDownloadViewportModal' },
-    { type: 'btn', id: 'delStudy',   svg: 'trash',    tip: 'Xóa · Ẩn / Xóa vĩnh viễn ▾', style: 'color:#ef4444',
-      dropdown: [
-        { label: 'Ẩn ca này (có thể khôi phục)',           fn: 'hideCurrentStudy' },
-        { label: 'Bỏ ẩn ca này',                          fn: 'unhideCurrentStudy' },
-        { divider: true },
-        { label: 'Xóa vĩnh viễn ảnh hiện tại',             fn: 'hardDeleteCurrentInstance' },
-        { label: 'Xóa vĩnh viễn loạt hiện tại',            fn: 'hardDeleteCurrentSeries' },
-        { label: 'Xóa vĩnh viễn ca hiện tại (cả Mongo)',   fn: 'hardDeleteCurrentStudy' },
-      ]
-    },
     { type: 'btn', id: 'tags',       svg: 'info',     tip: 'Info ▾',
       dropdown: [
         { label: 'DICOM Tags · Xem thẻ DICOM', cmd: 'openDICOMTagViewer', ctx: 'DEFAULT' },
@@ -142,9 +123,6 @@
     play: '<path d="M7 5v14l12-7-12-7z" fill="currentColor"/>',
     camera: '<rect x="3" y="7" width="18" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 7l1.5-3h3L15 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="14" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/>',
     info: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="8" r="1.2" fill="currentColor"/><path d="M12 11v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
-    star: '<path d="M12 3l2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1L3.2 9.4l6.1-.9L12 3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
-    download: '<path d="M12 3v12m-4-4l4 4 4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
-    trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
   };
 
   function svgIcon(name) {
@@ -898,225 +876,6 @@
     } catch (e) {}
 
     console.log('[LinkRad toolbar] Delete All — measurementService:', msCount, '· cornerstone state:', cstCount);
-  }
-
-  // ============================================================
-  // KEY IMAGE / SAVE / DELETE — toolbar handlers
-  // ============================================================
-  // Read identifiers of what's currently on screen: study UID (URL), and the
-  // active viewport's series UID + SOP instance UID (from cornerstone state).
-  function _currentDicomIds() {
-    var out = { studyUID: null, seriesUID: null, instanceUID: null, frameNumber: 0 };
-    try {
-      var u = new URL(window.location.href);
-      out.studyUID = u.searchParams.get('StudyInstanceUIDs') || u.searchParams.get('StudyInstanceUID') || null;
-    } catch (e) {}
-    try {
-      var vgs = window.services && window.services.viewportGridService;
-      var grid = vgs && vgs.getState && vgs.getState();
-      var activeId = grid && grid.activeViewportId;
-      var re = window.cornerstone && window.cornerstone.getRenderingEngines && window.cornerstone.getRenderingEngines()[0];
-      var vp = re && re.getViewport(activeId);
-      if (!vp) { // fall back to first viewport
-        var vps = re && re.getViewports && re.getViewports();
-        if (vps && vps.length) vp = vps[0];
-      }
-      if (vp && typeof vp.getCurrentImageId === 'function') {
-        var imgId = vp.getCurrentImageId();
-        if (imgId) {
-          // wadors:.../series/<UID>/instances/<UID>/frames/<N>
-          var m = imgId.match(/series\/([^\/]+)\/instances\/([^\/]+)(?:\/frames\/(\d+))?/);
-          if (m) { out.seriesUID = m[1]; out.instanceUID = m[2]; out.frameNumber = m[3] ? parseInt(m[3], 10) : 0; }
-        }
-      }
-    } catch (e) {}
-    return out;
-  }
-
-  // ============================================================
-  // Parent ↔ iframe RPC for HIS-RIS API calls (auth lives on parent)
-  // ============================================================
-  var _apiPending = {};
-  window.addEventListener('message', function (e) {
-    var d = e.data;
-    if (!d || d.source !== 'linkrad-parent' || d.type !== 'lr:api:result') return;
-    var p = _apiPending[d.correlationId];
-    if (!p) return;
-    delete _apiPending[d.correlationId];
-    if (d.ok) p.resolve({ status: d.status, data: d.data });
-    else      p.reject(new Error(d.error || ('HTTP ' + d.status)));
-  });
-  function lrApi(method, path, body) {
-    var corr = 'api-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-    return new Promise(function (resolve, reject) {
-      _apiPending[corr] = { resolve: resolve, reject: reject };
-      try {
-        window.parent.postMessage({ source: 'linkrad-iframe', type: 'lr:api', correlationId: corr, method: method, path: path, body: body }, '*');
-      } catch (e) { delete _apiPending[corr]; reject(e); }
-      // Safety timeout
-      setTimeout(function () { if (_apiPending[corr]) { delete _apiPending[corr]; reject(new Error('lr:api timed out')); } }, 30000);
-    });
-  }
-
-  function _toast(msg, kind) {
-    var el = document.createElement('div');
-    el.style.cssText = 'position:fixed;top:64px;right:16px;z-index:10000;padding:10px 16px;background:' +
-      (kind === 'error' ? '#7f1d1d' : kind === 'warn' ? '#92400e' : '#065f46') +
-      ';color:#fff;border-radius:6px;font-size:13px;max-width:380px;box-shadow:0 4px 12px rgba(0,0,0,0.4);';
-    el.textContent = msg;
-    document.body.appendChild(el);
-    setTimeout(function () { try { el.remove(); } catch (e) {} }, 5500);
-  }
-
-  // ---- Key Image ----
-  // Cache of current study's key-image records (id-keyed) for star overlay +
-  // toggle semantics. Refreshed on toggle and on study load.
-  var _keyImageCache = []; // [{ _id, studyUID, seriesUID, instanceUID, frameNumber }]
-  function refreshKeyImages() {
-    var ids = _currentDicomIds();
-    if (!ids.studyUID) return Promise.resolve([]);
-    return lrApi('GET', '/ris/key-images/' + encodeURIComponent(ids.studyUID))
-      .then(function (r) { _keyImageCache = Array.isArray(r.data) ? r.data : []; renderKeyImageOverlay(); return _keyImageCache; })
-      .catch(function () { _keyImageCache = []; return []; });
-  }
-  function toggleKeyImage() {
-    var ids = _currentDicomIds();
-    if (!ids.instanceUID) { _toast('Không xác định được ảnh hiện tại', 'error'); return; }
-    var existing = _keyImageCache.find(function (k) {
-      return k.instanceUID === ids.instanceUID && (k.frameNumber || 0) === (ids.frameNumber || 0);
-    });
-    if (existing) {
-      lrApi('DELETE', '/ris/key-images/' + encodeURIComponent(existing._id))
-        .then(function () { _toast('Đã bỏ đánh dấu Key Image'); return refreshKeyImages(); })
-        .catch(function (err) { _toast('Lỗi: ' + err.message, 'error'); });
-    } else {
-      lrApi('POST', '/ris/key-images', {
-        studyId: ids.studyUID, // backend uses studyId as the primary key; pass UID for now (server stores both)
-        studyUID: ids.studyUID,
-        seriesUID: ids.seriesUID,
-        instanceUID: ids.instanceUID,
-        frameNumber: ids.frameNumber,
-      })
-        .then(function () { _toast('Đã đánh dấu Key Image ✓'); return refreshKeyImages(); })
-        .catch(function (err) { _toast('Lỗi: ' + err.message, 'error'); });
-    }
-  }
-  // Yellow star marker bottom-right of viewports whose current image is a
-  // key image. Re-rendered on every cornerstone STACK_NEW_IMAGE so it tracks
-  // wheel scrolling.
-  function renderKeyImageOverlay() {
-    document.querySelectorAll('.lr-keyimg-star').forEach(function (el) { el.remove(); });
-    if (!_keyImageCache.length) return;
-    try {
-      var re = window.cornerstone && window.cornerstone.getRenderingEngines && window.cornerstone.getRenderingEngines()[0];
-      var vps = (re && re.getViewports && re.getViewports()) || [];
-      vps.forEach(function (vp) {
-        if (!vp || !vp.element || typeof vp.getCurrentImageId !== 'function') return;
-        var imgId = vp.getCurrentImageId(); if (!imgId) return;
-        var m = imgId.match(/instances\/([^\/]+)(?:\/frames\/(\d+))?/);
-        if (!m) return;
-        var iuid = m[1], fno = m[2] ? parseInt(m[2], 10) : 0;
-        var marked = _keyImageCache.some(function (k) { return k.instanceUID === iuid && (k.frameNumber || 0) === fno; });
-        if (!marked) return;
-        var pane = vp.element.closest('[data-cy="viewport-pane"]') || vp.element.parentElement;
-        if (!pane) return;
-        var star = document.createElement('div');
-        star.className = 'lr-keyimg-star';
-        star.style.cssText = 'position:absolute;bottom:36px;right:8px;color:#fbbf24;font-size:22px;text-shadow:0 0 4px rgba(0,0,0,0.8);pointer-events:none;z-index:5;';
-        star.textContent = '★';
-        star.title = 'Key Image';
-        pane.appendChild(star);
-      });
-    } catch (e) {}
-  }
-  // Subscribe star refresh to wheel-driven slice changes
-  function subscribeKeyImageOverlay() {
-    if (subscribeKeyImageOverlay._done) return;
-    var cs = window.cornerstone;
-    var tgt = cs && cs.eventTarget;
-    var STACK = cs && cs.Enums && cs.Enums.Events && cs.Enums.Events.STACK_NEW_IMAGE;
-    if (!tgt || !STACK) return;
-    tgt.addEventListener(STACK, function () { renderKeyImageOverlay(); });
-    subscribeKeyImageOverlay._done = true;
-  }
-
-  // ---- Save (DICOM download via server proxy) ----
-  function _triggerDownload(url, suggested) {
-    // Use a transient <a download> so the browser handles Save As. We can't
-    // window.open() directly because we need the session cookie which only
-    // attaches on same-origin XHR; the parent's API hostname differs from
-    // OHIF's hostname in prod. So instead: fetch through lr:api (parent
-    // proxies → returns base64 blob? no — easier: just open server URL from
-    // parent window so it uses the parent's session.)
-    try {
-      // Ask parent to navigate a hidden iframe / anchor to the URL with
-      // its session cookie. Simpler in v1: parent opens a download window.
-      window.parent.postMessage({ source: 'linkrad-iframe', type: 'lr:download', url: url, filename: suggested || '' }, '*');
-      _toast('Đang tải về: ' + (suggested || url));
-    } catch (e) { _toast('Lỗi: ' + e.message, 'error'); }
-  }
-  function downloadCurrentInstance() {
-    var ids = _currentDicomIds();
-    if (!ids.instanceUID) return _toast('Không xác định được ảnh', 'error');
-    _triggerDownload('/api/ris/orthanc/download/instance/' + encodeURIComponent(ids.instanceUID), ids.instanceUID + '.dcm');
-  }
-  function downloadCurrentSeries() {
-    var ids = _currentDicomIds();
-    if (!ids.seriesUID) return _toast('Không xác định được loạt', 'error');
-    _triggerDownload('/api/ris/orthanc/download/series/' + encodeURIComponent(ids.seriesUID), 'series-' + ids.seriesUID.slice(-12) + '.zip');
-  }
-  function downloadCurrentStudy() {
-    var ids = _currentDicomIds();
-    if (!ids.studyUID) return _toast('Không xác định được ca', 'error');
-    _triggerDownload('/api/ris/orthanc/download/study/' + encodeURIComponent(ids.studyUID), 'study-' + ids.studyUID.slice(-12) + '.zip');
-  }
-
-  // ---- Hide / Hard delete ----
-  function hideCurrentStudy() {
-    var ids = _currentDicomIds();
-    if (!ids.studyUID) return _toast('Không xác định được ca', 'error');
-    var reason = window.prompt('Lý do ẩn ca (tuỳ chọn):', '');
-    if (reason === null) return; // user cancelled
-    lrApi('PATCH', '/ris/studies/' + encodeURIComponent(ids.studyUID) + '/hide', { reason: reason })
-      .then(function () { _toast('Đã ẩn ca · sẽ hiển thị mờ trong worklist'); })
-      .catch(function (err) { _toast('Lỗi ẩn ca: ' + err.message, 'error'); });
-  }
-  function unhideCurrentStudy() {
-    var ids = _currentDicomIds();
-    if (!ids.studyUID) return _toast('Không xác định được ca', 'error');
-    lrApi('PATCH', '/ris/studies/' + encodeURIComponent(ids.studyUID) + '/unhide')
-      .then(function () { _toast('Đã bỏ ẩn ca'); })
-      .catch(function (err) { _toast('Lỗi bỏ ẩn: ' + err.message, 'error'); });
-  }
-  function _confirmHardDelete(label) {
-    return window.confirm('Bạn có chắc muốn XÓA VĨNH VIỄN ' + label + '?\n\nThao tác này không thể hoàn tác.');
-  }
-  function hardDeleteCurrentInstance() {
-    var ids = _currentDicomIds();
-    if (!ids.instanceUID) return _toast('Không xác định được ảnh', 'error');
-    if (!_confirmHardDelete('ảnh hiện tại')) return;
-    lrApi('DELETE', '/ris/orthanc/instances/' + encodeURIComponent(ids.instanceUID))
-      .then(function (r) { _toast('Đã xóa ảnh khỏi PACS (' + (r.data?.deleted || 0) + ')'); })
-      .catch(function (err) { _toast('Lỗi xóa ảnh: ' + err.message, 'error'); });
-  }
-  function hardDeleteCurrentSeries() {
-    var ids = _currentDicomIds();
-    if (!ids.seriesUID) return _toast('Không xác định được loạt', 'error');
-    if (!_confirmHardDelete('loạt hiện tại (tất cả ảnh trong loạt)')) return;
-    lrApi('DELETE', '/ris/orthanc/series/' + encodeURIComponent(ids.seriesUID))
-      .then(function (r) { _toast('Đã xóa loạt khỏi PACS (' + (r.data?.deleted || 0) + ')'); })
-      .catch(function (err) { _toast('Lỗi xóa loạt: ' + err.message, 'error'); });
-  }
-  function hardDeleteCurrentStudy() {
-    var ids = _currentDicomIds();
-    if (!ids.studyUID) return _toast('Không xác định được ca', 'error');
-    if (!_confirmHardDelete('toàn bộ ca hiện tại (cả Mongo: Report, KeyImages, Annotations)')) return;
-    lrApi('DELETE', '/ris/studies/' + encodeURIComponent(ids.studyUID))
-      .then(function (r) {
-        var c = (r.data && r.data.cascaded) || {};
-        _toast('Đã xóa ca · cascade: ' + (c.reports || 0) + ' reports, ' + (c.keyImages || 0) + ' key-images, ' + (c.annotations || 0) + ' annotations', 'warn');
-      })
-      .catch(function (err) { _toast('Lỗi xóa ca: ' + err.message, 'error'); });
   }
 
   function togglePatientOverlay() {
@@ -2796,15 +2555,6 @@
     showVolumeLoadingOverlay: showVolumeLoadingOverlay,
     hideVolumeLoadingOverlay: hideVolumeLoadingOverlay,
     setZoomPanSync: function (arg) { setZoomPanSync(!!arg); },
-    toggleKeyImage: toggleKeyImage,
-    downloadCurrentInstance: downloadCurrentInstance,
-    downloadCurrentSeries: downloadCurrentSeries,
-    downloadCurrentStudy: downloadCurrentStudy,
-    hideCurrentStudy: hideCurrentStudy,
-    unhideCurrentStudy: unhideCurrentStudy,
-    hardDeleteCurrentInstance: hardDeleteCurrentInstance,
-    hardDeleteCurrentSeries: hardDeleteCurrentSeries,
-    hardDeleteCurrentStudy: hardDeleteCurrentStudy,
   };
 
   // ============================================================
@@ -3949,9 +3699,6 @@
     startMutationObserver();
     watchModality();
     subscribeMammoOverlays();
-    subscribeKeyImageOverlay();
-    // Initial key-image fetch — re-runs on lr:loadStudy too (see iframe RPC handler).
-    setTimeout(refreshKeyImages, 1500);
 
     // Parent (Teleradiology page) → iframe protocol.
     window.addEventListener('message', function (e) {
@@ -3974,12 +3721,7 @@
       if (data.type === 'lr:loadStudy') {
         console.log('[LinkRad] lr:loadStudy →', data.studyUID, data.restore ? '(with restore)' : '(fresh HP)');
         loadStudyInPlace(data.studyUID, data.restore)
-          .then(function (r) {
-            reply('lr:loadStudy:done', { studyUID: r.studyUID });
-            // Refresh key-image cache for the new study so the star overlay
-            // reflects the new study's flagged images.
-            setTimeout(function () { try { refreshKeyImages(); } catch (e) {} }, 1500);
-          })
+          .then(function (r) { reply('lr:loadStudy:done', { studyUID: r.studyUID }); })
           .catch(function (err) { reply('lr:loadStudy:error', { studyUID: data.studyUID, error: String(err && err.message || err) }); });
         return;
       }
