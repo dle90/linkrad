@@ -19,7 +19,7 @@ import { postLoadStudy, postSnapshotState, postPurgeStudy, postPrefetchStudy } f
 // restore in ~600ms with no React tree remount.
 
 export default function PersistentOHIFHost () {
-  const { openCases, activeCaseId, viewerSlotRect, prefetchRef } = useTeleradTabs()
+  const { openCases, activeCaseId, viewerSlotRect, prefetchRef, warmupStudyUID } = useTeleradTabs()
   const [iframeSrc, setIframeSrc] = useState(null)
   const [iframeReady, setIframeReady] = useState(false)
 
@@ -125,24 +125,34 @@ export default function PersistentOHIFHost () {
     }
   }, [prefetchRef, target, iframeReady])
 
-  // Lazy iframe-src mount on first real case
+  // Iframe-src mount. Seed priority: an open case (the bacsi clicked "Mở
+  // ca"), else warmupStudyUID (background boot triggered by Teleradiology
+  // loading the worklist). The warmup path mounts the iframe parked off-
+  // screen so the OHIF bundle is booted before the first real case-open.
   useEffect(() => {
     if (iframeSrc) return
-    if (openCases.length === 0) return
-    const seed = openCases.find(c => c._id === activeCaseId) || openCases[0]
-    if (!seed || !seed.studyUID) return
+    let seedStudyUID = null
+    let seedCaseId = SYS_WORKLIST
+    if (openCases.length > 0) {
+      const c = openCases.find(c => c._id === activeCaseId) || openCases[0]
+      if (c && c.studyUID) { seedStudyUID = c.studyUID; seedCaseId = c._id }
+    }
+    if (!seedStudyUID && warmupStudyUID) {
+      seedStudyUID = warmupStudyUID
+    }
+    if (!seedStudyUID) return
     let cancelled = false
-    api.get(`/ris/orthanc/viewer-url/${encodeURIComponent(seed.studyUID)}`)
+    api.get(`/ris/orthanc/viewer-url/${encodeURIComponent(seedStudyUID)}`)
       .then(r => {
         if (cancelled) return
         if (r.data?.found === false) return
-        currentStudyUIDRef.current = seed.studyUID
-        prevActiveRef.current = seed._id
+        currentStudyUIDRef.current = seedStudyUID
+        prevActiveRef.current = seedCaseId
         setIframeSrc(r.data.url)
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [openCases, activeCaseId, iframeSrc])
+  }, [openCases, activeCaseId, iframeSrc, warmupStudyUID])
 
   // Snapshot + load on activeCaseId change (once iframe ready)
   useEffect(() => {
@@ -164,6 +174,14 @@ export default function PersistentOHIFHost () {
         } catch (err) { console.warn('[OHIFHost] snapshot failed', err) }
       }
       if (!nextCase || !nextCase.studyUID) return
+
+      // Warm-up alignment: if the iframe is already showing this study (e.g.
+      // the worklist-load warmer seeded it), skip the redundant loadStudy —
+      // OHIF would otherwise rebuild the same viewport for no reason.
+      if (oldStudyUID === nextCase.studyUID) {
+        currentStudyUIDRef.current = nextCase.studyUID
+        return
+      }
 
       const restore = viewerStatesRef.current.get(next) || null
       try {

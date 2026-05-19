@@ -32,6 +32,12 @@ export function TeleradTabsProvider({ children }) {
   const prefetchStudy = useCallback((studyUID) => {
     if (typeof prefetchRef.current === 'function') prefetchRef.current(studyUID)
   }, [])
+  // Warm-up seed: Teleradiology publishes the first ready-to-read study UID
+  // after loading the worklist. PersistentOHIFHost uses it to mount the
+  // iframe early (parked off-screen) so the OHIF bundle is booted before the
+  // doctor clicks "Mở ca". Cleared on logout/refresh — the iframe survives
+  // route navigation regardless.
+  const [warmupStudyUID, setWarmupStudyUID] = useState(null)
 
   const openCase = useCallback((study) => {
     setOpenCases(cs => cs.find(c => c._id === study._id) ? cs : [...cs, study])
@@ -55,6 +61,7 @@ export function TeleradTabsProvider({ children }) {
       viewerSlotRect, setViewerSlotRect,
       undockedRef,
       prefetchRef, prefetchStudy,
+      warmupStudyUID, setWarmupStudyUID,
     }}>
       {children}
     </TeleradTabsContext.Provider>

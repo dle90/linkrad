@@ -111,8 +111,12 @@ function ViewerDivider({ reportWidth, onChange }) {
     <>
       <div
         onPointerDown={(e) => { e.preventDefault(); setDragging(true) }}
-        className="relative w-1 flex-shrink-0 bg-gray-300 hover:bg-blue-400 cursor-col-resize transition-colors
-                   before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5 before:content-['']"
+        // z-10 lifts the divider (and its widened ::before hit zone) above
+        // the persistent OHIF iframe (position:fixed, z-index:5). Without
+        // this, the 6px hit zone that overlaps the iframe is unclickable
+        // and the doctor effectively only gets a 4px wide grab strip.
+        className="relative z-10 w-1 flex-shrink-0 bg-gray-300 hover:bg-blue-400 cursor-col-resize transition-colors
+                   before:absolute before:inset-y-0 before:-left-2 before:-right-2 before:content-['']"
         title="Kéo để thay đổi kích thước"
       />
       {dragging && (
@@ -173,7 +177,24 @@ function ViewImagesButton({ studyUID, imageStatus, imageCount, compact = false }
 
 // ── Study list (left) ────────────────────────────────────────────────────────
 
-function StudyList({ studies, selectedId, onSelect, onOpen, onOpenInNewTab, groupKey, onGroupKey, filterBar }) {
+function StudyList({ studies, selectedId, onSelect, onOpen, onOpenInNewTab, onHoverRow, groupKey, onGroupKey, filterBar }) {
+  // Hover prefetch: 200ms dwell on a row signals enough intent to warm the
+  // study (Orthanc + R2 + browser HTTP caches) before the click lands. One
+  // shared timer — a new mouseenter clears the previous candidate.
+  const hoverTimerRef = useRef(null)
+  const lastHoverUIDRef = useRef(null)
+  const handleEnter = (s) => {
+    if (!onHoverRow || !s.studyUID) return
+    if (lastHoverUIDRef.current === s.studyUID) return
+    clearTimeout(hoverTimerRef.current)
+    hoverTimerRef.current = setTimeout(() => {
+      lastHoverUIDRef.current = s.studyUID
+      onHoverRow(s.studyUID)
+    }, 200)
+  }
+  const handleLeave = () => {
+    clearTimeout(hoverTimerRef.current)
+  }
   return (
     <div className="w-[520px] flex-shrink-0 flex flex-col bg-white border-r border-gray-200">
       {/* Pill group tabs */}
@@ -202,6 +223,8 @@ function StudyList({ studies, selectedId, onSelect, onOpen, onOpenInNewTab, grou
           return (
             <button key={s._id} onClick={() => onSelect(s)}
               onDoubleClick={() => onOpen(s)}
+              onMouseEnter={() => handleEnter(s)}
+              onMouseLeave={handleLeave}
               title={s.hiddenAt ? `Đã ẩn bởi ${s.hiddenByName || s.hiddenBy || '?'}${s.hiddenReason ? ' — ' + s.hiddenReason : ''}` : undefined}
               className={`w-full text-left px-3 py-2.5 rounded-xl border transition-colors
                 ${on ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-white border-gray-200 hover:bg-gray-50'}
@@ -428,7 +451,7 @@ export default function Teleradiology() {
   const { auth } = useAuth()
   const {
     openCases, activeCaseId, setActiveCaseId, openCase, closeCase, syncWithStudies,
-    setViewerSlotRect, undockedRef, prefetchStudy,
+    setViewerSlotRect, undockedRef, prefetchStudy, setWarmupStudyUID,
   } = useTeleradTabs()
   const slotRef = useRef(null)
 
@@ -544,8 +567,20 @@ export default function Teleradiology() {
   const load = async () => {
     try {
       const r = await api.get('/ris/studies')
-      setStudies(r.data || [])
-      syncWithStudies(r.data || [])
+      const list = r.data || []
+      setStudies(list)
+      syncWithStudies(list)
+      // Background warm: pick the first ready-to-read study and seed
+      // PersistentOHIFHost so the OHIF bundle boots while the doctor scans
+      // the worklist. When they click "Mở ca" we swap-load instead of cold-
+      // starting. Pending-read first (most likely target), then any other
+      // available study as a fallback.
+      if (setWarmupStudyUID) {
+        const pickable = (s) => s && s.studyUID && s.imageStatus === 'available' && !s.hiddenAt
+        const seed = list.find(s => pickable(s) && s.status === 'pending_read')
+                  || list.find(pickable)
+        if (seed) setWarmupStudyUID(seed.studyUID)
+      }
     } catch (e) {
       console.error('Teleradiology load error:', e)
     } finally {
@@ -734,6 +769,7 @@ export default function Teleradiology() {
               onSelect={(s) => { setSelectedId(s._id); prefetchStudy?.(s.studyUID) }}
               onOpen={openCase}
               onOpenInNewTab={openInNewTab}
+              onHoverRow={prefetchStudy}
               groupKey={groupKey}
               onGroupKey={setGroupKey}
               filterBar={filterBar}
