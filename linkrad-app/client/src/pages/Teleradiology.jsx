@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTeleradTabs, SYS_WORKLIST } from '../context/TeleradTabsContext'
 import CaseTabBar from '../components/CaseTabBar'
 import PatientDetailView from '../components/PatientDetailView'
+import { warmWorklist, pauseWarming, resumeWarming } from '../lib/pacsWarmer'
 
 const VIEWER_DOCKED_KEY = 'linkrad.reader.viewerDocked'
 const REPORT_WIDTH_KEY = 'linkrad.reader.reportWidth'
@@ -581,6 +582,14 @@ export default function Teleradiology() {
                   || list.find(pickable)
         if (seed) setWarmupStudyUID(seed.studyUID)
       }
+      // Warm the Cloudflare edge cache for the rest of today's worklist so the
+      // studies the doctor opens next are already in the VN PoP. Background +
+      // throttled; pauses while a case is open. See lib/pacsWarmer.js.
+      const warmUIDs = list
+        .filter(s => s.studyUID && s.imageStatus === 'available' && !s.hiddenAt &&
+                     (s.status === 'pending_read' || s.status === 'reading'))
+        .map(s => s.studyUID)
+      if (warmUIDs.length) warmWorklist(warmUIDs)
     } catch (e) {
       console.error('Teleradiology load error:', e)
     } finally {
@@ -589,6 +598,13 @@ export default function Teleradiology() {
   }
 
   useEffect(() => { load() }, [])
+
+  // Pause background edge-cache warming while a case is open — the doctor's
+  // real DICOM reads should own the bandwidth. Resume back on the worklist.
+  useEffect(() => {
+    if (activeCaseId && activeCaseId !== SYS_WORKLIST) pauseWarming()
+    else resumeWarming()
+  }, [activeCaseId])
 
   // Publish the slot's bounding rect to TeleradTabsContext so
   // <PersistentOHIFHost/> can pin its fixed iframe over the same area.
