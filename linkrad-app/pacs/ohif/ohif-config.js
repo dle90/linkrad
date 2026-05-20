@@ -140,9 +140,14 @@ window.config = {
       configuration: {
         friendlyName: 'LinkRad PACS',
         name: 'orthanc',
-        wadoUriRoot: '/wado',
-        qidoRoot: '/wado',
-        wadoRoot: '/wado',
+        // DICOM roots point at the Cloudflare Worker edge-cache rather than the
+        // OHIF nginx /wado proxy directly. The Worker caches immutable
+        // instance/frame bytes at CF PoPs (incl. Vietnam), so warm fetches are
+        // ~20x faster from VN (8.4MB mammo frame: 4.3s -> 0.2s). It bypasses
+        // QIDO/metadata so study lists stay live. Source: linkrad-app/pacs/cf-worker/
+        wadoUriRoot: 'https://linkrad-pacs-cache.linkrad.workers.dev/wado',
+        qidoRoot: 'https://linkrad-pacs-cache.linkrad.workers.dev/wado',
+        wadoRoot: 'https://linkrad-pacs-cache.linkrad.workers.dev/wado',
         qidoSupportsIncludeField: false,
         supportsReject: false,
         imageRendering: 'wadors',

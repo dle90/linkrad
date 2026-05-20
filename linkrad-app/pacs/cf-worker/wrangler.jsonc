@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "linkrad-pacs-cache",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-05-01",
+  // workers.dev gives a free *.workers.dev URL for probing before the custom
+  // domain DNS is live. Safe to leave on; OHIF points at the custom domain.
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    // Origin the Worker proxies + caches. The OHIF nginx already adds CORS;
+    // pointing here (rather than Orthanc directly) keeps one known-good path.
+    "ORIGIN": "https://linkrad-ohif-production.up.railway.app"
+  }
+  // Custom domain — uncommented + deployed once the creanova.tech zone is
+  // active in this Cloudflare account. `custom_domain: true` makes wrangler
+  // provision the DNS record + edge cert automatically.
+  // "routes": [
+  //   { "pattern": "pacs.creanova.tech", "custom_domain": true }
+  // ]
+}
