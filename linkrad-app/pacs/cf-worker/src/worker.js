@@ -1,33 +1,44 @@
 /**
  * LinkRad PACS edge cache — Cloudflare Worker
  *
- * Sits in front of the Railway-hosted Orthanc (Singapore) and caches immutable
- * DICOM bytes at Cloudflare PoPs. VN clients hit the HCM/HAN PoP at local-ISP
- * bandwidth instead of paying VN<->SG RTT + bandwidth on every frame.
+ * Sits in front of the Railway-hosted Orthanc (Singapore) and caches DICOM
+ * responses at Cloudflare PoPs. VN clients hit the HCM/HAN PoP at local-ISP
+ * bandwidth instead of paying VN<->SG RTT + bandwidth on every request.
  *
- * Caching policy:
- *   - CACHE  GET /wado/studies/<UID>/series/<UID>/instances/<UID>
- *            GET .../instances/<UID>/frames/<N>
- *            SOPInstanceUIDs are immutable by DICOM spec — pixel data and
- *            per-instance metadata never change once Orthanc holds the
- *            instance, so a 1-year immutable TTL is safe.
- *   - BYPASS GET /wado/studies?...          (QIDO — result set changes as
- *            GET .../studies/<UID>/metadata  studies/series are added)
- *            GET .../series/<UID>/metadata
- *   - BYPASS every non-GET (Orthanc hard-delete DELETE must reach origin).
+ * Three tiers:
+ *   - IMMUTABLE (1-year)  GET /wado/studies/<UID>/series/<UID>/instances/<UID>
+ *                         GET .../instances/<UID>/frames/<N>
+ *       SOPInstanceUIDs are immutable by DICOM spec — pixel data never changes.
+ *   - STUDY META (10-min) GET /wado/studies/<UID>            (study-scoped:
+ *                         GET .../studies/<UID>/metadata      metadata, series
+ *                         GET .../studies/<UID>/series        list, instance
+ *                         GET .../series/<UID>/metadata       list, etc.)
+ *       Per-study metadata is immutable once a study finishes arriving, but a
+ *       study still being acquired can change — so a short TTL caps staleness
+ *       to 10 min while still killing the repeat-fetch cost (warmer + doctor +
+ *       re-reads in a session all hit the cache).
+ *   - BYPASS              GET /wado/studies?...   (QIDO — the study search
+ *                         every non-GET            result set changes as new
+ *                                                  studies are registered;
+ *                                                  Orthanc DELETE must reach
+ *                                                  origin).
  *
- * Response is decorated with CORS + CORP headers so the OHIF page (a
+ * Responses are decorated with CORS + CORP headers so the OHIF page (a
  * different origin, loaded under COEP: require-corp) can fetch cross-origin.
  * X-LR-Cache: HIT | MISS | BYPASS is added for probing/observability.
  */
 
-// Matches /wado/studies/<UID>/series/<UID>/instances/<UID> and the
-// multi-frame variant .../instances/<UID>/frames/<N>. Mirrors the regex
-// location in ohif-nginx.conf so cache scope stays identical to nginx's.
+// Per-instance / per-frame pixel data — immutable by DICOM spec. Mirrors the
+// regex location in ohif-nginx.conf.
 const IMMUTABLE_RE =
   /^\/wado\/studies\/[^/]+\/series\/[^/]+\/instances\/[^/]+(?:\/frames\/[^/]+)?\/?$/;
 
+// Anything scoped to one study UID — metadata, series list, instance list.
+// Does NOT match the bare QIDO search `/wado/studies` (no UID segment).
+const STUDY_META_RE = /^\/wado\/studies\/[^/]+(?:\/|$)/;
+
 const IMMUTABLE_TTL = 'public, max-age=31536000, immutable';
+const META_TTL = 'public, max-age=600'; // 10 min — caps metadata staleness
 
 function corsHeaders() {
   return {
@@ -84,11 +95,16 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders() });
     }
 
-    const cacheable =
-      request.method === 'GET' && IMMUTABLE_RE.test(url.pathname);
+    // Decide cache tier. Immutable wins over study-meta (frames are also
+    // study-scoped). QIDO search and every non-GET fall through to bypass.
+    let tier = 'bypass';
+    if (request.method === 'GET') {
+      if (IMMUTABLE_RE.test(url.pathname)) tier = 'immutable';
+      else if (STUDY_META_RE.test(url.pathname)) tier = 'meta';
+    }
 
-    // Pass-through: QIDO, metadata, and every non-GET method.
-    if (!cacheable) {
+    // Pass-through: QIDO study search and every non-GET method.
+    if (tier === 'bypass') {
       const resp = await fetch(originUrl, {
         method: request.method,
         headers: forwardHeaders(request),
@@ -97,8 +113,9 @@ export default {
       return decorate(resp, 'BYPASS');
     }
 
-    // Immutable resource — PoP-local cache, keyed by the origin URL so the
-    // key is stable regardless of which custom domain fronts the Worker.
+    // Cacheable — PoP-local cache, keyed by the origin URL so the key is
+    // stable regardless of which domain fronts the Worker.
+    const ttl = tier === 'immutable' ? IMMUTABLE_TTL : META_TTL;
     const cache = caches.default;
     const cacheKey = new Request(originUrl, { method: 'GET' });
 
@@ -113,10 +130,10 @@ export default {
     });
 
     // Only cache a clean success. Errors/redirects fall through uncached so a
-    // transient origin blip never gets pinned for a year.
+    // transient origin blip never gets pinned.
     if (originResp.status === 200) {
       const h = new Headers(originResp.headers);
-      h.set('Cache-Control', IMMUTABLE_TTL);
+      h.set('Cache-Control', ttl);
       h.delete('Set-Cookie');
       const stored = new Response(originResp.body, {
         status: 200,
