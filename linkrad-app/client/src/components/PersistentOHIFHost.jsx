@@ -22,6 +22,11 @@ export default function PersistentOHIFHost () {
   const { openCases, activeCaseId, viewerSlotRect, prefetchRef, warmupStudyUID } = useTeleradTabs()
   const [iframeSrc, setIframeSrc] = useState(null)
   const [iframeReady, setIframeReady] = useState(false)
+  // True while a study swap (lr:loadStudy) is in flight. The swap tears OHIF
+  // down and re-inits it — a ~10-20s black gap for big studies — so we cover
+  // the iframe with a loading overlay instead of leaving the doctor staring
+  // at a black viewport that looks broken.
+  const [swapping, setSwapping] = useState(false)
 
   const iframeRef = useRef(null)
   const queueRef = useRef(Promise.resolve())
@@ -184,6 +189,7 @@ export default function PersistentOHIFHost () {
       }
 
       const restore = viewerStatesRef.current.get(next) || null
+      setSwapping(true)
       try {
         await postLoadStudy(target(), nextCase.studyUID, restore)
         currentStudyUIDRef.current = nextCase.studyUID
@@ -195,7 +201,11 @@ export default function PersistentOHIFHost () {
             !openCases.some(c => c.studyUID === oldStudyUID)) {
           postPurgeStudy(target(), oldStudyUID)
         }
-      } catch (err) { console.warn('[OHIFHost] load failed', err) }
+      } catch (err) {
+        console.warn('[OHIFHost] load failed', err)
+      } finally {
+        setSwapping(false)
+      }
     })
   }, [activeCaseId, openCases, iframeReady, enqueue, target])
 
@@ -236,13 +246,43 @@ export default function PersistentOHIFHost () {
     zIndex: -1,
   }
 
+  // Loading overlay — pinned over the same rect as the iframe. Shown while a
+  // study swap is in flight, or before the iframe's first lr:ready. Without
+  // it, the swap's teardown→reinit shows a bare black viewport that looks
+  // broken (the #1 "it won't load" complaint on big CT studies).
+  const showOverlay = visible && (swapping || !iframeReady)
+
   return (
-    <iframe
-      ref={iframeRef}
-      src={iframeSrc}
-      title="DICOM Viewer"
-      allow="fullscreen; clipboard-read; clipboard-write; cross-origin-isolated"
-      style={style}
-    />
+    <>
+      <iframe
+        ref={iframeRef}
+        src={iframeSrc}
+        title="DICOM Viewer"
+        allow="fullscreen; clipboard-read; clipboard-write; cross-origin-isolated"
+        style={style}
+      />
+      {showOverlay && (
+        <div
+          style={{
+            position: 'fixed',
+            top: viewerSlotRect.top,
+            left: viewerSlotRect.left,
+            width: viewerSlotRect.width,
+            height: viewerSlotRect.height,
+            zIndex: 6,
+            background: '#0f1115',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 14,
+          }}
+        >
+          <div className="w-9 h-9 rounded-full border-2 border-gray-700 border-t-blue-400 animate-spin" />
+          <div className="text-sm text-gray-300">Đang tải ca chụp…</div>
+          <div className="text-xs text-gray-500">Ca chụp lớn có thể mất 10–20 giây</div>
+        </div>
+      )}
+    </>
   )
 }

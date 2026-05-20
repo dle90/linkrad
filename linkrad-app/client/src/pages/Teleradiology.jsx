@@ -725,8 +725,11 @@ export default function Teleradiology() {
                 transparent + pointer-events:none so the persistent iframe
                 (rendered at App level with position:fixed, zIndex:5) is
                 visible and interactive through it. The buttons re-enable
-                pointer-events for themselves. */}
-            <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
+                pointer-events for themselves.
+                Offset down (top-14) so they clear the OHIF toolbar row —
+                otherwise they cover OHIF's own right-side buttons (key/save/
+                capture/delete/info). */}
+            <div className="absolute top-14 right-2 z-10 flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
               <button
                 onClick={toggleViewerExpanded}
                 title={isViewerExpanded ? 'Thu gọn ảnh' : 'Mở rộng ảnh (thu nhỏ kết quả)'}
