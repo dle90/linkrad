@@ -8,7 +8,11 @@
  * Three tiers:
  *   - IMMUTABLE (1-year)  GET /wado/studies/<UID>/series/<UID>/instances/<UID>
  *                         GET .../instances/<UID>/frames/<N>
- *       SOPInstanceUIDs are immutable by DICOM spec — pixel data never changes.
+ *                         GET /assets/* and any content-hashed OHIF bundle
+ *                             (app.bundle.<hash>.js, <id>.bundle.<hash>.js, …)
+ *       SOPInstanceUIDs are immutable by DICOM spec — pixel data never changes;
+ *       OHIF bundles are content-hashed, so a change is always a new filename.
+ *       Caching them lets the OHIF app boot from the VN PoP, not Railway SG.
  *   - STUDY META (10-min) GET /wado/studies/<UID>            (study-scoped:
  *                         GET .../studies/<UID>/metadata      metadata, series
  *                         GET .../studies/<UID>/series        list, instance
@@ -36,6 +40,18 @@ const IMMUTABLE_RE =
 // Anything scoped to one study UID — metadata, series list, instance list.
 // Does NOT match the bare QIDO search `/wado/studies` (no UID segment).
 const STUDY_META_RE = /^\/wado\/studies\/[^/]+(?:\/|$)/;
+
+// OHIF app static assets safe to cache for 1 year:
+//   - /assets/*  — icons / manifests, stable across builds.
+//   - any file with a 16+ hex content-hash segment in its name — the webpack
+//     bundles & web-workers: app.bundle.<hash>.js, <id>.bundle.<hash>.js,
+//     index.worker.<hash>.worker.js. The build renames them on every change,
+//     so the URL itself is the cache-buster.
+// Deliberately NOT matched (stay BYPASS so a redeploy is picked up at once):
+// index.html, app-config.js, init-service-worker.js, linkrad-extras.js,
+// linkrad-toolbar.js, and OHIF's UN-hashed CSS (app.bundle.css, <id>.css).
+const ASSET_RE = /^\/assets\//;
+const HASHED_RE = /\.[0-9a-f]{16,}\./;
 
 const IMMUTABLE_TTL = 'public, max-age=31536000, immutable';
 const META_TTL = 'public, max-age=600'; // 10 min — caps metadata staleness
@@ -95,12 +111,15 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders() });
     }
 
-    // Decide cache tier. Immutable wins over study-meta (frames are also
-    // study-scoped). QIDO search and every non-GET fall through to bypass.
+    // Decide cache tier. WADO paths are matched first so a study UID that
+    // happens to contain a 16-digit run can't fall through to HASHED_RE.
+    // QIDO search and every non-GET fall through to bypass.
     let tier = 'bypass';
     if (request.method === 'GET') {
-      if (IMMUTABLE_RE.test(url.pathname)) tier = 'immutable';
-      else if (STUDY_META_RE.test(url.pathname)) tier = 'meta';
+      const p = url.pathname;
+      if (IMMUTABLE_RE.test(p)) tier = 'immutable';
+      else if (STUDY_META_RE.test(p)) tier = 'meta';
+      else if (ASSET_RE.test(p) || HASHED_RE.test(p)) tier = 'immutable';
     }
 
     // Pass-through: QIDO study search and every non-GET method.
