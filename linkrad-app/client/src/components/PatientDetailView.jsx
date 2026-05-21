@@ -136,7 +136,7 @@ function TemplatesPanel({ templates, modality, bodyPart, activeSection, onInsert
           {filtered.length === 0 ? (
             <div className="text-center py-4 text-xs text-gray-400">Không có mẫu phù hợp</div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
               {filtered.map(t => {
                 const preview = t[sectionField] || ''
                 const hasContent = !!preview.trim()
@@ -435,7 +435,7 @@ function ActionToolbar({ study, report, onViewImages }) {
 function PatientSummaryCard({ study }) {
   const age = calcAge(study.dob)
   return (
-    <div className="flex items-center gap-4 px-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm">
+    <div className="flex flex-wrap items-center gap-4 px-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm">
       <div className="w-11 h-11 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center flex-shrink-0">
         {initials(study.patientName)}
       </div>
@@ -564,7 +564,7 @@ function SignerPanel({ report, study, onSigned }) {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 mt-3">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
       <SignBlock
         title="Người ký (Alt+1)"
         signerName={report?.radiologistName}
@@ -1064,7 +1064,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
             )}
 
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-              <div className="px-5 pt-4 pb-0">
+              <div className="px-3 md:px-5 pt-4 pb-0">
                 <div className="flex items-baseline justify-between mb-2">
                   <h2 className="text-sm font-semibold text-gray-800">
                     Kết quả chẩn đoán — {(study.bodyPart || study.modality || '').toUpperCase()}
@@ -1079,7 +1079,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
               {loading ? (
                 <div className="text-center py-8 text-gray-400 text-sm">Đang tải...</div>
               ) : (
-                <div className="px-5 py-4 space-y-3">
+                <div className="px-3 md:px-5 py-4 space-y-3">
                   {!locked && (
                     <TemplatesPanel
                       templates={templates}
@@ -1186,7 +1186,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
         </div>
 
         {/* Pinned footer — save actions always reachable */}
-        <div className="border-t border-gray-200 bg-white px-4 py-3 flex items-center gap-3 flex-shrink-0">
+        <div className="border-t border-gray-200 bg-white px-4 py-3 flex flex-wrap items-center gap-3 flex-shrink-0">
           <button onClick={() => save('preliminary')} disabled={saving || locked}
             className="px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent">
             Lưu tạm
@@ -1204,7 +1204,7 @@ export default function PatientDetailView({ study, onRefresh, onOpenCase, showCo
             </span>
           ) : null}
           {!locked && (
-            <div className="flex items-center gap-1 text-[10px] text-gray-500">
+            <div className="hidden md:flex items-center gap-1 text-[10px] text-gray-500">
               <Kbd>Ctrl</Kbd>+<Kbd>Enter</Kbd>
             </div>
           )}

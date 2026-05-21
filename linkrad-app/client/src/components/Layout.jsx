@@ -1,6 +1,7 @@
 import React from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import useIsMobile from '../lib/useIsMobile'
 import api, { logoutUser } from '../api'
 import GlobalSearch from './GlobalSearch'
 import NotificationBell from './NotificationBell'
@@ -325,7 +326,15 @@ export default function Layout({ children }) {
   // Legacy flags kept as fallback for items that haven't migrated to `perm` yet.
   const isFinancialsUser = hasPerm('financials.view') || auth?.role === 'giamdoc'
   const isWorkflowUser = auth?.role && auth.role !== 'guest'
-  const [sidebarOpen, setSidebarOpen] = React.useState(true)
+  const isMobile = useIsMobile()
+  // Sidebar starts open on desktop, closed on mobile (it's an overlay drawer
+  // there — leaving it open would bury the page under it on first paint).
+  const [sidebarOpen, setSidebarOpen] = React.useState(
+    () => typeof window === 'undefined' || window.innerWidth >= 768
+  )
+  // Re-sync when the viewport crosses the breakpoint (rotate / resize): a
+  // desktop→mobile cross should tuck the drawer away, mobile→desktop reveal it.
+  React.useEffect(() => { setSidebarOpen(!isMobile) }, [isMobile])
   const [collapsed, setCollapsed] = React.useState(() => {
     const init = {}
     const walk = (nodes, parentKey) => {
@@ -437,15 +446,32 @@ export default function Layout({ children }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-56' : 'w-0'} flex-shrink-0 flex flex-col overflow-y-auto overflow-x-hidden transition-all duration-200`} style={{ backgroundColor: '#1e3a5f' }}>
+      {/* Backdrop — only on mobile while the drawer is open. Tap to dismiss. */}
+      {isMobile && sidebarOpen && (
+        <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* Sidebar — fixed off-canvas drawer on mobile, in-flow column on desktop */}
+      <aside
+        className={
+          isMobile
+            ? `fixed inset-y-0 left-0 z-50 w-64 flex flex-col overflow-y-auto overflow-x-hidden transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+            : `${sidebarOpen ? 'w-56' : 'w-0'} flex-shrink-0 flex flex-col overflow-y-auto overflow-x-hidden transition-all duration-200`
+        }
+        style={{ backgroundColor: '#1e3a5f' }}
+      >
         {/* Logo */}
         <div className="px-4 py-4 border-b border-blue-800">
           <div className="text-white font-bold text-lg tracking-wide">LinkRad</div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 py-4">
+        {/* Navigation — on mobile, tapping any link closes the drawer (the click
+            bubbles to this <nav>; group expand/collapse buttons aren't <a> so
+            they don't trip the dismiss). */}
+        <nav
+          className="flex-1 py-4"
+          onClick={(e) => { if (isMobile && e.target.closest('a')) setSidebarOpen(false) }}
+        >
           {NAV.map(section => renderNode(section, 0, ''))}
         </nav>
 
@@ -474,32 +500,33 @@ export default function Layout({ children }) {
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0">
-          <div className="flex items-center gap-3">
+        <header className="bg-white border-b border-gray-200 px-3 md:px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen(prev => !prev)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors flex-shrink-0"
               title={sidebarOpen ? 'Ẩn menu' : 'Hiện menu'}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </button>
-            <h1 className="text-lg font-semibold text-gray-800">LinkRad ERP</h1>
+            <h1 className="text-base md:text-lg font-semibold text-gray-800 truncate">LinkRad ERP</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
             <button
               onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))}
-              className="text-xs flex items-center gap-2 px-2.5 py-1 rounded border border-gray-200 hover:border-gray-300 text-gray-500 hover:bg-gray-50"
+              className="text-xs flex items-center gap-2 px-2 md:px-2.5 py-1 rounded border border-gray-200 hover:border-gray-300 text-gray-500 hover:bg-gray-50"
               title="Tìm kiếm (Ctrl+K)"
             >
-              🔍 <span>Tìm kiếm</span> <kbd className="bg-gray-100 px-1 rounded text-[10px]">Ctrl+K</kbd>
+              🔍 <span className="hidden md:inline">Tìm kiếm</span>
+              <kbd className="hidden md:inline bg-gray-100 px-1 rounded text-[10px]">Ctrl+K</kbd>
             </button>
             <NotificationBell />
             {!isAdmin && (
-              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">Chế độ xem</span>
+              <span className="hidden md:inline text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">Chế độ xem</span>
             )}
-            <span className="text-sm text-gray-500">Đơn vị: VND triệu</span>
+            <span className="hidden md:inline text-sm text-gray-500">Đơn vị: VND triệu</span>
             <div className="w-2 h-2 rounded-full bg-green-500" title="Server online"></div>
           </div>
         </header>

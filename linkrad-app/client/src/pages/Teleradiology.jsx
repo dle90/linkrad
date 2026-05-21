@@ -5,6 +5,7 @@ import { useTeleradTabs, SYS_WORKLIST } from '../context/TeleradTabsContext'
 import CaseTabBar from '../components/CaseTabBar'
 import PatientDetailView from '../components/PatientDetailView'
 import { warmWorklist, pauseWarming, resumeWarming } from '../lib/pacsWarmer'
+import useIsMobile from '../lib/useIsMobile'
 
 const VIEWER_DOCKED_KEY = 'linkrad.reader.viewerDocked'
 const REPORT_WIDTH_KEY = 'linkrad.reader.reportWidth'
@@ -178,7 +179,7 @@ function ViewImagesButton({ studyUID, imageStatus, imageCount, compact = false }
 
 // ── Study list (left) ────────────────────────────────────────────────────────
 
-function StudyList({ studies, selectedId, onSelect, onOpen, onOpenInNewTab, onHoverRow, groupKey, onGroupKey, filterBar }) {
+function StudyList({ studies, selectedId, onSelect, onOpen, onOpenInNewTab, onHoverRow, groupKey, onGroupKey, filterBar, isMobile }) {
   // Hover prefetch: 200ms dwell on a row signals enough intent to warm the
   // study (Orthanc + R2 + browser HTTP caches) before the click lands. One
   // shared timer — a new mouseenter clears the previous candidate.
@@ -197,7 +198,7 @@ function StudyList({ studies, selectedId, onSelect, onOpen, onOpenInNewTab, onHo
     clearTimeout(hoverTimerRef.current)
   }
   return (
-    <div className="w-[520px] flex-shrink-0 flex flex-col bg-white border-r border-gray-200">
+    <div className={`${isMobile ? 'w-full flex-1' : 'w-[520px] flex-shrink-0'} flex flex-col bg-white border-r border-gray-200`}>
       {/* Pill group tabs */}
       <div className="px-4 pt-3 pb-2 border-b border-gray-200 flex items-center gap-1.5 flex-wrap">
         {STATUS_GROUPS.map(g => (
@@ -446,6 +447,27 @@ function FilterBar({ modalityFilter, onModalityFilter, siteFilter, onSiteFilter,
   )
 }
 
+// ── Mobile pane switcher — phones can't show viewer + report side-by-side, so
+//    a case opens into one full-screen pane at a time and this segmented control
+//    flips between them. Stays pinned (flex-none) so it never scrolls away.
+function MobilePaneTabs({ pane, onChange }) {
+  const Tab = ({ id, icon, label }) => (
+    <button
+      onClick={() => onChange(id)}
+      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors
+        ${pane === id ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+    >
+      <span>{icon}</span><span>{label}</span>
+    </button>
+  )
+  return (
+    <div className="flex border-b border-gray-200 flex-none">
+      <Tab id="images" icon="🖼️" label="Hình ảnh" />
+      <Tab id="report" icon="📝" label="Kết quả" />
+    </div>
+  )
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function Teleradiology() {
@@ -455,6 +477,11 @@ export default function Teleradiology() {
     setViewerSlotRect, undockedRef, prefetchStudy, setWarmupStudyUID,
   } = useTeleradTabs()
   const slotRef = useRef(null)
+  const isMobile = useIsMobile()
+  // Which pane fills the screen when a case is open on mobile: the OHIF viewer
+  // ('images') or the report editor ('report'). Ignored on desktop, where both
+  // show side-by-side.
+  const [mobilePane, setMobilePane] = useState('images')
 
   const [studies, setStudies] = useState([])
   const [loading, setLoading] = useState(true)
@@ -606,6 +633,13 @@ export default function Teleradiology() {
     else resumeWarming()
   }, [activeCaseId])
 
+  // Opening or switching to a case on mobile lands on the images pane — the
+  // doctor looks at the study before writing the report. (No-op on desktop,
+  // where mobilePane isn't used.)
+  useEffect(() => {
+    if (activeCaseId && activeCaseId !== SYS_WORKLIST) setMobilePane('images')
+  }, [activeCaseId])
+
   // Publish the slot's bounding rect to TeleradTabsContext so
   // <PersistentOHIFHost/> can pin its fixed iframe over the same area.
   // The slot's geometry can change without a remount (report-width drag,
@@ -613,7 +647,10 @@ export default function Teleradiology() {
   // plus a window resize listener. On unmount (e.g. user navigates to
   // /inventory) we publish null which parks the iframe off-screen.
   const activeCase = openCases.find(c => c._id === activeCaseId)
-  const slotShouldExist = !!activeCase && viewerDocked
+  // On mobile the viewer slot exists only while the 'images' pane is selected;
+  // on desktop it tracks the docked/undocked toggle as before. When false the
+  // slot doesn't render → PersistentOHIFHost parks the iframe off-screen.
+  const showViewerSlot = !!activeCase && (isMobile ? mobilePane === 'images' : viewerDocked)
   useLayoutEffect(() => {
     const el = slotRef.current
     if (!el) {
@@ -633,7 +670,7 @@ export default function Teleradiology() {
       window.removeEventListener('resize', publish)
       setViewerSlotRect(null)
     }
-  }, [setViewerSlotRect, slotShouldExist, isViewerExpanded, reportWidth])
+  }, [setViewerSlotRect, showViewerSlot, isViewerExpanded, reportWidth, isMobile])
 
   const siteOptions = useMemo(
     () => Array.from(new Set(studies.map(s => s.site).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -693,11 +730,15 @@ export default function Teleradiology() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] -m-4 bg-gray-50">
-      <PageHeader
-        userName={auth?.displayName || auth?.username}
-        date={todayISO()}
-        counts={counts}
-      />
+      {/* PageHeader is desktop-only — on a phone its path/counts strip just
+          eats vertical space the viewer needs. */}
+      {!isMobile && (
+        <PageHeader
+          userName={auth?.displayName || auth?.username}
+          date={todayISO()}
+          counts={counts}
+        />
+      )}
       <CaseTabBar
         systemTabs={systemTabs}
         openCases={openCases}
@@ -705,6 +746,11 @@ export default function Teleradiology() {
         onSelect={setActiveCaseId}
         onClose={closeCase}
       />
+      {/* Mobile-only: a phone can't show viewer + report side-by-side, so an
+          open case flips between them with this segmented control. */}
+      {isMobile && activeCase && (
+        <MobilePaneTabs pane={mobilePane} onChange={setMobilePane} />
+      )}
       <div className="flex-1 flex min-h-0 overflow-hidden relative">
         {/* Viewer SLOT — the persistent OHIF iframe (rendered at App level by
             <PersistentOHIFHost/>) pins itself over this rect via position:fixed.
@@ -712,13 +758,16 @@ export default function Teleradiology() {
             overlaid in its top-right corner. When the worklist tab is active
             this slot doesn't render — the host parks the iframe off-screen,
             keeping the OHIF instance warm for the next case open. */}
-        {viewerDocked && activeCase && (
+        {showViewerSlot && (
           <div
             ref={slotRef}
             className="relative"
-            style={isViewerExpanded
-              ? { position: 'fixed', top: 0, left: 0, right: `${reportWidth}px`, bottom: 0, zIndex: 50, background: 'transparent', pointerEvents: 'none' }
-              : { flex: '1 1 0%', minWidth: 0, position: 'relative', background: 'transparent', pointerEvents: 'none' }
+            style={
+              isMobile
+                ? { flex: '1 1 0%', minWidth: 0, position: 'relative', background: 'transparent', pointerEvents: 'none' }
+                : isViewerExpanded
+                  ? { position: 'fixed', top: 0, left: 0, right: `${reportWidth}px`, bottom: 0, zIndex: 50, background: 'transparent', pointerEvents: 'none' }
+                  : { flex: '1 1 0%', minWidth: 0, position: 'relative', background: 'transparent', pointerEvents: 'none' }
             }
           >
             {/* Action buttons floating above the iframe. The slot itself is
@@ -728,58 +777,111 @@ export default function Teleradiology() {
                 pointer-events for themselves.
                 Offset down (top-14) so they clear the OHIF toolbar row —
                 otherwise they cover OHIF's own right-side buttons (key/save/
-                capture/delete/info). */}
-            <div className="absolute top-14 right-2 z-10 flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
-              <button
-                onClick={toggleViewerExpanded}
-                title={isViewerExpanded ? 'Thu gọn ảnh' : 'Mở rộng ảnh (thu nhỏ kết quả)'}
-                className="px-2.5 py-1 bg-gray-800/80 hover:bg-gray-700 text-gray-200 text-xs rounded-md border border-gray-700 backdrop-blur-sm transition-colors"
-              >
-                {isViewerExpanded ? '↔ Thu gọn' : '⇔ Mở rộng ảnh'}
-              </button>
-              <button
-                onClick={() => undockViewer(activeCase)}
-                title="Mở viewer trong cửa sổ riêng"
-                className="px-2.5 py-1 bg-gray-800/80 hover:bg-gray-700 text-gray-200 text-xs rounded-md border border-gray-700 backdrop-blur-sm transition-colors"
-              >
-                ⇗ Cửa sổ riêng
-              </button>
-            </div>
+                capture/delete/info). Hidden on mobile: "expand" and "separate
+                window" have no meaning when each pane is already full-screen. */}
+            {!isMobile && (
+              <div className="absolute top-14 right-2 z-10 flex items-center gap-1.5" style={{ pointerEvents: 'auto' }}>
+                <button
+                  onClick={toggleViewerExpanded}
+                  title={isViewerExpanded ? 'Thu gọn ảnh' : 'Mở rộng ảnh (thu nhỏ kết quả)'}
+                  className="px-2.5 py-1 bg-gray-800/80 hover:bg-gray-700 text-gray-200 text-xs rounded-md border border-gray-700 backdrop-blur-sm transition-colors"
+                >
+                  {isViewerExpanded ? '↔ Thu gọn' : '⇔ Mở rộng ảnh'}
+                </button>
+                <button
+                  onClick={() => undockViewer(activeCase)}
+                  title="Mở viewer trong cửa sổ riêng"
+                  className="px-2.5 py-1 bg-gray-800/80 hover:bg-gray-700 text-gray-200 text-xs rounded-md border border-gray-700 backdrop-blur-sm transition-colors"
+                >
+                  ⇗ Cửa sổ riêng
+                </button>
+              </div>
+            )}
           </div>
         )}
         {activeCase ? (
-          // Active-case row layout. The iframe stack is rendered above and
-          // takes the left slot via flex:1. This wrapper holds the divider
-          // and the report panel. In expanded mode the iframe stack is a
-          // fixed overlay, and we position the report panel to match.
-          <div
-            className={
-              !viewerDocked
-                ? 'flex-1 flex'
-                : (isViewerExpanded
-                    ? 'fixed top-0 right-0 bottom-0 z-50 flex bg-gray-50'
-                    : 'flex flex-shrink-0')
-            }
-            style={(isViewerExpanded && viewerDocked) ? { width: `${reportWidth}px` } : undefined}
-          >
-            {viewerDocked && !isViewerExpanded && (
-              <ViewerDivider reportWidth={reportWidth} onChange={persistReportWidth} />
-            )}
+          isMobile ? (
+            // Mobile: the report pane fills the screen when selected; the
+            // viewer pane is just the slot above (rendered when 'images').
+            mobilePane === 'report' ? (
+              <div className="flex-1 flex flex-col min-w-0">
+                <PatientDetailView
+                  study={activeCase}
+                  onRefresh={load}
+                  onOpenCase={openCase}
+                  showConsumables={false}
+                  showHistoryRail={false}
+                />
+              </div>
+            ) : null
+          ) : (
+            // Active-case row layout (desktop). The iframe stack is rendered
+            // above and takes the left slot via flex:1. This wrapper holds the
+            // divider and the report panel. In expanded mode the iframe stack
+            // is a fixed overlay, and we position the report panel to match.
             <div
-              className={viewerDocked ? 'flex-shrink-0 flex flex-col border-l border-gray-200 bg-gray-50' : 'flex-1 flex flex-col'}
-              style={viewerDocked ? { width: `${reportWidth}px` } : undefined}>
-              {!viewerDocked && (
-                <UndockedBanner onRedock={() => persistViewerDocked(true)} />
+              className={
+                !viewerDocked
+                  ? 'flex-1 flex'
+                  : (isViewerExpanded
+                      ? 'fixed top-0 right-0 bottom-0 z-50 flex bg-gray-50'
+                      : 'flex flex-shrink-0')
+              }
+              style={(isViewerExpanded && viewerDocked) ? { width: `${reportWidth}px` } : undefined}
+            >
+              {viewerDocked && !isViewerExpanded && (
+                <ViewerDivider reportWidth={reportWidth} onChange={persistReportWidth} />
               )}
-              <PatientDetailView
-                study={activeCase}
-                onRefresh={load}
-                onOpenCase={openCase}
-                showConsumables={false}
-                showHistoryRail={false}
-              />
+              <div
+                className={viewerDocked ? 'flex-shrink-0 flex flex-col border-l border-gray-200 bg-gray-50' : 'flex-1 flex flex-col'}
+                style={viewerDocked ? { width: `${reportWidth}px` } : undefined}>
+                {!viewerDocked && (
+                  <UndockedBanner onRedock={() => persistViewerDocked(true)} />
+                )}
+                <PatientDetailView
+                  study={activeCase}
+                  onRefresh={load}
+                  onOpenCase={openCase}
+                  showConsumables={false}
+                  showHistoryRail={false}
+                />
+              </div>
             </div>
-          </div>
+          )
+        ) : isMobile ? (
+          // Mobile worklist: full-width list; tapping a row slides a
+          // full-screen detail panel over it (master → detail pattern).
+          <>
+            <StudyList
+              isMobile
+              studies={filtered}
+              selectedId={selectedId}
+              onSelect={(s) => { setSelectedId(s._id); prefetchStudy?.(s.studyUID) }}
+              onOpen={openCase}
+              onOpenInNewTab={openInNewTab}
+              onHoverRow={prefetchStudy}
+              groupKey={groupKey}
+              onGroupKey={setGroupKey}
+              filterBar={filterBar}
+            />
+            {selected && (
+              <div className="absolute inset-0 z-30 bg-white flex flex-col">
+                <div className="flex items-center px-3 py-2 border-b border-gray-200 bg-white flex-none">
+                  <button
+                    onClick={() => setSelectedId(null)}
+                    className="text-sm text-blue-600 font-medium flex items-center gap-1"
+                  >
+                    ← Danh sách ca
+                  </button>
+                </div>
+                <StudyPreview
+                  study={selected}
+                  onOpen={(s) => { setSelectedId(null); openCase(s) }}
+                  onOpenInNewTab={openInNewTab}
+                />
+              </div>
+            )}
+          </>
         ) : (
           <>
             <StudyList
